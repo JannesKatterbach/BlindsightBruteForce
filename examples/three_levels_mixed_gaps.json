@@ -1,0 +1,87 @@
+{
+  "name": "Drei Ebenen mit unterschiedlichen Abstaenden",
+  "target_count": 16,
+  "clearance": 1.0,
+  "tolerance": 0.05,
+  "rod": {
+    "diameter": 4.0,
+    "stroke": 50.0,
+    "engage_below": 10.0,
+    "engage_above": 10.0,
+    "length_tolerance": 2.0,
+    "retract_depth": 0.0,
+    "hole_clearance": 0.5
+  },
+  "motor": {
+    "width": 12.0,
+    "depth": 24.0,
+    "height": 10.0,
+    "shaft_x": 0.0,
+    "axis_height": 5.0,
+    "gear_diameter": 6.0,
+    "gear_width": 4.0,
+    "gear_gap": 1.0,
+    "center_distance": 5.0,
+    "own_clearance": 0.2,
+    "mount": "top"
+  },
+  "stack": {
+    "n_motor_planes": 3,
+    "mode": "gaps",
+    "uniform_spacing": 20.0,
+    "gaps": [
+      18,
+      25,
+      15
+    ],
+    "distances": [],
+    "thickness": 1.6,
+    "g0_thickness": 6.0,
+    "allowed_planes": null,
+    "mount_zones": {}
+  },
+  "bounds": {
+    "xmin": 0.0,
+    "ymin": 0.0,
+    "xmax": 140,
+    "ymax": 140,
+    "edge_margin": 0.0,
+    "parts_in_bounds": "all"
+  },
+  "obstacles": [
+    {
+      "shape": "circle",
+      "x": 70,
+      "y": 70,
+      "w": 10.0,
+      "h": 10.0,
+      "r": 6,
+      "angle": 0.0,
+      "z0": -1000000.0,
+      "z1": 1000000.0,
+      "name": "Schraubloch"
+    }
+  ],
+  "search": {
+    "weights": {
+      "count": 10,
+      "area": 4,
+      "uniformity": 2.0,
+      "regularity": 1.0
+    },
+    "patterns": [
+      "square",
+      "hex_x",
+      "hex_y"
+    ],
+    "angle_step": 15.0,
+    "angle_min": 0.0,
+    "angle_max": 360.0,
+    "allowed_angles": null,
+    "time_limit_s": 20,
+    "max_candidates": 2000000,
+    "seed": 1,
+    "top_k": 5,
+    "refine_fraction": 0.35
+  }
+}

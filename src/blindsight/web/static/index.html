@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Blindsight</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>Project Blindsight</h1>
+  <span class="sub">Geometrischer Motor und Gewindestangen Optimierer</span>
+  <div class="spacer"></div>
+  <select id="exampleSel" title="Beispiel laden"><option value="">Beispiel laden</option></select>
+  <button id="btnSave">Konfig speichern</button>
+  <label class="btn">Konfig laden<input type="file" id="fileLoad" accept=".json" hidden></label>
+</header>
+<nav id="tabs">
+  <button data-tab="geometry" class="active">Geometrie</button>
+  <button data-tab="levels">Ebenen</button>
+  <button data-tab="bounds">Bauraum</button>
+  <button data-tab="optim">Optimierung</button>
+  <button data-tab="results">Ergebnisse</button>
+</nav>
+<main>
+  <section id="tab-geometry" class="tab active">
+    <div class="cols">
+      <div><h2>Allgemein</h2><div class="form" id="f-general"></div>
+        <h2>Gewindestange</h2><div class="form" id="f-rod"></div></div>
+      <div><h2>Motor und Zahnrad</h2><div class="form" id="f-motor"></div>
+        <details><summary>Motorkontur aus SVG importieren</summary>
+          <p class="hint">Genau ein Rechteck oder Polygon. Ist der Massstab nicht eindeutig, wird er abgefragt.</p>
+          <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
+        </details></div>
+      <div><h2>Vorschau Motor, Draufsicht</h2><svg id="motorPreview" viewBox="0 0 100 100"></svg>
+        <p class="hint">Grau Gehaeuse, Farbe Zahnrad, Punkt Stangenachse, Kreis Stange. Winkel 0 Grad.</p></div>
+    </div>
+  </section>
+  <section id="tab-levels" class="tab">
+    <div class="cols">
+      <div><h2>Ebenen</h2><div class="form" id="f-stack"></div></div>
+      <div><h2>Berechnete Ebenen und Stangenlaengen</h2><div id="levelInfo"></div>
+        <svg id="sectionPreview" viewBox="0 0 300 200"></svg></div>
+    </div>
+  </section>
+  <section id="tab-bounds" class="tab">
+    <div class="cols">
+      <div><h2>Bauraum (Draufsicht)</h2><div class="form" id="f-bounds"></div></div>
+      <div><h2>Feste Hindernisse (JSON)</h2>
+        <textarea id="obstacles" rows="8" spellcheck="false"></textarea>
+        <p class="hint">Liste von Objekten, zum Beispiel
+        <code>{"shape":"circle","x":60,"y":60,"r":5}</code> oder <code>{"shape":"rect","x":20,"y":20,"w":10,"h":10,"angle":0}</code>.
+        Optional z0 und z1.</p>
+        <h2>Montagebereiche je Ebene (JSON)</h2>
+        <textarea id="mountZones" rows="4" spellcheck="false"></textarea>
+        <p class="hint">Zum Beispiel <code>{"1": [[0,0,60,120]]}</code> (xmin, ymin, xmax, ymax). Leer = ueberall.</p></div>
+    </div>
+  </section>
+  <section id="tab-optim" class="tab">
+    <div class="cols">
+      <div><h2>Prioritaeten der Ziele</h2><div class="form" id="f-weights"></div>
+        <p class="hint">Relative Gewichte, werden normiert. Hohe Anzahl vor kleiner Flaeche, vor Gleichmaessigkeit und Muster.</p></div>
+      <div><h2>Suche</h2><div class="form" id="f-search"></div></div>
+      <div><h2>Berechnung</h2>
+        <button id="btnStart" class="primary">Optimierung starten</button>
+        <button id="btnCancel" disabled>Abbrechen</button>
+        <div class="progress"><div id="bar"></div></div>
+        <table class="kv" id="progTable"></table>
+        <div id="errors" class="errors"></div></div>
+    </div>
+  </section>
+  <section id="tab-results" class="tab">
+    <div id="noResult" class="hint">Noch kein Ergebnis. Auf dem Reiter Optimierung starten.</div>
+    <div id="resultBox" hidden>
+      <div id="statusBox" class="statusBox"></div>
+      <div class="toolbar">
+        <label>Loesung <select id="solSel"></select></label>
+        <label>Ansicht <select id="viewSel">
+          <option value="top">Draufsicht (alle Ebenen)</option>
+          <option value="plane">Einzelne Ebene</option>
+          <option value="section">Seitenschnitt</option>
+          <option value="iso">Raeumlich</option>
+        </select></label>
+        <label id="planeLabel">Ebene <select id="planeSel"></select></label>
+        <label id="rotLabel">Drehung <input type="range" id="rot" min="0" max="360" value="35"></label>
+        <label><input type="checkbox" id="optDist" checked> Abstaende</label>
+        <a id="dlSvg" class="btn" href="#">SVG exportieren</a>
+        <a id="dlJson" class="btn" href="#">JSON exportieren</a>
+      </div>
+      <div class="cols resultCols">
+        <div class="viewWrap"><svg id="view"></svg><div class="legend" id="legend"></div></div>
+        <div><h2>Kennzahlen</h2><table class="kv" id="metrics"></table>
+          <h2>Zielfunktion</h2><table class="kv" id="terms"></table>
+          <h2>Hinweise</h2><ul id="messages"></ul>
+          <h2>Kollisionen</h2><ul id="collisions"></ul></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

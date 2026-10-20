@@ -1,0 +1,2 @@
+# Laufzeit hat keine Abhaengigkeiten (nur Python-Standardbibliothek)
+pytest>=7  # nur fuer Tests
