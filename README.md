@@ -6,20 +6,39 @@ Nur Python Standardbibliothek, keine Laufzeitabhängigkeiten.
 
 ## Installation und Start
 
+Die Laufzeit braucht nur Python 3.10 oder neuer, keine Pakete. Der einfachste Start ohne Installation, in jeder Shell
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate   # optional
-pip install -e ".[dev]"                               # dev nur für pytest
-python -m blindsight                                  # Web UI auf http://127.0.0.1:8765
+python run.py                    # Web UI auf http://127.0.0.1:8765
+python run.py --port 9000 --no-browser
 ```
 
-Ohne Installation geht auch `PYTHONPATH=src python -m blindsight`.
+Mit virtueller Umgebung (nur nötig für die Tests oder den Befehl `blindsight`). Die Aktivierung hängt von der Shell ab
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # bash, zsh
+source .venv/bin/activate.fish     # fish
+.venv\Scripts\activate            # Windows
+pip install -e ".[dev]"
+blindsight                         # oder python -m blindsight
+```
+
+Ohne Aktivierung geht es immer direkt über die Programme der Umgebung (auch bei Arch Linux mit "externally-managed-environment")
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/python -m blindsight
+.venv/bin/python -m pytest
+```
 
 Weitere Befehle
 
 ```bash
-python -m blindsight --port 9000 --no-browser         # anderer Port, Browser nicht öffnen
-python -m blindsight.cli examples/small_hex.json --svg out.svg --json out.json --time 20
-python -m pytest                                      # Tests
+python run.py --port 9000 --no-browser                 # anderer Port, Browser nicht öffnen
+PYTHONPATH=src python -m blindsight.cli examples/small_hex.json --svg out.svg --json out.json --time 20
+python -m pytest                                       # Tests (braucht pytest)
 ```
 
 ## Architektur
