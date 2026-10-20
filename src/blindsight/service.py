@@ -15,7 +15,7 @@ from typing import Optional
 from .config import ConfigError, Project
 from .layout import Counter
 from .model import Model
-from .optimizers import get_optimizer
+from .optimizers import run_optimizer
 from .optimizers.base import OptimizationResult, ProgressInfo, StopToken
 
 
@@ -32,8 +32,11 @@ class Job:
     thread: Optional[threading.Thread] = None
     started: float = field(default_factory=time.time)
 
+    def best_so_far(self) -> list:
+        return list(self.progress.best_placements) if self.progress else []
+
     def status_dict(self) -> dict:
-        prog = self.progress.as_dict() if self.progress else None
+        prog = self.progress.as_dict(with_best=False) if self.progress else None
         if self.state == "running" and self.stop is not None and prog is not None:
             prog["elapsed"] = self.stop.elapsed
             prog["fraction"] = min(1.0, self.stop.elapsed / self.project.search.time_limit_s)
@@ -54,9 +57,8 @@ class JobManager:
         self.jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def start(self, project: Project, optimizer: str = "pattern_greedy") -> Job:
+    def start(self, project: Project) -> Job:
         model = Model(project)  # wirft ConfigError bei ungueltigen Daten
-        opt = get_optimizer(optimizer)
         counter = Counter()
         stop = StopToken(project.search.time_limit_s, project.search.max_candidates, counter)
         job = Job(uuid.uuid4().hex[:12], project, model, stop=stop)
@@ -67,7 +69,7 @@ class JobManager:
         def work() -> None:
             job.state = "running"
             try:
-                job.result = opt.run(model, on_progress, stop, counter)
+                job.result = run_optimizer(model, on_progress, stop, counter)
                 job.state = "cancelled" if stop.reason == "cancelled" else "finished"
             except Exception:  # pragma: no cover - Schutz gegen Thread Absturz
                 job.error = traceback.format_exc()

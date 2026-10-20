@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 from xml.sax.saxutils import escape
 
+from .base import rod_passes
+
 PLANE_COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f"]
 SHEET_GAP = 20.0
 
@@ -150,7 +152,4 @@ class SvgExporter:
 
     @staticmethod
     def _rod_passes(geometry: dict, u: dict, plane: int) -> bool:
-        """Durchquert die Stange der Einheit die Ebene (Durchgangsloch noetig)?"""
-        pl = geometry["planes"][plane]
-        rod = u["rod"]
-        return rod["bottom_retracted"] <= pl["z_top"] and rod["tip_extended"] >= pl["z_bottom"]
+        return rod_passes(geometry, u, plane)

@@ -16,13 +16,15 @@ from importlib import resources
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
-from ..config import ConfigError, Project
+from ..config import ConfigError, Project, schema
 from ..export import EXPORTERS, build_geometry
+from ..layout import Placement
 from ..model import Model
-from ..motor_import import ScaleRequired, SvgImportError, motor_outline_from_svg
+from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
 from ..service import JobManager
 
 STATIC = Path(__file__).parent / "static"
+MAX_BODY = 8 * 1024 * 1024
 
 
 def _examples_dir() -> Path | None:
@@ -47,8 +49,27 @@ def analyze(project: Project) -> dict:
 
 
 class App:
-    def __init__(self) -> None:
+    def __init__(self, allowed_hosts: set[str] | None = None) -> None:
         self.jobs = JobManager()
+        self.allowed_hosts = allowed_hosts  # None = nur Loopback Namen
+
+    def host_ok(self, host: str | None, origin: str | None) -> bool:
+        """Schutz gegen DNS Rebinding und fremde Webseiten, die lokale Dienste ansprechen."""
+        def name(h: str) -> str:
+            h = h.strip().lower()
+            if h.startswith("["):
+                return h.split("]")[0] + "]"
+            return h.rsplit(":", 1)[0] if ":" in h else h
+
+        ok = self.allowed_hosts or {"127.0.0.1", "localhost", "[::1]"}
+        if host is None or name(host) not in ok:
+            return False
+        if origin and origin != "null":
+            from urllib.parse import urlparse as _u
+
+            if (_u(origin).hostname or "") not in {x.strip("[]") for x in ok}:
+                return False
+        return True
 
     def handle(self, method: str, path: str, query: dict, body: bytes) -> tuple[int, str, bytes]:
         def js(obj, code=200):
@@ -63,6 +84,10 @@ class App:
                     if STATIC.resolve() not in f.parents or not f.is_file():
                         return js({"error": "nicht gefunden"}, 404)
                     return 200, mimetypes.guess_type(f.name)[0] or "application/octet-stream", f.read_bytes()
+                if path == "/favicon.ico":
+                    return 204, "image/x-icon", b""
+                if path == "/api/schema":
+                    return js(schema())
                 if path == "/api/default":
                     return js(Project().to_dict())
                 if path == "/api/examples":
@@ -76,6 +101,10 @@ class App:
                     return js(json.loads(f.read_text(encoding="utf-8")))
                 if path.startswith("/api/status/"):
                     return js(self.jobs.get(path.rsplit("/", 1)[1]).status_dict())
+                if path.startswith("/api/live/"):
+                    job = self.jobs.get(path.rsplit("/", 1)[1])
+                    pls = [Placement(**p) for p in job.best_so_far()]
+                    return js({"geometry": build_geometry(job.model, pls) if pls else None})
                 if path.startswith("/api/result/"):
                     job = self.jobs.get(path.rsplit("/", 1)[1])
                     if job.result is None:
@@ -107,6 +136,26 @@ class App:
                     project = Project.from_dict(data)
                     job = self.jobs.start(project)
                     return js({"job_id": job.id})
+                if path in ("/api/validate", "/api/export-layout"):
+                    if not isinstance(data, dict) or "project" not in data or not isinstance(data.get("placements"), list):
+                        raise ValueError("Erwartet {project, placements}")
+                    project = Project.from_dict(data["project"])
+                    n = project.stack.n_motor_planes
+                    pls = [Placement.from_dict(p, n) for p in data["placements"]]
+                    if len(pls) > 5000:
+                        raise ValueError("Zu viele Platzierungen (max 5000)")
+                    model = Model(project)
+                    geo = build_geometry(model, pls)
+                    if path == "/api/validate":
+                        from ..scoring import evaluate
+
+                        sc = evaluate(model, pls, project.search.weights, project.target_count).as_dict() if pls else None
+                        return js({"geometry": geo, "valid": not geo["collisions"], "score": sc})
+                    fmt = data.get("format", "svg")
+                    if fmt not in EXPORTERS:
+                        raise ValueError(f"Unbekanntes Exportformat {fmt}")
+                    ex = EXPORTERS[fmt]()
+                    return 200, ex.mime + "; charset=utf-8", ex.export(geo).encode()
                 if path == "/api/analyze":
                     return js(analyze(Project.from_dict(data)))
                 if path.startswith("/api/cancel/"):
@@ -114,10 +163,10 @@ class App:
                     return js({"ok": True})
                 if path == "/api/svg-motor-import":
                     try:
-                        w, d = motor_outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
+                        o = outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
                     except ScaleRequired as exc:
                         return js({"scale_required": True, "message": str(exc)})
-                    return js({"width": w, "depth": d})
+                    return js({"width": o.width, "depth": o.depth, "outline": o.outline, "convex": o.was_convex, "notes": o.notes})
         except ConfigError as exc:
             return js({"errors": exc.errors}, 400)
         except SvgImportError as exc:
@@ -133,15 +182,28 @@ def make_handler(app: App):
     class Handler(BaseHTTPRequestHandler):
         def _serve(self, method: str) -> None:
             u = urlparse(self.path)
-            n = int(self.headers.get("Content-Length") or 0)
+            if not app.host_ok(self.headers.get("Host"), self.headers.get("Origin")):
+                self._send(403, "application/json", b'{"error": "Host oder Origin nicht erlaubt"}', u.path)
+                return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = -1
+            if n < 0 or n > MAX_BODY:
+                self._send(413 if n > 0 else 400, "application/json", b'{"error": "Ungueltige oder zu grosse Anfrage"}', u.path)
+                return
             body = self.rfile.read(n) if n else b""
             code, ctype, payload = app.handle(method, u.path, parse_qs(u.query), body)
+            self._send(code, ctype, payload, u.path)
+
+        def _send(self, code: int, ctype: str, payload: bytes, path: str) -> None:
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
-            if u.path.startswith("/api/export/"):
-                self.send_header("Content-Disposition", f'attachment; filename="blindsight.{u.path.rsplit(".", 1)[-1]}"')
+            self.send_header("X-Content-Type-Options", "nosniff")
+            if path.startswith("/api/export/"):
+                self.send_header("Content-Disposition", f'attachment; filename="blindsight.{path.rsplit(".", 1)[-1]}"')
             self.end_headers()
             self.wfile.write(payload)
 
@@ -158,7 +220,9 @@ def make_handler(app: App):
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), make_handler(App()))
+    app = App(None if host in ("127.0.0.1", "localhost", "::1") else {host.lower(), "127.0.0.1", "localhost"})
+    server = ThreadingHTTPServer((host, port), make_handler(app))
+    server.app = app  # type: ignore[attr-defined]
     server.daemon_threads = True
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(f"http://{host}:{server.server_address[1]}")).start()
@@ -178,6 +242,9 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nBeendet.")
     finally:
+        for job in list(server.app.jobs.jobs.values()):  # type: ignore[attr-defined]
+            if job.stop:
+                job.stop.cancel()
         server.server_close()
 
 

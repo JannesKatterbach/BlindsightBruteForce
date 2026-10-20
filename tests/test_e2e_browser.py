@@ -1,0 +1,86 @@
+"""Ende zu Ende Test der Oberflaeche mit Playwright. Wird uebersprungen, wenn Playwright oder Chromium fehlt."""
+
+import os
+import threading
+import time
+
+import pytest
+
+playwright = pytest.importorskip("playwright.sync_api")
+from blindsight.web.server import serve  # noqa: E402
+
+CHROMIUM = os.environ.get("BLINDSIGHT_CHROMIUM", "/opt/pw-browsers/chromium")
+
+
+@pytest.fixture(scope="module")
+def base_url():
+    server = serve("127.0.0.1", 0, open_browser=False)
+    th = threading.Thread(target=server.serve_forever, daemon=True)
+    th.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with playwright.sync_playwright() as p:
+        try:
+            b = p.chromium.launch(executable_path=CHROMIUM) if os.path.exists(CHROMIUM) else p.chromium.launch()
+        except Exception as exc:  # kein Browser installiert
+            pytest.skip(f"Chromium nicht verfuegbar. {exc}")
+        yield b
+        b.close()
+
+
+def test_full_flow(browser, base_url):
+    pg = browser.new_page(viewport={"width": 1400, "height": 900})
+    errors = []
+    pg.on("pageerror", lambda e: errors.append(str(e)))
+    pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    pg.goto(base_url)
+    pg.wait_for_selector("#in-motor-width")
+    pg.select_option("#exampleSel", "small_hex")
+    pg.wait_for_function("document.querySelector('#in-target_count').value === '7'")
+    # Feldfehler werden am Feld angezeigt
+    pg.fill("#in-rod-diameter", "-3")
+    pg.dispatch_event("#in-rod-diameter", "change")
+    pg.wait_for_selector("#in-rod-diameter.err")
+    pg.fill("#in-rod-diameter", "4")
+    pg.dispatch_event("#in-rod-diameter", "change")
+    pg.wait_for_selector("#in-rod-diameter:not(.err)")
+    errors.clear()  # die absichtlich ungueltige Eingabe erzeugt eine 400 Antwort im Browser Log
+    # Einheit cm rechnet um
+    pg.select_option("#unitSel", "cm")
+    assert pg.input_value("#in-rod-diameter") == "0.4"
+    pg.select_option("#unitSel", "mm")
+    # Optimierung
+    pg.click("[data-tab=optim]")
+    pg.fill("#in-search-time_limit_s", "3")
+    pg.dispatch_event("#in-search-time_limit_s", "change")
+    pg.click("#btnStart")
+    pg.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
+    assert "7 von 7" in pg.inner_text("#statusBox")
+    for view in ("plane", "section", "iso", "top"):
+        pg.select_option("#viewSel", view)
+        assert pg.locator("#view").inner_html() != ""
+    # Bearbeiten und Export
+    pg.check("#optEdit")
+    # Regression. Ziehen einer Stange auf eine andere muss Kollisionen melden (Hilfslinien duerfen Klicks nicht abfangen)
+    def center(unit):
+        bb = pg.locator(f"#view circle[data-unit='{unit}']").first.bounding_box()
+        return bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2
+    (x0, y0), (x1, y1) = center(0), center(1)
+    pg.mouse.move(x0, y0)
+    pg.mouse.down()
+    pg.mouse.move(x1 + 2, y1, steps=8)
+    pg.mouse.up()
+    pg.wait_for_function("document.querySelector('#statusBox').innerText.includes('Manuell bearbeitet')", timeout=10000)
+    assert "Kein" not in pg.inner_text("#collisions")[:6]
+    pg.click("#edReset")
+    pg.wait_for_function("!document.querySelector('#statusBox').innerText.includes('Manuell bearbeitet')", timeout=10000)
+    with pg.expect_download() as dl:
+        pg.click("#btnExport")
+    assert dl.value.suggested_filename.endswith(".svg")
+    assert errors == []
+    pg.close()

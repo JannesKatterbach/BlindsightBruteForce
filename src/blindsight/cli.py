@@ -12,7 +12,7 @@ from .config import ConfigError, Project
 from .export import JsonExporter, SvgExporter, build_geometry
 from .layout import Counter
 from .model import Model
-from .optimizers import get_optimizer
+from .optimizers import run_optimizer
 from .optimizers.base import StopToken
 
 
@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
             last[0] = info.elapsed
             print(f"[{info.elapsed:5.1f}s] {info.phase}. Kandidaten {info.candidates}, beste Anzahl {info.best_count}")
 
-    result = get_optimizer().run(model, progress, stop, counter)
+    result = run_optimizer(model, progress, stop, counter)
     print(f"Status {result.status}, Kandidaten {result.candidates}, Zeit {result.elapsed:.1f}s")
     print(result.optimality_note)
     for m in result.messages:

@@ -21,7 +21,7 @@ def test_bounds_too_small_for_single_unit():
 
 def test_partial_solution_is_reported_honestly():
     m = make_model(target_count=60, bounds__xmax=60.0, bounds__ymax=60.0)
-    m.project.search.time_limit_s = 3
+    m.project.search.time_limit_s = 2
     res = get_optimizer().run(m)
     n = len(res.best.placements)
     assert 0 < n < 60

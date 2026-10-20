@@ -1,3 +1,4 @@
+import pytest
 from blindsight.layout import Counter, layout_from_placements
 from blindsight.optimizers import get_optimizer
 from blindsight.optimizers.base import StopToken
@@ -27,6 +28,7 @@ def test_optimizer_uses_multiple_planes():
     assert len({p.plane for p in res.best.placements}) > 1
 
 
+@pytest.mark.real_time
 def test_deterministic_with_seed():
     def one():
         m = make_model(target_count=6)
@@ -48,16 +50,16 @@ def test_multiple_ranked_solutions_with_breakdown():
 
 
 def test_weights_change_ranking():
-    m1 = make_model(target_count=40, bounds__xmax=90.0, bounds__ymax=90.0)
-    m1.project.search.time_limit_s = 3
-    s = run(m1).best.score
-    from blindsight.scoring import evaluate
     from blindsight.config import WeightsSpec
+    from blindsight.scoring import evaluate
 
-    pl = run(m1).best.placements
-    a = evaluate(m1, pl, WeightsSpec(count=1, area=0, uniformity=0, regularity=0), 40).total
-    b = evaluate(m1, pl, WeightsSpec(count=0, area=1, uniformity=0, regularity=0), 40).total
-    assert a != b
+    m = make_model(target_count=40, bounds__xmax=90.0, bounds__ymax=90.0)
+    m.project.search.time_limit_s = 1.5
+    pl = run(m).best.placements
+    a = evaluate(m, pl, WeightsSpec(count=1, area=0, uniformity=0, regularity=0), 40)
+    b = evaluate(m, pl, WeightsSpec(count=0, area=1, uniformity=0, regularity=0), 40)
+    assert a.total != b.total
+    assert a.total == a.terms["count"] and b.total == b.terms["area"]
 
 
 def test_cancel():

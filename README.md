@@ -33,12 +33,13 @@ python -m pytest                                      # Tests
 | `layout.py` | Menge platzierter Einheiten, inkrementelle Kollisionsprüfung mit Raumraster, Kollisionsliste |
 | `patterns.py` | Kandidatengenerierung (Quadrat, Hexagon in x oder y) |
 | `scoring.py` | Zielfunktion mit konfigurierbaren Gewichten und Aufschlüsselung |
-| `optimizers/` | Schnittstelle `Optimizer`, Registry, `pattern_greedy` (Muster, gierig, lokale Suche) |
+| `optimizers/` | Schnittstelle `Optimizer`, Registry, gemeinsame Bausteine (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `parallel` |
 | `diagnose.py` | verständliche Gründe, wenn keine Lösung existiert |
-| `export/` | `build_geometry` (formatneutral), SVG, JSON, Protokoll `Exporter` für weitere Formate |
+| `export/` | `build_geometry` (formatneutral), SVG, JSON, DXF, Bohrliste CSV, Protokoll `Exporter` für weitere Formate |
 | `service.py` | Hintergrundläufe in Threads mit Fortschritt und Abbruch |
 | `web/` | HTTP Server (stdlib) und Oberfläche (HTML, JS, CSS) |
-| `motor_import.py` | Motorkontur aus SVG, fragt nach dem Maßstab, wenn er nicht eindeutig ist |
+| `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
+| `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
 
 Entscheidungen
@@ -98,33 +99,100 @@ Zielfunktion (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
 Ehrlichkeit. Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die einfache
 Flächenschranke erreicht wird, wird Optimalität gemeldet.
 
+## Optimierer
+
+| Name | Verfahren | Aussage |
+|---|---|---|
+| `pattern_greedy` | Quadrat und Hexagonalraster, gierige Zuordnung, Teilungssuche, lokale Suche | beste gefundene Lösung |
+| `anneal_free` | freie Verteilung, Mehrfachstart, Simulated Annealing | beste gefundene Lösung |
+| `exhaustive_small` | Backtracking auf diskretem Raster, kleinstes Fenster der Stangenmitten | bewiesen nur bezogen auf das Raster und nur ohne Knotenlimit, bis 14 Stangen |
+
+Anordnungsziel `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
+`search.workers` größer 1 startet unabhängige Seeds in getrennten Prozessen und führt die Ergebnisse zusammen.
+Mit `search.stagnation_s` endet ein Lauf früh, sobald die Zielanzahl erreicht ist und sich nichts mehr verbessert.
+
 ## Parameter
 
-Alle Längen in mm.
+Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle wird aus `FIELD_META` in `config.py` erzeugt
+(`python -m blindsight.docs --update`), dieselbe Quelle füllt die UI Formulare, Tooltips und die Validierung.
 
-| Parameter | Bedeutung |
-|---|---|
-| `target_count` | gewünschte Anzahl Stangen mit Motoren |
-| `clearance`, `tolerance` | Sicherheitsabstand und Toleranz, wirksam ist die Summe |
-| `rod.diameter`, `rod.stroke` | Durchmesser und maximaler Hub über G0 |
-| `rod.engage_below` / `engage_above` | Mindestgewinde unter/über der Zahnradachse bei vollem Aus/Einfahren |
-| `rod.length_tolerance`, `rod.retract_depth`, `rod.hole_clearance` | Längenzuschlag, Einfahrtiefe, Lochspiel |
-| `motor.width/depth/height` | Gehäuse |
-| `motor.shaft_x`, `axis_height` | Lage der Abtriebsachse im Gehäuse |
-| `motor.gear_diameter/gear_width/gear_gap` | Zahnrad |
-| `motor.center_distance` | Achsabstand Zahnrad zu Stangenachse (Eingriff) |
-| `motor.mount` | `top` oder `bottom` |
-| `stack.n_motor_planes` | Anzahl Motorebenen, keine feste Obergrenze |
-| `stack.mode` | `uniform`, `gaps` (Abstände G(i) zu G(i+1)) oder `distances` (zu G0) |
-| `stack.allowed_planes`, `mount_zones` | erlaubte Ebenen, Montagebereiche |
-| `bounds` | Bauraum, Randabstand |
-| `obstacles` | feste Hindernisse (Rechteck oder Kreis, optional z0 und z1) |
-| `search.weights` | Priorität der Ziele |
-| `search.patterns`, `angle_step`, `allowed_angles` | Muster und erlaubte Motorwinkel |
-| `search.time_limit_s`, `max_candidates`, `seed` | Limits und Reproduzierbarkeit |
+<!-- PARAMS:BEGIN -->
+| Parameter | Bedeutung | Einheit | Grenzen |
+|---|---|---|---|
+| `name` | Name. Bezeichnung des Projekts |  |  |
+| `target_count` | Gewuenschte Anzahl Stangen. So viele Gewindestangen mit Motoren sollen platziert werden |  | >= 1, <= 100000 |
+| `clearance` | Sicherheitsabstand. Mindestabstand zwischen allen fremden Bauteilen | mm | >= 0, <= 1000 |
+| `tolerance` | Toleranz. Wird zum Sicherheitsabstand addiert (Fertigung, Rundung). Wirksamer Abstand = Sicherheitsabstand + Toleranz | mm | >= 0, <= 1000 |
+| `rod.diameter` | Durchmesser. Aussendurchmesser des Gewindes | mm | > 0, <= 1000 |
+| `rod.stroke` | Maximaler Hub ueber G0. So weit muss jede Stange oberhalb von G0 ausfahren koennen, unabhaengig von der Motorebene | mm | > 0, <= 100000 |
+| `rod.engage_below` | Gewinde unter Zahnradachse (ausgefahren). Mindestgewinde unter der Zahnradachse bei maximalem Ausfahren | mm | >= 0, <= 100000 |
+| `rod.engage_above` | Gewinde ueber Zahnradachse (eingefahren). Mindestgewinde ueber der Zahnradachse bei vollem Einfahren | mm | >= 0, <= 100000 |
+| `rod.length_tolerance` | Laengenzuschlag. Zusaetzlicher Sicherheitszuschlag der Stangenlaenge | mm | >= 0, <= 100000 |
+| `rod.retract_depth` | Spitze eingefahren unter G0. Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = buendig) | mm | >= 0, <= 100000 |
+| `rod.hole_clearance` | Radiales Lochspiel. Spiel der Durchgangsloecher in den Ebenen (je Seite) | mm | >= 0, <= 1000 |
+| `motor.width` | Breite (x). Gehaeusebreite quer zur Welle | mm | > 0, <= 10000 |
+| `motor.depth` | Tiefe (y, Wellenrichtung). Gehaeusetiefe entlang der Welle | mm | > 0, <= 10000 |
+| `motor.height` | Hoehe (z). Gehaeusehoehe senkrecht zur Ebene | mm | > 0, <= 10000 |
+| `motor.shaft_x` | Abtriebsachse, x Versatz. Seitlicher Versatz der Abtriebsachse zur Gehaeusemitte | mm | >= -10000, <= 10000 |
+| `motor.axis_height` | Achshoehe ueber Montageflaeche. Hoehe der Abtriebsachse ueber der Montageflaeche | mm | >= 0, <= 10000 |
+| `motor.gear_diameter` | Zahnrad Durchmesser. Aussendurchmesser des Antriebszahnrads | mm | > 0, <= 10000 |
+| `motor.gear_width` | Zahnrad Breite. Axiale Breite des Zahnrads | mm | > 0, <= 10000 |
+| `motor.gear_gap` | Abstand Gehaeuse zu Zahnrad. Axialer Abstand zwischen Gehaeusekante und Zahnrad | mm | >= 0, <= 10000 |
+| `motor.center_distance` | Achsabstand Zahnrad zu Stange. Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur ueber diesen Abstand modelliert | mm | >= 0, <= 10000 |
+| `motor.center_distance_min` | Achsabstand min (optional). Untergrenze, wenn der Optimierer den Achsabstand variieren darf | mm | >= 0, <= 10000 |
+| `motor.center_distance_max` | Achsabstand max (optional). Obergrenze, wenn der Optimierer den Achsabstand variieren darf | mm | >= 0, <= 10000 |
+| `motor.center_distance_steps` | Achsabstand Stufen. Anzahl der Stufen zwischen min und max (1 = nur nominal) |  | >= 1, <= 50 |
+| `motor.own_clearance` | Eigenabstand Gehaeuse zur Stange. Mindestabstand des Gehaeuses zur eigenen Stange | mm | >= 0, <= 1000 |
+| `motor.mount` | Montage. Motor steht auf der Ebene oder haengt darunter |  | `top` / `bottom` |
+| `stack.n_motor_planes` | Anzahl Motorebenen. Anzahl der Ebenen G1 bis Gn, keine feste Obergrenze |  | >= 1, <= 1000 |
+| `stack.mode` | Abstandsmodus. Wie die Ebenenhoehen angegeben werden |  | `uniform` / `gaps` / `distances` |
+| `stack.uniform_spacing` | Einheitlicher Ebenenabstand. Abstand zwischen allen Ebenen (Modus uniform) | mm | > 0, <= 100000 |
+| `stack.gaps` | Einzelabstaende (Liste). Abstaende G0-G1, G1-G2, ... (Modus gaps) | mm |  |
+| `stack.distances` | Abstaende zu G0 (Liste). Abstand jeder Motorebene zu G0, aufsteigend (Modus distances) | mm |  |
+| `stack.thickness` | Dicke Motorebenen. Plattendicke der Ebenen G1 bis Gn | mm | > 0, <= 1000 |
+| `stack.g0_thickness` | Dicke G0. Plattendicke der oberen Referenzebene | mm | > 0, <= 1000 |
+| `stack.thicknesses` | Dicke je Ebene (Liste, optional). Eigene Dicke fuer jede Motorebene, ueberschreibt die gemeinsame Dicke | mm |  |
+| `stack.allowed_planes` | Erlaubte Motorebenen (Liste, leer = alle) (optional). Nur diese Ebenen duerfen Motoren tragen |  |  |
+| `bounds.xmin` | x min. Bauraum, linke Grenze | mm | >= -1e+06, <= 1e+06 |
+| `bounds.xmax` | x max. Bauraum, rechte Grenze | mm | >= -1e+06, <= 1e+06 |
+| `bounds.ymin` | y min. Bauraum, untere Grenze | mm | >= -1e+06, <= 1e+06 |
+| `bounds.ymax` | y max. Bauraum, obere Grenze | mm | >= -1e+06, <= 1e+06 |
+| `bounds.edge_margin` | Randabstand. Zusaetzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
+| `bounds.parts_in_bounds` | Im Bauraum muessen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
+| `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` |
+| `search.layout_goal` | Anordnungsziel. compact packt dicht (kleine Flaeche), spread verteilt gleichmaessig ueber den ganzen Bauraum |  | `compact` / `spread` |
+| `search.patterns` | Muster (square, hex_x, hex_y). Verteilungsstruktur der Kandidaten |  |  |
+| `search.fixed_pitch` | Feste Teilung (optional). Nur diese Rasterteilung verwenden statt sie zu suchen | mm | > 0, <= 100000 |
+| `search.angle_step` | Winkelschritt (Grad). Raster der zulaessigen Motorwinkel |  | > 0, <= 360 |
+| `search.angle_min` | Winkel von (Grad). Kleinster Motorwinkel |  | >= -3600, <= 3600 |
+| `search.angle_max` | Winkel bis (Grad, exklusiv). 360 = voller Kreis |  | >= -3600, <= 3600 |
+| `search.allowed_angles` | Nur diese Winkel (Liste, leer = Raster) (optional). Explizite Liste erlaubter Motorwinkel | mm |  |
+| `search.time_limit_s` | Zeitlimit (s). Maximale Rechenzeit |  | > 0, <= 86400 |
+| `search.max_candidates` | Max. Kandidaten. Maximale Anzahl geprueften Platzierungen |  | >= 1 |
+| `search.seed` | Seed. Zufallsstartwert fuer reproduzierbare Laeufe |  | >= 0 |
+| `search.top_k` | Anzahl Loesungen. Wie viele beste Loesungen behalten werden |  | >= 1, <= 50 |
+| `search.refine_fraction` | Anteil lokale Suche. Zeitanteil der Verfeinerung (0 bis 0.9) |  | >= 0, <= 0.9 |
+| `search.stagnation_s` | Stagnation (s, optional). Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert |  | > 0, <= 86400 |
+| `search.workers` | Parallele Laeufe. Anzahl Prozesse fuer unabhaengige Seeds (1 = ohne Parallelisierung) |  | >= 1, <= 64 |
+| `search.weights.count` | Anzahl Stangen. Gewicht des Ziels Anzahl |  | >= 0, <= 1000 |
+| `search.weights.area` | Kleine Grundflaeche. Gewicht des Ziels Grundflaeche |  | >= 0, <= 1000 |
+| `search.weights.uniformity` | Gleichmaessige Verteilung. Gewicht der gleichmaessigen Nachbarabstaende |  | >= 0, <= 1000 |
+| `search.weights.regularity` | Regelmaessiges Muster. Gewicht der Quadrat oder Hexagonalordnung |  | >= 0, <= 1000 |
+<!-- PARAMS:END -->
+
+Weitere Felder ohne Tabellenzeile
+- `stack.mount_zones` Montagebereiche je Ebene, zum Beispiel `{"1": [[0, 0, 60, 120]]}`
+- `stack.max_per_plane` maximale Motoranzahl je Ebene, zum Beispiel `{"1": 6}`
+- `stack.plane_angles` erlaubte Winkel je Ebene, zum Beispiel `{"3": [0, 90, 180, 270]}`
+- `motor.outline` konvexes Polygon des Gehäuses im lokalen Motorsystem, ersetzt das Rechteck
+- `obstacles` feste Hindernisse (`shape` rect oder circle, `x`, `y`, `w`, `h`, `r`, `angle`, optional `z0`, `z1`, `plane` für eine Sperrzone nur auf einer Motorebene)
 
 Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `small_hex.json` kleine Standardaufgabe
+- `spread_even.json` gleichmäßig über den Bauraum verteilt
+- `polygon_motor_variable_center_distance.json` gezeichnete Motorkontur, Achsabstand wird mitoptimiert
+- `plane_rules.json` Kapazität, Winkel, Sperrzone und Dicke je Ebene
+- `exact_small.json` exakte Suche auf dem Raster
 - `three_levels_mixed_gaps.json` ungleiche Ebenenabstände mit Hindernis
 - `bottom_mount_two_levels.json` Motoren unter den Ebenen
 - `area_too_small.json` Bauraum zu klein, ehrliche Teillösung
@@ -135,24 +203,41 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 SVG im Maßstab 1:1 (`width` und `height` in mm, `viewBox` in mm). Gruppe `top` ist die Draufsicht, `plane-N` je Motorebene mit
 Gehäusen, Zahnrädern, Stangen und Durchgangslöchern. Die Y Achse ist gespiegelt (Ursprung links unten im Bauraum).
 Das SVG ist ein geometrisches Ergebnis, kein fertiges PCB Layout. JSON enthält alle Konturen und Z Werte.
+DXF (R12, mm) hat Layer `BOUNDS`, `OBSTACLES`, `TOP_RODS` sowie je Ebene `Gn_MOTOR`, `Gn_GEAR` und `Gn_HOLES`.
+Die Bohrliste (CSV) enthält je Ebene alle Durchgangslöcher (jede Stange braucht ein Loch in jeder Ebene, die sie durchquert,
+auch die eingefahrene Stange unterhalb ihrer Motorebene).
+
+## Oberfläche
+
+- Reiter Geometrie. Formulare mit Tooltips, Einheitenwahl, Fehler direkt am Feld. Motor Editor mit ziehbaren Griffen
+  (Größe, Zahnrad, Achsabstand), Konturzeichnen (wird automatisch konvex), SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
+- Reiter Ebenen. Abstandsmodi, Tabelle je Ebene (erlaubt, Kapazität, Winkel, Dicke), berechnete Stangenlängen und Seitenschnitt
+- Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
+- Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter, Fortschritt, Live Vorschau der besten Lösung
+- Reiter Ergebnisse. Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht (mit der Maus drehen), Kollisionen, engste Stellen,
+  Vergleich der Top Lösungen, manuelles Bearbeiten mit sofortiger Prüfung, Export (SVG, DXF, CSV, JSON), Ergebnis speichern und laden
+
+Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten) und
+begrenzt die Größe von Anfragen.
 
 ## Mechanische Annahmen und Einschränkungen
 
 - Das Zahnrad ist ein Quader als Einhüllende, ohne Zahngeometrie. Der Eingriff steckt nur im Achsabstand. Ob das reale Zahnrad
   in das reale Gewinde passt, muss mit den echten Bauteilen geprüft werden
 - Standardwerte sind Platzhalter, keine Herstellerdaten
-- Gehäuse sind Rechtecke. Der SVG Import liefert nur Breite und Tiefe der Kontur (ein Rechteck oder Polygon)
+- Gehäuse sind konvex (Rechteck oder konvexes Polygon). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
+- Die Stange gilt über den ganzen Verfahrweg als Zylinder, auch eingefahren unterhalb des Motors. Das ist konservativ
 - Bauraum ist ein Rechteck, Ebenen sind keine Platinen mit Leiterbahnen, Kabel und Stecker fehlen
-- Die Suche ist heuristisch. Sehr große Aufgaben brauchen mehr Zeit, das Verfahren bevorzugt regelmäßige Muster
+- Die Suche ist heuristisch. Sehr große Aufgaben brauchen mehr Zeit. Bei kompakter Anordnung wird nur ein Fenster um die Mitte des Bauraums gerastert
+- `exhaustive_small` untersucht Fenster der Stangenmitten ab der Ecke des Bauraums und beweist nur Rasteroptimalität
 - Die 3D Ansicht ist eine einfache gedrehte Projektion
 - Zahnrad und Gehäuse werden auch gegen die eigene Montageebene mit dem Sicherheitsabstand geprüft
 
 ## Nächste Schritte
 
-1. Freie Motorkonturen (konvexe Polygone, später nicht konvex) und SVG Konturimport mit Zahnradposition
+1. Nicht konvexe Motorkonturen (Zerlegung in konvexe Teile), Zahnradposition aus SVG
 2. Zahnform und Gewindeeingriff als eigenes Modul, Toleranzketten
-3. DXF und STEP Export, Bohrbilder für G0
-4. Zweite Strategie (genetisch oder Constraint Löser) im selben `Optimizer` Interface, Vergleich der Läufe
-5. Polygonale Bauräume, Kabelkanäle, Montagezonen mit UI
+3. STEP Export, Bohrbilder mit Bemaßung
+4. Genetischer oder Constraint Optimierer im selben `Optimizer` Interface
+5. Polygonale Bauräume, Kabelkanäle
 6. Echte 3D Ansicht (three.js), Messwerkzeug, Kollisionsanimation
-7. Parallelisierung der Kandidatenprüfung

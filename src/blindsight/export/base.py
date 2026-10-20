@@ -42,6 +42,7 @@ def build_geometry(model: Model, placements: list[Placement]) -> dict:
             "y": pl.y,
             "plane": pl.plane,
             "angle": pl.angle,
+            "cd": pl.cd,
             "rod": model.rod_geometry(pl.plane).as_dict(),
             "parts": parts,
         })
@@ -69,4 +70,22 @@ def build_geometry(model: Model, placements: list[Placement]) -> dict:
         "units": units,
         "obstacles": obstacles,
         "collisions": [c.as_dict() for c in lay.all_collisions()],
+        "closest_pairs": lay.closest_pairs(12),
     }
+
+
+def rod_passes(geometry: dict, unit: dict, plane_index: int) -> bool:
+    """Durchquert die Stange der Einheit die Ebene (Durchgangsloch noetig)?"""
+    pl = geometry["planes"][plane_index]
+    rod = unit["rod"]
+    return rod["bottom_retracted"] <= pl["z_top"] and rod["tip_extended"] >= pl["z_bottom"]
+
+
+def holes_by_plane(geometry: dict) -> dict[int, list[dict]]:
+    """Durchgangsloecher je Ebene (inklusive G0). Jede Stange braucht ein Loch in jeder Ebene, die sie durchquert."""
+    out: dict[int, list[dict]] = {p["index"]: [] for p in geometry["planes"]}
+    for u in geometry["units"]:
+        for p in geometry["planes"]:
+            if rod_passes(geometry, u, p["index"]):
+                out[p["index"]].append({"unit": u["id"], "x": u["x"], "y": u["y"], "d": geometry["hole_diameter"]})
+    return out

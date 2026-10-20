@@ -25,7 +25,7 @@ def single_unit_report(model: Model) -> list[str]:
             x = b.xmin + (b.xmax - b.xmin) * i / (n - 1)
             y = b.ymin + (b.ymax - b.ymin) * j / (n - 1)
             for plane in usable:
-                for ang in model.angles:
+                for ang in model.angles_for(plane):
                     res = lay.check(Placement(x, y, plane, ang))
                     if res.ok:
                         return []

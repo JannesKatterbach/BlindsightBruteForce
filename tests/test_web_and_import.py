@@ -46,3 +46,13 @@ def test_api_rejects_invalid_config():
     cfg["rod"]["diameter"] = -3
     code, _, body = app.handle("POST", "/api/start", {}, json.dumps(cfg).encode())
     assert code == 400 and json.loads(body)["errors"]
+
+
+def test_readme_documents_every_field():
+    from pathlib import Path
+
+    from blindsight.config import FIELD_META
+
+    text = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    missing = [m.path for m in FIELD_META if f"`{m.path}`" not in text]
+    assert not missing, f"In der README fehlen. {missing} (python -m blindsight.docs --update)"

@@ -34,7 +34,7 @@ class Score:
 def footprint_bbox(model: Model, placements: list[Placement]) -> tuple[float, float, float, float]:
     xs0, ys0, xs1, ys1 = math.inf, math.inf, -math.inf, -math.inf
     for i, pl in enumerate(placements):
-        for p in model.unit_parts(i, pl.x, pl.y, pl.plane, pl.angle):
+        for p in model.unit_parts(i, pl.x, pl.y, pl.plane, pl.angle, pl.cd):
             if p.kind == "rod":
                 b = p.prism.fp.bbox
                 xs0, ys0, xs1, ys1 = min(xs0, b[0]), min(ys0, b[1]), max(xs1, b[2]), max(ys1, b[3])
@@ -57,7 +57,7 @@ def evaluate(model: Model, placements: list[Placement], weights: WeightsSpec, ta
     area = max((x1 - x0) * (y1 - y0), 1e-9)
     hull_pts = []
     for i, pl in enumerate(placements):
-        for p in model.unit_parts(i, pl.x, pl.y, pl.plane, pl.angle):
+        for p in model.unit_parts(i, pl.x, pl.y, pl.plane, pl.angle, pl.cd):
             hull_pts.extend(p.prism.fp.outline() if p.kind != "rod" else [(pl.x, pl.y)])
     hull_area = polygon_area(convex_hull(hull_pts))
 

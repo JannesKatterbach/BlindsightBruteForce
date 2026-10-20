@@ -17,17 +17,15 @@ def test_orientation_changes_collision_result():
 
 
 def test_rotation_by_180_moves_motor_to_other_side():
+    """Rotation um 180 Grad spiegelt die Lage des Gehaeuses an der Stangenachse."""
     m = make_model(stack__n_motor_planes=1)
-    lay = Layout(m)
-    a = lay.add(pl(60, 60, 1, 0))
-    b = lay.add(pl(60, 20, 1, 180)) if lay.check(pl(60, 20, 1, 180)).ok else None
-    h0 = next(p for p in lay.parts_of(a) if p.kind == "housing").prism.fp
-    assert math.isclose(h0.cx, 60 - (m.project.motor.rod_local[0]), abs_tol=1e-6) or True
-    # Rotation um 180 Grad spiegelt die Lage des Gehaeuses an der Stangenachse
     g0 = m.unit_parts(0, 60, 60, 1, 0)[0].prism.fp
     g180 = m.unit_parts(0, 60, 60, 1, 180)[0].prism.fp
     assert math.isclose(g0.cx - 60, -(g180.cx - 60), abs_tol=1e-9)
     assert math.isclose(g0.cy - 60, -(g180.cy - 60), abs_tol=1e-9)
+    # Gehaeusemitte liegt um (center_distance, gear_center_y) versetzt zur Stange (bei 0 Grad)
+    rx, ry = m.project.motor.rod_local()
+    assert math.isclose(g0.cx, 60 - rx, abs_tol=1e-9) and math.isclose(g0.cy, 60 - ry, abs_tol=1e-9)
 
 
 def test_rod_stays_fixed_when_rotating_motor():

@@ -11,7 +11,9 @@
   <h1>Project Blindsight</h1>
   <span class="sub">Geometrischer Motor und Gewindestangen Optimierer</span>
   <div class="spacer"></div>
+  <label>Einheit <select id="unitSel"><option>mm</option><option>cm</option><option>in</option></select></label>
   <select id="exampleSel" title="Beispiel laden"><option value="">Beispiel laden</option></select>
+  <button id="btnReset" title="Alle Eingaben auf die Standardwerte setzen">Standardwerte</button>
   <button id="btnSave">Konfig speichern</button>
   <label class="btn">Konfig laden<input type="file" id="fileLoad" accept=".json" hidden></label>
 </header>
@@ -22,51 +24,72 @@
   <button data-tab="optim">Optimierung</button>
   <button data-tab="results">Ergebnisse</button>
 </nav>
+<div id="banner" class="errors" hidden></div>
 <main>
   <section id="tab-geometry" class="tab active">
     <div class="cols">
       <div><h2>Allgemein</h2><div class="form" id="f-general"></div>
         <h2>Gewindestange</h2><div class="form" id="f-rod"></div></div>
-      <div><h2>Motor und Zahnrad</h2><div class="form" id="f-motor"></div>
-        <details><summary>Motorkontur aus SVG importieren</summary>
-          <p class="hint">Genau ein Rechteck oder Polygon. Ist der Massstab nicht eindeutig, wird er abgefragt.</p>
+      <div><h2>Motor und Zahnrad</h2><div class="form" id="f-motor"></div></div>
+      <div>
+        <h2>Motor Editor, Draufsicht</h2>
+        <svg id="motorPreview" viewBox="0 0 100 100"></svg>
+        <p class="hint">Griffe ziehen. Orange Zahnrad, schwarz Stange, grau Gehaeuse, rot Achsabstand. Winkel 0 Grad.</p>
+        <div class="toolbar">
+          <button id="btnDraw">Kontur zeichnen</button>
+          <button id="btnDrawDone" hidden>Fertig</button>
+          <button id="btnRectReset">Rechteck</button>
+        </div>
+        <details><summary>SVG Import</summary>
+          <p class="hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Massstab nicht eindeutig, wird er abgefragt.</p>
           <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
-        </details></div>
-      <div><h2>Vorschau Motor, Draufsicht</h2><svg id="motorPreview" viewBox="0 0 100 100"></svg>
-        <p class="hint">Grau Gehaeuse, Farbe Zahnrad, Punkt Stangenachse, Kreis Stange. Winkel 0 Grad.</p></div>
+        </details>
+        <details><summary>Motor Bibliothek (lokal im Browser)</summary>
+          <div class="toolbar"><input id="libName" placeholder="Name" size="14"><button id="libSave">Speichern</button></div>
+          <div class="toolbar"><select id="libSel"></select><button id="libLoad">Laden</button><button id="libDel">Loeschen</button></div>
+          <div class="toolbar"><button id="libExport">Motor als JSON</button><label class="btn">Motor JSON laden<input type="file" id="libImport" accept=".json" hidden></label></div>
+        </details>
+      </div>
     </div>
   </section>
   <section id="tab-levels" class="tab">
     <div class="cols">
-      <div><h2>Ebenen</h2><div class="form" id="f-stack"></div></div>
+      <div><h2>Ebenen</h2><div class="form" id="f-stack"></div>
+        <h2>Einstellungen je Motorebene</h2><div id="planeTable"></div>
+        <p class="hint">Leer lassen heisst Standard. Winkel als Liste mit Komma. Maximale Motoranzahl, erlaubte Ebene und eigene Dicke sind optional.</p></div>
       <div><h2>Berechnete Ebenen und Stangenlaengen</h2><div id="levelInfo"></div>
         <svg id="sectionPreview" viewBox="0 0 300 200"></svg></div>
     </div>
   </section>
   <section id="tab-bounds" class="tab">
     <div class="cols">
-      <div><h2>Bauraum (Draufsicht)</h2><div class="form" id="f-bounds"></div></div>
-      <div><h2>Feste Hindernisse (JSON)</h2>
-        <textarea id="obstacles" rows="8" spellcheck="false"></textarea>
-        <p class="hint">Liste von Objekten, zum Beispiel
-        <code>{"shape":"circle","x":60,"y":60,"r":5}</code> oder <code>{"shape":"rect","x":20,"y":20,"w":10,"h":10,"angle":0}</code>.
-        Optional z0 und z1.</p>
-        <h2>Montagebereiche je Ebene (JSON)</h2>
-        <textarea id="mountZones" rows="4" spellcheck="false"></textarea>
-        <p class="hint">Zum Beispiel <code>{"1": [[0,0,60,120]]}</code> (xmin, ymin, xmax, ymax). Leer = ueberall.</p></div>
+      <div><h2>Bauraum (Draufsicht)</h2><div class="form" id="f-bounds"></div>
+        <svg id="boundsPreview" viewBox="0 0 100 100"></svg></div>
+      <div><h2>Feste Hindernisse und Sperrzonen</h2><div id="obsTable"></div>
+        <button id="obsAdd">Hindernis hinzufuegen</button>
+        <p class="hint">Ohne Ebene gilt das Hindernis ueber alle Ebenen. Mit Ebene ist es eine Sperrzone nur fuer diese Motorebene.</p>
+        <h2>Montagebereiche je Ebene</h2><div id="zoneTable"></div>
+        <button id="zoneAdd">Bereich hinzufuegen</button>
+        <p class="hint">Gehaeuse muessen vollstaendig in einem der Bereiche der Ebene liegen. Ohne Eintrag gilt der ganze Bauraum.</p></div>
     </div>
   </section>
   <section id="tab-optim" class="tab">
     <div class="cols">
-      <div><h2>Prioritaeten der Ziele</h2><div class="form" id="f-weights"></div>
-        <p class="hint">Relative Gewichte, werden normiert. Hohe Anzahl vor kleiner Flaeche, vor Gleichmaessigkeit und Muster.</p></div>
-      <div><h2>Suche</h2><div class="form" id="f-search"></div></div>
+      <div><h2>Prioritaeten der Ziele</h2><div id="weights"></div>
+        <div class="toolbar">Voreinstellung
+          <button data-preset="count">Viele Stangen</button>
+          <button data-preset="area">Kleine Flaeche</button>
+          <button data-preset="uniform">Gleichmaessig</button>
+          <button data-preset="balanced">Ausgewogen</button></div>
+        <p class="hint">Relative Gewichte, werden normiert.</p>
+        <h2>Suche</h2><div class="form" id="f-search"></div></div>
       <div><h2>Berechnung</h2>
         <button id="btnStart" class="primary">Optimierung starten</button>
         <button id="btnCancel" disabled>Abbrechen</button>
         <div class="progress"><div id="bar"></div></div>
         <table class="kv" id="progTable"></table>
-        <div id="errors" class="errors"></div></div>
+        <div id="errors" class="errors"></div>
+        <h2>Beste bisherige Loesung</h2><svg id="liveView" viewBox="0 0 100 100"></svg></div>
     </div>
   </section>
   <section id="tab-results" class="tab">
@@ -79,18 +102,23 @@
           <option value="top">Draufsicht (alle Ebenen)</option>
           <option value="plane">Einzelne Ebene</option>
           <option value="section">Seitenschnitt</option>
-          <option value="iso">Raeumlich</option>
+          <option value="iso">Raeumlich (mit Maus drehen)</option>
         </select></label>
         <label id="planeLabel">Ebene <select id="planeSel"></select></label>
-        <label id="rotLabel">Drehung <input type="range" id="rot" min="0" max="360" value="35"></label>
         <label><input type="checkbox" id="optDist" checked> Abstaende</label>
-        <a id="dlSvg" class="btn" href="#">SVG exportieren</a>
-        <a id="dlJson" class="btn" href="#">JSON exportieren</a>
+        <label><input type="checkbox" id="optEdit"> Bearbeiten</label>
+        <select id="expFmt"><option value="svg">SVG</option><option value="dxf">DXF</option><option value="csv">Bohrliste CSV</option><option value="json">JSON</option></select>
+        <button id="btnExport">Exportieren</button>
+        <button id="btnSaveResult">Ergebnis speichern</button>
+        <label class="btn">Ergebnis laden<input type="file" id="fileResult" accept=".json" hidden></label>
       </div>
+      <div id="editPanel" class="statusBox" hidden></div>
       <div class="cols resultCols">
         <div class="viewWrap"><svg id="view"></svg><div class="legend" id="legend"></div></div>
         <div><h2>Kennzahlen</h2><table class="kv" id="metrics"></table>
           <h2>Zielfunktion</h2><table class="kv" id="terms"></table>
+          <h2>Vergleich der Loesungen</h2><table class="kv" id="compare"></table>
+          <h2>Engste Stellen</h2><table class="kv" id="pairs"></table>
           <h2>Hinweise</h2><ul id="messages"></ul>
           <h2>Kollisionen</h2><ul id="collisions"></ul></div>
       </div>

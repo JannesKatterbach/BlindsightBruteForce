@@ -86,7 +86,11 @@ class PlaneStack:
             tops += [-d for d in s.distances[:n]]
         self.planes: list[Plane] = []
         for i, z in enumerate(tops):
-            self.planes.append(Plane(i, f"G{i}", z, s.g0_thickness if i == 0 else s.thickness))
+            if i == 0:
+                th = s.g0_thickness
+            else:
+                th = s.thicknesses[i - 1] if s.thicknesses is not None else s.thickness
+            self.planes.append(Plane(i, f"G{i}", z, th))
         for a, b in zip(self.planes, self.planes[1:]):
             if b.z_top >= a.z_bottom:
                 raise ConfigError(
@@ -121,15 +125,20 @@ class Model:
         self.stack = PlaneStack(project)
         self.gap = project.required_gap
         self.angles = project.allowed_angle_list()
+        self._plane_angles = {i: project.angles_for_plane(i) for i in range(1, project.stack.n_motor_planes + 1)}
+        self.center_distances = project.motor.center_distances()
+        self.capacity = {int(k): v for k, v in project.stack.max_per_plane.items()}
+        self._cd_problem_cache: dict[float, str] = {}
         self._rod_geo: dict[int, RodGeometry] = {}
         self._plane_problems: dict[int, list[str]] = {}
         self._parts_cache: dict[tuple, list[Part]] = {}
-        self.obstacles = self._build_obstacles()
         self.rod_r = project.rod.diameter / 2.0
         self.hole_r = self.rod_r + project.rod.hole_clearance
         for p in self.stack.motor_planes:
             self._rod_geo[p.index] = self._compute_rod(p)
             self._plane_problems[p.index] = self._check_plane(p)
+        self.obstacles = self._build_obstacles()
+        self.housing_local = self._housing_polygon()
         self.unit_radius = self._compute_unit_radius()
 
     # -- Gewindestange -------------------------------------------------------
@@ -208,47 +217,72 @@ class Model:
                 f"Zahnradachse liegt zu nah an G0. Eingefahren nur {geo.engage_above_actual:.1f} mm Gewinde "
                 f"ueber der Achse, benoetigt {self.project.rod.engage_above:.1f} mm"
             )
+        return problems
+
+    def cd_problem(self, cd: Optional[float]) -> str:
+        """Leer, wenn das Gehaeuse bei diesem Achsabstand die eigene Stange freihaelt, sonst Meldung."""
         m = self.project.motor
-        # Gehaeuse gegen eigene Stange (rein lokal, unabhaengig von der Position)
-        rx, ry = m.rod_local
-        own = Footprint.rect(0, 0, m.width, m.depth).pts
+        key = round(m.center_distance if cd is None else cd, 9)
+        hit = self._cd_problem_cache.get(key)
+        if hit is not None:
+            return hit
         from .geometry import point_polygon_distance
 
-        d = point_polygon_distance(rx, ry, own) - self.rod_r
+        rx, ry = m.rod_local(cd)
+        d = point_polygon_distance(rx, ry, self.housing_local) - self.rod_r
+        msg = ""
         if d < m.own_clearance - 1e-9:
-            problems.append(
+            msg = (
                 f"Motorgehaeuse beruehrt die eigene Stange (Abstand {max(d, 0):.2f} mm, benoetigt "
                 f"{m.own_clearance:.2f} mm). Zahnradabstand oder Achsabstand anpassen"
             )
-        return problems
+        self._cd_problem_cache[key] = msg
+        return msg
+
+    def angles_for(self, plane_index: int) -> list[float]:
+        return self._plane_angles[plane_index]
+
+    def _housing_polygon(self) -> list[tuple[float, float]]:
+        m = self.project.motor
+        if m.outline:
+            return [(float(x), float(y)) for x, y in Footprint.polygon(m.outline).pts]
+        return Footprint.rect(0, 0, m.width, m.depth).pts
 
     def plane_problems(self, plane_index: int) -> list[str]:
         return self._plane_problems[plane_index]
 
     def usable_planes(self) -> list[int]:
-        return [p.index for p in self.stack.motor_planes if not self._plane_problems[p.index]]
+        """Motorebenen ohne statische Probleme (Hoehe, erlaubt, Eigenabstand beim nominalen Achsabstand)."""
+        return [
+            p.index for p in self.stack.motor_planes
+            if not self._plane_problems[p.index] and self.capacity.get(p.index, 1) > 0
+        ]
 
     # -- Bauteile -------------------------------------------------------------
     def _compute_unit_radius(self) -> float:
         """Obere Schranke fuer den Abstand aller Bauteilpunkte von der Stangenachse (fuer Raster)."""
         m = self.project.motor
-        rx, ry = m.rod_local
-        pts = rect_corners(0, 0, m.width, m.depth)
-        r = max(math.hypot(x - rx, y - ry) for x, y in pts)
+        r = self.rod_r
         gx0, gx1 = m.shaft_x - m.gear_radius, m.shaft_x + m.gear_radius
         gy0 = m.depth / 2 + m.gear_gap
         gy1 = gy0 + m.gear_width
-        for x in (gx0, gx1):
-            for y in (gy0, gy1):
+        for cd in self.center_distances:
+            rx, ry = m.rod_local(cd)
+            for x, y in self.housing_local:
                 r = max(r, math.hypot(x - rx, y - ry))
-        return max(r, self.rod_r)
+            for x in (gx0, gx1):
+                for y in (gy0, gy1):
+                    r = max(r, math.hypot(x - rx, y - ry))
+        return r
 
-    def unit_parts(self, owner: int, x: float, y: float, plane_index: int, angle_deg: float) -> list[Part]:
+    def unit_parts(
+        self, owner: int, x: float, y: float, plane_index: int, angle_deg: float, cd: Optional[float] = None
+    ) -> list[Part]:
         """Erzeugt Gehaeuse, Zahnrad und Stangenhuelle einer Platzierung.
 
         (x, y) ist die Position der Gewindestange, angle_deg die Drehung des Motors um die Stange.
         """
-        key = (round(x, 6), round(y, 6), plane_index, round(angle_deg, 6))
+        key = (round(x, 6), round(y, 6), plane_index, round(angle_deg, 6), None if cd is None else round(cd, 6))
         cached = self._parts_cache.get(key)
         if cached is not None:
             return [Part(p.kind, p.prism, owner, p.label) for p in cached]
@@ -256,15 +290,14 @@ class Model:
         geo = self._rod_geo[plane_index]
         plane = self.stack[plane_index]
         a = math.radians(angle_deg)
-        rx, ry = m.rod_local
+        rx, ry = m.rod_local(cd)
 
         def world(lx: float, ly: float) -> tuple[float, float]:
             return rotate_point(x + (lx - rx), y + (ly - ry), x, y, a)
 
         hz0, hz1 = self._housing_z(plane)
         gz0, gz1 = self._gear_z(plane)
-        hc = world(0.0, 0.0)
-        housing = Footprint.rect(hc[0], hc[1], m.width, m.depth, a)
+        housing = Footprint.polygon([world(px, py) for px, py in self.housing_local])
         gcx, gcy = world(m.shaft_x, m.gear_center_y)
         gear = Footprint.rect(gcx, gcy, m.gear_diameter, m.gear_width, a)
         rod = Footprint.circle(x, y, self.rod_r)
@@ -285,7 +318,12 @@ class Model:
                 fp = Footprint.circle(o.x, o.y, o.r)
             else:
                 fp = Footprint.rect(o.x, o.y, o.w, o.h, math.radians(o.angle))
-            out.append(Part("obstacle", Prism(fp, o.z0, o.z1), None, o.name or f"Hindernis {i + 1}"))
+            z0, z1 = o.z0, o.z1
+            if o.plane is not None:
+                pl = self.stack[o.plane]
+                hz0, hz1 = self._housing_z(pl)
+                z0, z1 = min(hz0, pl.z_bottom), max(hz1, pl.z_top)
+            out.append(Part("obstacle", Prism(fp, z0, z1), None, o.name or f"Hindernis {i + 1}"))
         return out
 
     # -- Bauraum --------------------------------------------------------------

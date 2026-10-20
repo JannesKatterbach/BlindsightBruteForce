@@ -57,13 +57,25 @@ def test_rod_blocks_motor_on_other_plane():
 
 
 def test_different_planes_allow_overlapping_footprints():
+    """Gehaeuse auf verschiedenen Ebenen duerfen sich in der Draufsicht ueberlappen,
+    solange keine Stange oder kein Zahnrad im Weg ist."""
+    from blindsight.geometry import footprint_distance
+
     m = make_model()
     lay = Layout(m)
-    # Stangen weit genug auseinander, Gehaeuse liegen aber in der Draufsicht uebereinander
-    lay.add(pl(40, 60, 1, 0))
-    assert lay.check(pl(40 + 8, 60, 2, 0)).ok is False or True  # nur Smoke, Detail im Winkeltest
-    far = lay.check(pl(40, 60 + 40, 2, 0))
-    assert far.ok
+    uid = lay.add(pl(40, 60, 1, 0))
+    h1 = next(p for p in lay.parts_of(uid) if p.kind == "housing").prism.fp
+    found = False
+    for ang in range(0, 360, 15):
+        for dx in range(-30, 31, 2):
+            for dy in range(-30, 31, 2):
+                cand = pl(40 + dx, 60 + dy, 2, ang)
+                if not lay.check(cand).ok:
+                    continue
+                h2 = next(p for p in m.unit_parts(9, cand.x, cand.y, 2, ang) if p.kind == "housing").prism.fp
+                if footprint_distance(h1, h2) == 0.0:
+                    found = True
+    assert found
 
 
 def test_clearance_boundary():
