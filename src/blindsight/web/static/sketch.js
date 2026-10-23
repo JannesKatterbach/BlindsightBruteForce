@@ -465,16 +465,23 @@
   }
 
   // --- Ziehen mit Solver (gedrosselt, letzte Position gewinnt) ----------------------------------------------------------
-  let dragBusy = false, dragQueue = null;
-  async function dragSolve(i, target) {
-    dragQueue = { i, target }; if (dragBusy) return; dragBusy = true; S.busy++;
+  // Der Ziehvorgang (drag) wird mitgegeben, weil S.drag beim Loslassen schon null sein kann,
+  // waehrend die letzte Antwort noch unterwegs ist. dragRun erlaubt dem Loslassen, darauf zu warten.
+  let dragQueue = null, dragRun = null;
+  function dragSolve(drag, target) {
+    dragQueue = { drag, target };
+    if (!dragRun) dragRun = dragLoop().finally(() => { dragRun = null; });
+    return dragRun;
+  }
+  async function dragLoop() {
+    S.busy++;
     try {
       while (dragQueue) {
-        const q = dragQueue; dragQueue = null;
-        const data = await callSolve({ drag: { point: q.i, target: q.target } });
-        if (data.ok) { if (!S.drag.pushed) { S.hist.push(S.drag.before); S.redo = []; S.drag.pushed = true; } apply(data); render(); renderStatusLight(); }
+        const { drag, target } = dragQueue; dragQueue = null;
+        const data = await callSolve({ drag: { point: drag.i, target } });
+        if (data.ok) { if (!drag.pushed) { S.hist.push(drag.before); S.redo = []; drag.pushed = true; } apply(data); render(); renderStatusLight(); }
       }
-    } finally { dragBusy = false; S.busy--; }
+    } finally { S.busy--; }
   }
   function renderStatusLight() { renderStatus(); }
 
@@ -521,7 +528,7 @@
       if (S.tool === "draw") { S.cursor = [snapV(mx), snapV(my)]; render(); return; }
       const d = S.drag; if (!d) return;
       if (d.type === "pan") { const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy; if (Math.hypot(dx, dy) > 3) d.moved = true; S.view.cx = d.cx - dx * S.view.k; S.view.cy = d.cy + dy * S.view.k; render(); }
-      else if (d.type === "point") { if (!d.moved && Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) < 4) return; d.moved = true; dragSolve(d.i, [snapV(mx), snapV(my)]); }
+      else if (d.type === "point") { if (!d.moved && Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) < 4) return; d.moved = true; dragSolve(d, [snapV(mx), snapV(my)]); }
       else if (d.type === "gear") { d.moved = true; const cd = Math.max(0, Math.round(-snapV(mx) * 1000) / 1000); if (cd !== cfg.motor.center_distance) { cfg.motor.center_distance = cd; writeInputs(); render(); S.pending = cd; } }
     });
     const end = async (ev) => {
@@ -529,7 +536,7 @@
       S.busy++;
       try {
       if (d.type === "gear" && d.moved) { apply(await callSolve()); sync(); renderAll(); }
-      else if (d.type === "point" && d.moved) { await new Promise((r) => setTimeout(r, 30)); sync(); renderAll(); }
+      else if (d.type === "point" && d.moved) { if (dragRun) await dragRun; sync(); renderAll(); }
       else if (d.type === "pan") renderAll();
       } finally { S.busy--; }
     };

@@ -5,7 +5,7 @@ const NS = "http://www.w3.org/2000/svg";
 const PALETTE = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f"];
 const col = (p) => PALETTE[(p - 1) % PALETTE.length];
 const UNIT = { mm: 1, cm: 10, in: 25.4 };
-const LIST_KINDS = ["list", "listint", "liststr"];
+const LIST_KINDS = ["list", "lenlist", "listint", "liststr"];
 const LEN_LISTS = new Set(["stack.gaps", "stack.distances", "stack.thicknesses"]);
 let unit = "mm", cfg = null, schema = null, defaults = null;
 let jobId = null, poll = null, livePoll = null;
@@ -19,7 +19,7 @@ const round = (v, n = 4) => (v == null || isNaN(v) ? v : Math.round(v * 10 ** n)
 const toU = (mm) => round(mm / UNIT[unit]);
 const fromU = (v) => v * UNIT[unit];
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const lenLabel = (l, kind, p) => (kind === "len" || LEN_LISTS.has(p) ? `${l} [${unit}]` : l);
+const lenLabel = (l, kind, p) => (kind === "len" || kind === "lenlist" || LEN_LISTS.has(p) ? `${l} [${unit}]` : l);
 
 function el(name, attrs = {}, parent) {
   const e = document.createElementNS(NS, name);
@@ -69,7 +69,7 @@ function readInput(inp) {
   if (k === "len") v = fromU(parseFloat(v));
   else if (k === "num") v = parseFloat(v);
   else if (k === "int") v = parseInt(v, 10);
-  else if (k === "list") { v = v.trim() === "" ? [] : v.split(/[,; ]+/).filter(Boolean).map(parseFloat); if (LEN_LISTS.has(p)) v = v.map(fromU); }
+  else if (k === "list" || k === "lenlist") { v = v.trim() === "" ? [] : v.split(/[,; ]+/).filter(Boolean).map(parseFloat); if (LEN_LISTS.has(p)) v = v.map(fromU); }
   else if (k === "listint") v = v.split(/[,; ]+/).filter(Boolean).map((x) => parseInt(x, 10));
   else if (k === "liststr") v = v.split(/[,; ]+/).filter(Boolean);
   set(cfg, p, v);
@@ -80,7 +80,7 @@ function writeInputs() {
     const k = inp.dataset.kind, v = get(cfg, inp.dataset.path);
     if (v == null) inp.value = "";
     else if (k === "len") inp.value = toU(v);
-    else if (k === "list") inp.value = v.map((x) => (LEN_LISTS.has(inp.dataset.path) ? toU(x) : round(x))).join(", ");
+    else if (k === "list" || k === "lenlist") inp.value = v.map((x) => (LEN_LISTS.has(inp.dataset.path) ? toU(x) : round(x))).join(", ");
     else if (LIST_KINDS.includes(k)) inp.value = v.join(", ");
     else inp.value = v;
   }

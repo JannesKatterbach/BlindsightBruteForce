@@ -13,21 +13,23 @@ from .config import FIELD_META
 
 BEGIN = "<!-- PARAMS:BEGIN -->"
 END = "<!-- PARAMS:END -->"
-UNIT = {"len": "mm", "num": "", "int": "", "text": "", "enum": "", "list": "mm", "listint": "", "liststr": ""}
+UNIT = {"len": "mm", "lenlist": "mm", "num": "", "int": "", "text": "", "enum": "", "list": "", "listint": "", "liststr": ""}
+NO_UPPER_LIMIT = 1e9  # groessere Obergrenzen sind nur technische Schranken und werden nicht angezeigt
 
 
 def parameter_table() -> str:
     rows = ["| Parameter | Bedeutung | Einheit | Grenzen |", "|---|---|---|---|"]
-    for m in FIELD_META:
-        lim = []
-        if m.lo is not None:
-            lim.append(("> " if m.strict_lo else ">= ") + f"{m.lo:g}")
-        if m.hi is not None and m.hi < 1e9:
-            lim.append(f"<= {m.hi:g}")
-        if m.options:
-            lim = [" / ".join(f"`{o[0]}`" for o in m.options)]
-        opt = " (optional)" if m.optional and "optional" not in m.label else ""
-        rows.append(f"| `{m.path}` | {m.label}{opt}. {m.tip} | {UNIT.get(m.kind, '')} | {', '.join(lim)} |")
+    for meta in FIELD_META:
+        limits = []
+        if meta.lo is not None:
+            limits.append(("> " if meta.strict_lo else ">= ") + f"{meta.lo:g}")
+        if meta.hi is not None and meta.hi < NO_UPPER_LIMIT:
+            limits.append(f"<= {meta.hi:g}")
+        if meta.options:
+            limits = [" / ".join(f"`{option[0]}`" for option in meta.options)]
+        optional = " (optional)" if meta.optional and "optional" not in meta.label else ""
+        unit = UNIT.get(meta.kind, "")
+        rows.append(f"| `{meta.path}` | {meta.label}{optional}. {meta.tip} | {unit} | {', '.join(limits)} |")
     return "\n".join(rows)
 
 

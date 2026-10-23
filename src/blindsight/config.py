@@ -3,8 +3,17 @@
 Alle Laengen in mm, Winkel in Grad. Die Konfiguration ist reines Datenmodell
 und kennt weder Optimierer noch UI. Sie laesst sich als JSON laden und speichern.
 
-FIELD_META beschreibt jedes Feld (Label, Hilfetext, Einheit, Grenzen, Auswahl).
-Daraus entstehen Validierung, UI Formulare (/api/schema) und die Dokumentation.
+Aufbau dieser Datei
+  1. Dataclasses (RodSpec, MotorSpec, StackSpec, ...), Standardwerte sind Platzhalter
+  2. Project mit Laden, Speichern und Validierung
+  3. FIELD_META. Beschreibung jedes einfachen Feldes (Label, Hilfetext, Einheit,
+     Grenzen, Auswahl). Daraus entstehen Feldpruefung, UI Formulare (/api/schema)
+     und die Parametertabelle der README (docs.py)
+  4. Typgetriebenes Einlesen aus JSON (_build, _coerce)
+
+Erweitern. Ein neues einfaches Feld braucht ein Dataclass Attribut und einen
+Eintrag in FIELD_META. Pruefungen, die mehrere Felder betreffen, gehoeren in die
+passende ``_check_*`` Funktion in Abschnitt 2.
 
 Wichtig. Die Standardwerte sind Platzhalter fuer ein erstes Ausprobieren und
 keine Herstellerdaten. Alle mechanisch relevanten Masse muessen mit den realen
@@ -15,22 +24,26 @@ from __future__ import annotations
 
 import dataclasses
 import json
-import math
+import types
 import typing
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from .errors import ConfigError
+from .geometry import is_convex_ccw, signed_area
+from .patterns import PATTERNS
+from .units import EPS, EPS_AREA, FAR_AWAY, is_finite_number, normalize_angle_deg
 
-class ConfigError(ValueError):
-    """Ungueltige Konfiguration. errors enthaelt alle gefundenen Probleme."""
+MAX_ANGLE_COUNT = 100_000  # Schutz gegen winzige Winkelschritte
 
-    def __init__(self, errors: list[str] | str):
-        if isinstance(errors, str):
-            errors = [errors]
-        self.errors = list(errors)
-        super().__init__("; ".join(self.errors))
+STACK_MODES = ("uniform", "gaps", "distances")
+MOUNT_MODES = ("top", "bottom")
+OBSTACLE_SHAPES = ("rect", "circle")
 
 
+# ---------------------------------------------------------------------------
+# 1. Dataclasses
+# ---------------------------------------------------------------------------
 @dataclass
 class RodSpec:
     """Gewindestange (vertikal)."""
@@ -46,7 +59,7 @@ class RodSpec:
 
 @dataclass
 class ConstraintSpec:
-    """Ein Constraint der Motor Skizze (siehe sketch.py)."""
+    """Ein Constraint der Motor Skizze (Typen und Bedeutung siehe sketch/constraints.py)."""
 
     type: str = "length"
     a: Optional[int] = None
@@ -70,17 +83,19 @@ class SketchSpec:
 class MotorSpec:
     """Motor mit seitlichem Antriebszahnrad, vereinfacht als Prisma plus Zahnradquader.
 
-    Lokales Koordinatensystem in der Draufsicht (Motorwinkel 0 Grad).
-      Mit sketch gilt ein anderes System. Ursprung ist die Stangenachse, Zahnrad bei (-center_distance, 0),
-      width, depth, shaft_x, gear_gap und outline werden dann ignoriert (siehe sketch.py).
-      Gehaeuse ist um (0, 0) zentriert. Ohne outline ein Rechteck width mal depth,
-      mit outline ein konvexes Polygon (dann sind width und depth nur noch die
-      Bounding Box fuer die Anzeige und die Lage des Zahnrads).
-      Die Abtriebsachse verlaeuft parallel zu y und tritt an der +y Seite aus.
-      Sie liegt bei x = shaft_x (relativ zur Gehaeusemitte).
-      Das Zahnrad sitzt axial gear_gap hinter der Gehaeusekante (depth/2), Breite gear_width.
-      Die Gewindestange steht senkrecht, Abstand center_distance zur Abtriebsachse
-      in +x Richtung, in y auf Hoehe der Zahnradmitte.
+    Es gibt zwei Arten, das Gehaeuse zu beschreiben.
+
+    Ohne Skizze (Gehaeusesystem, Motorwinkel 0 Grad, Draufsicht)
+      * Gehaeuse um (0, 0) zentriert. Ein Rechteck width mal depth oder, mit
+        ``outline``, ein konvexes Polygon (width und depth sind dann nur Anzeige).
+      * Die Abtriebsachse verlaeuft parallel zu y bei x = shaft_x und tritt an der
+        +y Seite aus. Das Zahnrad sitzt gear_gap hinter der obersten Gehaeusekante.
+      * Die Gewindestange steht senkrecht im Abstand center_distance zur
+        Abtriebsachse (in +x), auf Hoehe der Zahnradmitte.
+
+    Mit Skizze (``sketch``, Stangenrahmen)
+      * Ursprung ist die Stangenachse, das Zahnrad liegt bei (-center_distance, 0).
+      * width, depth, shaft_x, gear_gap und outline werden ignoriert.
     """
 
     width: float = 12.0
@@ -98,7 +113,7 @@ class MotorSpec:
     own_clearance: float = 0.2
     mount: str = "top"
     outline: Optional[list[list[float]]] = None
-    sketch: Optional[SketchSpec] = None  # ersetzt Rechteck und outline, siehe sketch.py
+    sketch: Optional[SketchSpec] = None
 
     @property
     def gear_radius(self) -> float:
@@ -106,24 +121,25 @@ class MotorSpec:
 
     @property
     def gear_center_y(self) -> float:
-        # Das Zahnrad sitzt hinter der obersten Kante der Kontur (bei zentrierter Kontur ist das depth / 2)
+        """y der Zahnradmitte im Gehaeusesystem (hinter der obersten Kante der Kontur)."""
         top = max(p[1] for p in self.outline) if self.outline else self.depth / 2.0
         return top + self.gear_gap + self.gear_width / 2.0
 
     def center_distances(self) -> list[float]:
-        """Zulaessige Achsabstaende (nominal, wenn kein Bereich angegeben ist)."""
-        lo = self.center_distance if self.center_distance_min is None else self.center_distance_min
-        hi = self.center_distance if self.center_distance_max is None else self.center_distance_max
-        n = max(1, self.center_distance_steps)
-        if n == 1 or hi <= lo:
+        """Zulaessige Achsabstaende, aufsteigend. Ohne Bereich nur der Nominalwert.
+
+        Der Nominalwert ist immer enthalten (die Validierung stellt sicher, dass er im Bereich liegt)."""
+        lo, hi = self.center_distance_min, self.center_distance_max
+        steps = max(1, self.center_distance_steps)
+        if lo is None or hi is None or steps == 1 or hi <= lo:
             return [self.center_distance]
-        vals = [lo + (hi - lo) * i / (n - 1) for i in range(n)]
-        if not any(abs(v - self.center_distance) < 1e-9 for v in vals):
-            vals.append(self.center_distance)
-        return sorted(vals)
+        values = [lo + (hi - lo) * i / (steps - 1) for i in range(steps)]
+        if not any(abs(v - self.center_distance) < EPS for v in values):
+            values.append(self.center_distance)
+        return sorted(values)
 
     def rod_local(self, cd: Optional[float] = None) -> tuple[float, float]:
-        """Position der Gewindestange im lokalen Motorsystem."""
+        """Position der Gewindestange im Gehaeusesystem (nur ohne Skizze sinnvoll)."""
         return (self.shaft_x + (self.center_distance if cd is None else cd), self.gear_center_y)
 
 
@@ -148,6 +164,31 @@ class StackSpec:
     mount_zones: dict[str, list[list[float]]] = field(default_factory=dict)
     max_per_plane: dict[str, int] = field(default_factory=dict)
     plane_angles: dict[str, list[float]] = field(default_factory=dict)
+
+    def plane_tops(self) -> list[float]:
+        """Z der Oberseiten von G0 bis Gn (G0 bei 0, darunter negativ)."""
+        n = self.n_motor_planes
+        tops = [0.0]
+        if self.mode == "uniform":
+            tops += [-(i * self.uniform_spacing) for i in range(1, n + 1)]
+        elif self.mode == "gaps":
+            z = 0.0
+            for gap in self.gaps[:n]:
+                z -= gap
+                tops.append(z)
+        elif self.mode == "distances":
+            tops += [-d for d in self.distances[:n]]
+        else:
+            raise ConfigError(f"stack.mode. Unbekannter Modus '{self.mode}'")
+        return tops
+
+    def plane_thickness(self, index: int) -> float:
+        """Dicke der Ebene G<index> (0 = G0)."""
+        if index == 0:
+            return self.g0_thickness
+        if self.thicknesses is not None:
+            return self.thicknesses[index - 1]
+        return self.thickness
 
 
 @dataclass
@@ -176,6 +217,7 @@ class ObstacleSpec:
 
     Ist plane gesetzt, gilt es nur auf dieser Motorebene (Sperrzone, z.B. Loch oder Bauteil
     in der Platine), die Z Spanne ergibt sich dann aus der Ebene und der Motorhoehe.
+    Der Winkel ``angle`` ist in Grad.
     """
 
     shape: str = "rect"
@@ -185,20 +227,25 @@ class ObstacleSpec:
     h: float = 10.0
     r: float = 5.0
     angle: float = 0.0
-    z0: float = -1e6
-    z1: float = 1e6
+    z0: float = -FAR_AWAY
+    z1: float = FAR_AWAY
     plane: Optional[int] = None
     name: str = ""
 
 
 @dataclass
 class WeightsSpec:
-    """Prioritaeten der Optimierungsziele (relative Gewichte, werden normiert)."""
+    """Prioritaeten der Optimierungsziele (relative Gewichte, werden normiert).
+
+    Jedes Feld entspricht einem Eintrag in ``scoring.OBJECTIVES``."""
 
     count: float = 10.0
     area: float = 8.0
     uniformity: float = 2.0
     regularity: float = 1.0
+
+    def as_dict(self) -> dict[str, float]:
+        return dataclasses.asdict(self)
 
 
 @dataclass
@@ -223,6 +270,9 @@ class SearchSpec:
     workers: int = 1
 
 
+# ---------------------------------------------------------------------------
+# 2. Projekt
+# ---------------------------------------------------------------------------
 @dataclass
 class Project:
     name: str = "Unbenannt"
@@ -250,6 +300,7 @@ class Project:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Project":
+        """Liest und validiert ein Projekt. Wirft ConfigError mit allen gefundenen Problemen."""
         errs: list[str] = []
         proj = _build(cls, data, "", errs)
         if errs:
@@ -273,127 +324,169 @@ class Project:
 
     # -- Validierung -------------------------------------------------------
     def validate(self) -> None:
+        """Prueft erst jedes Feld einzeln (FIELD_META), dann die Zusammenhaenge.
+
+        Die Zusammenhangspruefungen setzen gueltige Einzelwerte voraus und laufen daher nur,
+        wenn die Feldpruefung fehlerfrei war."""
         errs: list[str] = []
-        _validate_meta(self, errs)
-        if errs:  # semantische Pruefungen setzen gueltige Einzelwerte voraus
+        _validate_fields(self, errs)
+        if errs:
             raise ConfigError(errs)
-        self._validate_semantics(errs)
+        for check in (_check_motor, _check_stack, _check_bounds, _check_obstacles, _check_search):
+            check(self, errs)
         if errs:
             raise ConfigError(errs)
 
-    def _validate_semantics(self, errs: list[str]) -> None:
-        r, m, s, b, se = self.rod, self.motor, self.stack, self.bounds, self.search
-        n = s.n_motor_planes
-        if m.axis_height > m.height:
-            errs.append("motor.axis_height. Die Abtriebsachse liegt ausserhalb der Motorhoehe")
-        if s.mode == "gaps":
-            if len(s.gaps) < n:
-                errs.append(f"stack.gaps. Modus 'gaps' braucht {n} Abstaende (G0-G1, G1-G2, ...)")
-            elif any(g <= 0 for g in s.gaps[:n]):
-                errs.append("stack.gaps. Alle Ebenenabstaende muessen positiv sein")
-        elif s.mode == "distances":
-            d = s.distances[:n]
-            if len(d) < n:
-                errs.append(f"stack.distances. Modus 'distances' braucht {n} Abstaende zu G0")
-            elif any(x <= 0 for x in d) or any(d[i] >= d[i + 1] for i in range(len(d) - 1)):
-                errs.append("stack.distances. Abstaende zu G0 muessen positiv und streng aufsteigend sein")
-        if s.thicknesses is not None:
-            if len(s.thicknesses) < n:
-                errs.append(f"stack.thicknesses. {n} Dicken erwartet (eine je Motorebene)")
-            elif any(t <= 0 for t in s.thicknesses):
-                errs.append("stack.thicknesses. Alle Dicken muessen positiv sein")
-        if s.mode == "uniform" and s.uniform_spacing <= 0:
-            errs.append("stack.uniform_spacing. Muss groesser als 0 sein")
-        if s.allowed_planes is not None:
-            bad = [p for p in s.allowed_planes if not 1 <= p <= n]
-            if bad:
-                errs.append(f"stack.allowed_planes. Ebenen {bad} existieren nicht (1..{n})")
-            if not s.allowed_planes:
-                errs.append("stack.allowed_planes. Darf nicht leer sein (None = alle Ebenen)")
-        for key, zones in s.mount_zones.items():
-            _check_plane_key("stack.mount_zones", key, n, errs)
-            for z in zones:
-                if len(z) != 4 or z[2] <= z[0] or z[3] <= z[1]:
-                    errs.append(f"stack.mount_zones[{key}]. Bereich muss [xmin, ymin, xmax, ymax] mit xmax>xmin, ymax>ymin sein")
-        for key, cap in s.max_per_plane.items():
-            _check_plane_key("stack.max_per_plane", key, n, errs)
-            if cap < 0:
-                errs.append(f"stack.max_per_plane[{key}]. Darf nicht negativ sein")
-        for key, angs in s.plane_angles.items():
-            _check_plane_key("stack.plane_angles", key, n, errs)
-            if not angs:
-                errs.append(f"stack.plane_angles[{key}]. Darf nicht leer sein")
-        if b.xmax <= b.xmin or b.ymax <= b.ymin:
-            errs.append("bounds. Bauraum hat keine positive Flaeche (xmax>xmin, ymax>ymin)")
-        elif 2 * b.edge_margin >= min(b.width, b.height):
-            errs.append("bounds.edge_margin. Randabstand ist groesser als der halbe Bauraum")
-        for i, o in enumerate(self.obstacles):
-            tag = f"obstacles[{i}]"
-            if o.shape not in ("rect", "circle"):
-                errs.append(f"{tag}.shape. Muss 'rect' oder 'circle' sein")
-            if o.z1 < o.z0:
-                errs.append(f"{tag}. z1 muss >= z0 sein")
-            if o.shape == "rect" and (o.w <= 0 or o.h <= 0):
-                errs.append(f"{tag}. Breite und Hoehe muessen positiv sein")
-            if o.shape == "circle" and o.r <= 0:
-                errs.append(f"{tag}.r. Radius muss positiv sein")
-            if o.plane is not None and not 1 <= o.plane <= n:
-                errs.append(f"{tag}.plane. Ebene {o.plane} existiert nicht (1..{n})")
-        for p in se.patterns:
-            if p not in ("square", "hex_x", "hex_y"):
-                errs.append(f"search.patterns. Unbekanntes Muster '{p}' (square, hex_x, hex_y)")
-        if not se.patterns:
-            errs.append("search.patterns. Mindestens ein Muster ist noetig")
-        if se.angle_max <= se.angle_min:
-            errs.append("search.angle_max. Muss groesser als angle_min sein")
-        if m.sketch is not None:
-            from .sketch import check_sketch_motor
-
-            _, serrs = check_sketch_motor(m)
-            errs.extend(serrs)
-        elif m.outline is not None:
-            _check_outline(m.outline, errs)
-        if m.center_distance_min is not None and m.center_distance_max is not None and m.center_distance_max < m.center_distance_min:
-            errs.append("motor.center_distance_max. Muss >= center_distance_min sein")
-        w = se.weights
-        if w.count + w.area + w.uniformity + w.regularity <= 0:
-            errs.append("search.weights. Nicht alle Gewichte duerfen 0 sein")
-        if len(se.patterns) != len(set(se.patterns)):
-            errs.append("search.patterns. Muster doppelt angegeben")
-        try:
-            self.allowed_angle_list()
-        except ConfigError as exc:
-            errs.extend(exc.errors)
-        for key, angs in s.plane_angles.items():
-            if any(not math.isfinite(a) for a in angs):
-                errs.append(f"stack.plane_angles[{key}]. Winkel muessen endlich sein")
-
+    # -- Winkel ------------------------------------------------------------
     def allowed_angle_list(self) -> list[float]:
-        """Zulaessige Motorwinkel in Grad (aufsteigend, ohne Duplikate)."""
-        se = self.search
-        if se.allowed_angles is not None:
-            angs = sorted({round(a % 360.0, 6) for a in se.allowed_angles})
+        """Zulaessige Motorwinkel in Grad, in [0, 360), aufsteigend und ohne Duplikate."""
+        search = self.search
+        if search.allowed_angles is not None:
+            angles = {normalize_angle_deg(a) for a in search.allowed_angles}
         else:
-            if se.angle_step <= 0:
+            if search.angle_step <= 0:
                 raise ConfigError("search.angle_step. Muss positiv sein")
-            if (se.angle_max - se.angle_min) / se.angle_step > 100_000:
-                raise ConfigError("search.angle_step. Zu klein, ergibt ueber 100000 Winkel")
-            angs = []
-            a = se.angle_min
-            while a < se.angle_max - 1e-9:
-                angs.append(round(a % 360.0, 6))
-                a += se.angle_step
-            angs = sorted(set(angs))
-        if not angs:
+            if (search.angle_max - search.angle_min) / search.angle_step > MAX_ANGLE_COUNT:
+                raise ConfigError(f"search.angle_step. Zu klein, ergibt ueber {MAX_ANGLE_COUNT} Winkel")
+            angles = set()
+            a = search.angle_min
+            while a < search.angle_max - EPS:
+                angles.add(normalize_angle_deg(a))
+                a += search.angle_step
+        if not angles:
             raise ConfigError("search.allowed_angles. Keine zulaessigen Motorwinkel")
-        return angs
+        return sorted(angles)
 
     def angles_for_plane(self, plane: int) -> list[float]:
         """Zulaessige Winkel einer Ebene (globale Liste, durch plane_angles ersetzt)."""
         own = self.stack.plane_angles.get(str(plane))
         if own:
-            return sorted({round(a % 360.0, 6) for a in own})
+            return sorted({normalize_angle_deg(a) for a in own})
         return self.allowed_angle_list()
+
+
+def _check_motor(proj: Project, errs: list[str]) -> None:
+    motor = proj.motor
+    if motor.axis_height > motor.height:
+        errs.append("motor.axis_height. Die Abtriebsachse liegt ausserhalb der Motorhoehe")
+    lo, hi = motor.center_distance_min, motor.center_distance_max
+    if (lo is None) != (hi is None):
+        errs.append("motor.center_distance_min. Achsabstand min und max muessen zusammen angegeben werden")
+    elif lo is not None and hi is not None:
+        if hi < lo:
+            errs.append("motor.center_distance_max. Muss >= center_distance_min sein")
+        elif not lo - EPS <= motor.center_distance <= hi + EPS:
+            errs.append(
+                f"motor.center_distance. Der Achsabstand {motor.center_distance:g} liegt ausserhalb des Bereichs "
+                f"{lo:g} bis {hi:g}"
+            )
+    if motor.sketch is not None:
+        from .sketch import check_sketch_motor  # die Skizze nutzt MotorSpec, daher erst hier laden
+
+        _, sketch_errors = check_sketch_motor(motor)
+        errs.extend(sketch_errors)
+    elif motor.outline is not None:
+        _check_outline(motor.outline, errs)
+
+
+def _check_stack(proj: Project, errs: list[str]) -> None:
+    stack = proj.stack
+    n = stack.n_motor_planes
+    before = len(errs)
+    if stack.mode == "gaps":
+        if len(stack.gaps) < n:
+            errs.append(f"stack.gaps. Modus 'gaps' braucht {n} Abstaende (G0-G1, G1-G2, ...)")
+        elif any(g <= 0 for g in stack.gaps[:n]):
+            errs.append("stack.gaps. Alle Ebenenabstaende muessen positiv sein")
+    elif stack.mode == "distances":
+        dist = stack.distances[:n]
+        if len(dist) < n:
+            errs.append(f"stack.distances. Modus 'distances' braucht {n} Abstaende zu G0")
+        elif any(x <= 0 for x in dist) or any(dist[i] >= dist[i + 1] for i in range(len(dist) - 1)):
+            errs.append("stack.distances. Abstaende zu G0 muessen positiv und streng aufsteigend sein")
+    if stack.thicknesses is not None:
+        if len(stack.thicknesses) < n:
+            errs.append(f"stack.thicknesses. {n} Dicken erwartet (eine je Motorebene)")
+        elif any(t <= 0 for t in stack.thicknesses):
+            errs.append("stack.thicknesses. Alle Dicken muessen positiv sein")
+    if len(errs) == before:
+        errs.extend(plane_overlap_errors(stack))
+    if stack.allowed_planes is not None:
+        bad = [p for p in stack.allowed_planes if not 1 <= p <= n]
+        if bad:
+            errs.append(f"stack.allowed_planes. Ebenen {bad} existieren nicht (1..{n})")
+        if not stack.allowed_planes:
+            errs.append("stack.allowed_planes. Darf nicht leer sein (None = alle Ebenen)")
+    for key, zones in stack.mount_zones.items():
+        _check_plane_key("stack.mount_zones", key, n, errs)
+        for zone in zones:
+            if len(zone) != 4 or zone[2] <= zone[0] or zone[3] <= zone[1]:
+                errs.append(f"stack.mount_zones[{key}]. Bereich muss [xmin, ymin, xmax, ymax] mit xmax>xmin, ymax>ymin sein")
+    for key, cap in stack.max_per_plane.items():
+        _check_plane_key("stack.max_per_plane", key, n, errs)
+        if cap < 0:
+            errs.append(f"stack.max_per_plane[{key}]. Darf nicht negativ sein")
+    for key, angles in stack.plane_angles.items():
+        _check_plane_key("stack.plane_angles", key, n, errs)
+        if not angles:
+            errs.append(f"stack.plane_angles[{key}]. Darf nicht leer sein")
+
+
+def plane_overlap_errors(stack: StackSpec) -> list[str]:
+    """Meldungen, wenn eine Ebene in die naechste hineinragt (Abstand kleiner als die Plattendicke)."""
+    tops = stack.plane_tops()
+    out = []
+    for i in range(len(tops) - 1):
+        bottom = tops[i] - stack.plane_thickness(i)
+        if tops[i + 1] >= bottom:
+            out.append(
+                f"stack. Ebenen G{i} und G{i + 1} ueberlappen. Abstand {tops[i] - tops[i + 1]:.2f} mm "
+                f"ist kleiner als die Dicke von G{i} ({stack.plane_thickness(i):.2f} mm)"
+            )
+    return out
+
+
+def _check_bounds(proj: Project, errs: list[str]) -> None:
+    bounds = proj.bounds
+    if bounds.xmax <= bounds.xmin or bounds.ymax <= bounds.ymin:
+        errs.append("bounds. Bauraum hat keine positive Flaeche (xmax>xmin, ymax>ymin)")
+    elif 2 * bounds.edge_margin >= min(bounds.width, bounds.height):
+        errs.append("bounds.edge_margin. Randabstand ist groesser als der halbe Bauraum")
+
+
+def _check_obstacles(proj: Project, errs: list[str]) -> None:
+    n = proj.stack.n_motor_planes
+    for i, obstacle in enumerate(proj.obstacles):
+        tag = f"obstacles[{i}]"
+        if obstacle.shape not in OBSTACLE_SHAPES:
+            errs.append(f"{tag}.shape. Muss 'rect' oder 'circle' sein")
+        if obstacle.z1 < obstacle.z0:
+            errs.append(f"{tag}. z1 muss >= z0 sein")
+        if obstacle.shape == "rect" and (obstacle.w <= 0 or obstacle.h <= 0):
+            errs.append(f"{tag}. Breite und Hoehe muessen positiv sein")
+        if obstacle.shape == "circle" and obstacle.r <= 0:
+            errs.append(f"{tag}.r. Radius muss positiv sein")
+        if obstacle.plane is not None and not 1 <= obstacle.plane <= n:
+            errs.append(f"{tag}.plane. Ebene {obstacle.plane} existiert nicht (1..{n})")
+
+
+def _check_search(proj: Project, errs: list[str]) -> None:
+    search = proj.search
+    for pattern in search.patterns:
+        if pattern not in PATTERNS:
+            errs.append(f"search.patterns. Unbekanntes Muster '{pattern}' ({', '.join(PATTERNS)})")
+    if not search.patterns:
+        errs.append("search.patterns. Mindestens ein Muster ist noetig")
+    if len(search.patterns) != len(set(search.patterns)):
+        errs.append("search.patterns. Muster doppelt angegeben")
+    if search.angle_max <= search.angle_min:
+        errs.append("search.angle_max. Muss groesser als angle_min sein")
+    if sum(search.weights.as_dict().values()) <= 0:
+        errs.append("search.weights. Nicht alle Gewichte duerfen 0 sein")
+    try:
+        proj.allowed_angle_list()
+    except ConfigError as exc:
+        errs.extend(exc.errors)
 
 
 def _check_plane_key(label: str, key: str, n: int, errs: list[str]) -> None:
@@ -405,32 +498,24 @@ def _check_outline(outline: list[list[float]], errs: list[str]) -> None:
     if len(outline) < 3 or any(len(p) != 2 for p in outline):
         errs.append("motor.outline. Mindestens 3 Punkte [x, y] noetig")
         return
-    pts = [(p[0], p[1]) for p in outline]
-    area = 0.0
-    for i in range(len(pts)):
-        x1, y1 = pts[i]
-        x2, y2 = pts[(i + 1) % len(pts)]
-        area += x1 * y2 - x2 * y1
-    if abs(area) < 1e-9:
+    area = signed_area(outline)
+    if abs(area) < EPS_AREA:
         errs.append("motor.outline. Kontur hat keine Flaeche")
         return
-    sign = 1 if area > 0 else -1
-    for i in range(len(pts)):
-        ax, ay = pts[i]
-        bx, by = pts[(i + 1) % len(pts)]
-        cx, cy = pts[(i + 2) % len(pts)]
-        cr = (bx - ax) * (cy - by) - (by - ay) * (cx - bx)
-        if cr * sign < -1e-9:
-            errs.append("motor.outline. Kontur muss konvex sein (nicht konvexe Motoren bitte als Huelle angeben)")
-            return
+    ccw = outline if area > 0 else list(reversed(outline))
+    if not is_convex_ccw(ccw):
+        errs.append("motor.outline. Kontur muss konvex sein (nicht konvexe Motoren bitte als Huelle angeben)")
 
 
 # ---------------------------------------------------------------------------
-# Feldbeschreibung. Quelle fuer Validierung, UI Formulare und Doku.
-#   kind  len (mm, in der UI umrechenbar), num, int, text, enum, list, listint, liststr
+# 3. Feldbeschreibung. Quelle fuer Validierung, UI Formulare und Doku.
+#   kind  len (mm, in der UI umrechenbar), lenlist (Liste von Laengen in mm), num, int,
+#         text, enum, list (Zahlenliste ohne Einheit), listint, liststr
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Meta:
+    """Beschreibung eines Konfigurationsfeldes fuer Validierung, UI und Doku."""
+
     path: str
     label: str
     tip: str
@@ -443,7 +528,6 @@ class Meta:
     optional: bool = False  # None erlaubt
 
 
-_P = "project"
 FIELD_META: list[Meta] = [
     Meta("name", "Name", "Bezeichnung des Projekts", "text", group="general"),
     Meta("target_count", "Gewuenschte Anzahl Stangen", "So viele Gewindestangen mit Motoren sollen platziert werden", "int", 1, 100000, group="general"),
@@ -475,11 +559,11 @@ FIELD_META: list[Meta] = [
     Meta("stack.mode", "Abstandsmodus", "Wie die Ebenenhoehen angegeben werden", "enum", group="stack",
          options=(("uniform", "Einheitlicher Abstand"), ("gaps", "Einzelabstaende G(i) zu G(i+1)"), ("distances", "Abstand jeder Ebene zu G0"))),
     Meta("stack.uniform_spacing", "Einheitlicher Ebenenabstand", "Abstand zwischen allen Ebenen (Modus uniform)", "len", 0, 100000, True, group="stack"),
-    Meta("stack.gaps", "Einzelabstaende (Liste)", "Abstaende G0-G1, G1-G2, ... (Modus gaps)", "list", group="stack"),
-    Meta("stack.distances", "Abstaende zu G0 (Liste)", "Abstand jeder Motorebene zu G0, aufsteigend (Modus distances)", "list", group="stack"),
+    Meta("stack.gaps", "Einzelabstaende (Liste)", "Abstaende G0-G1, G1-G2, ... (Modus gaps)", "lenlist", group="stack"),
+    Meta("stack.distances", "Abstaende zu G0 (Liste)", "Abstand jeder Motorebene zu G0, aufsteigend (Modus distances)", "lenlist", group="stack"),
     Meta("stack.thickness", "Dicke Motorebenen", "Plattendicke der Ebenen G1 bis Gn", "len", 0, 1000, True, group="stack"),
     Meta("stack.g0_thickness", "Dicke G0", "Plattendicke der oberen Referenzebene", "len", 0, 1000, True, group="stack"),
-    Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke fuer jede Motorebene, ueberschreibt die gemeinsame Dicke", "list", group="stack", optional=True),
+    Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke fuer jede Motorebene, ueberschreibt die gemeinsame Dicke", "lenlist", group="stack", optional=True),
     Meta("stack.allowed_planes", "Erlaubte Motorebenen (Liste, leer = alle)", "Nur diese Ebenen duerfen Motoren tragen", "listint", group="stack", optional=True),
     Meta("bounds.xmin", "x min", "Bauraum, linke Grenze", "len", -1e6, 1e6, group="bounds"),
     Meta("bounds.xmax", "x max", "Bauraum, rechte Grenze", "len", -1e6, 1e6, group="bounds"),
@@ -511,116 +595,128 @@ FIELD_META: list[Meta] = [
     Meta("search.weights.regularity", "Regelmaessiges Muster", "Gewicht der Quadrat oder Hexagonalordnung", "num", 0, 1000, group="weights"),
 ]
 META_BY_PATH = {m.path: m for m in FIELD_META}
+NUMERIC_KINDS = ("len", "num", "int")
+NUMBER_LIST_KINDS = ("list", "lenlist", "listint")
 
 
 def _get(obj: Any, path: str) -> Any:
-    for k in path.split("."):
-        obj = getattr(obj, k)
+    for key in path.split("."):
+        obj = getattr(obj, key)
     return obj
 
 
-def _validate_meta(proj: Project, errs: list[str]) -> None:
-    for m in FIELD_META:
-        v = _get(proj, m.path)
-        if v is None:
-            if not m.optional:
-                errs.append(f"{m.path}. Wert fehlt")
+def _validate_fields(proj: Project, errs: list[str]) -> None:
+    """Prueft jedes Feld aus FIELD_META einzeln plus die Zahlen in Listen ohne eigene Meta."""
+    for meta in FIELD_META:
+        value = _get(proj, meta.path)
+        if value is None:
+            if not meta.optional:
+                errs.append(f"{meta.path}. Wert fehlt")
             continue
-        if m.kind in ("len", "num", "int"):
-            if not _isnum(v):
-                errs.append(f"{m.path}. Muss eine endliche Zahl sein")
-                continue
-            if m.lo is not None and ((v <= m.lo) if m.strict_lo else (v < m.lo)):
-                errs.append(f"{m.path}. Muss {'groesser als' if m.strict_lo else 'mindestens'} {m.lo:g} sein (ist {v:g})")
-            if m.hi is not None and v > m.hi:
-                errs.append(f"{m.path}. Darf hoechstens {m.hi:g} sein (ist {v:g})")
-        elif m.kind == "enum":
-            if v not in [o[0] for o in (m.options or ())]:
-                errs.append(f"{m.path}. Unzulaessiger Wert '{v}'. Erlaubt. {[o[0] for o in m.options]}")
-        elif m.kind in ("list", "listint"):
-            if not all(_isnum(x) for x in v):
-                errs.append(f"{m.path}. Alle Eintraege muessen endliche Zahlen sein")
-    # Felder ohne Meta (Obstacles, Zonen)
-    for i, o in enumerate(proj.obstacles):
+        if meta.kind in NUMERIC_KINDS:
+            _check_number(meta, value, errs)
+        elif meta.kind == "enum":
+            allowed = [option[0] for option in (meta.options or ())]
+            if value not in allowed:
+                errs.append(f"{meta.path}. Unzulaessiger Wert '{value}'. Erlaubt. {allowed}")
+        elif meta.kind in NUMBER_LIST_KINDS:
+            if not all(is_finite_number(x) for x in value):
+                errs.append(f"{meta.path}. Alle Eintraege muessen endliche Zahlen sein")
+    for i, obstacle in enumerate(proj.obstacles):
         for name in ("x", "y", "w", "h", "r", "angle", "z0", "z1"):
-            if not _isnum(getattr(o, name)):
+            if not is_finite_number(getattr(obstacle, name)):
                 errs.append(f"obstacles[{i}].{name}. Muss eine endliche Zahl sein")
     for key, zones in proj.stack.mount_zones.items():
-        for z in zones:
-            if not all(_isnum(c) for c in z):
-                errs.append(f"stack.mount_zones[{key}]. Koordinaten muessen endliche Zahlen sein")
+        if not all(is_finite_number(c) for zone in zones for c in zone):
+            errs.append(f"stack.mount_zones[{key}]. Koordinaten muessen endliche Zahlen sein")
     if proj.motor.outline is not None:
-        if not all(_isnum(c) for p in proj.motor.outline for c in p):
+        if not all(is_finite_number(c) for p in proj.motor.outline for c in p):
             errs.append("motor.outline. Koordinaten muessen endliche Zahlen sein")
 
 
-def _isnum(v: Any) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+def _check_number(meta: Meta, value: Any, errs: list[str]) -> None:
+    if not is_finite_number(value):
+        errs.append(f"{meta.path}. Muss eine endliche Zahl sein")
+        return
+    if meta.lo is not None:
+        too_small = value <= meta.lo if meta.strict_lo else value < meta.lo
+        if too_small:
+            relation = "groesser als" if meta.strict_lo else "mindestens"
+            errs.append(f"{meta.path}. Muss {relation} {meta.lo:g} sein (ist {value:g})")
+    if meta.hi is not None and value > meta.hi:
+        errs.append(f"{meta.path}. Darf hoechstens {meta.hi:g} sein (ist {value:g})")
+
+
+_isnum = is_finite_number  # Name aus frueheren Versionen
 
 
 # ---------------------------------------------------------------------------
-# Typgetriebenes Einlesen. Prueft Typen, wandelt ganzzahlige Floats in int um.
+# 4. Typgetriebenes Einlesen. Prueft Typen und wandelt ganzzahlige Floats in int um.
 # ---------------------------------------------------------------------------
+_BAD = object()  # Markierung fuer einen ungueltigen Wert (die Fehlermeldung steht schon in errs)
+
+
 def _build(cls, data: Any, path: str, errs: list[str]):
+    """Baut eine Dataclass aus einem Dictionary. Ungueltige Felder behalten ihren Standardwert."""
     if not isinstance(data, dict):
-        errs.append(f"{path or cls.__name__}. Objekt erwartet")
+        errs.append(f"{path.rstrip('.') or cls.__name__}. Objekt erwartet")
         return cls()
     hints = typing.get_type_hints(cls)
     names = {f.name for f in dataclasses.fields(cls)}
-    for key in sorted(set(data) - names):
-        errs.append(f"{path + key}. Unbekanntes Feld in {cls.__name__}")
+    for key in sorted(set(data) - names, key=str):
+        errs.append(f"{path}{key}. Unbekanntes Feld in {cls.__name__}")
     kwargs: dict[str, Any] = {}
-    for key, val in data.items():
-        if key not in names:
-            continue
-        kwargs[key] = _coerce(val, hints[key], f"{path}{key}", errs)
-    default = cls()
-    for key, val in kwargs.items():
-        if val is _BAD:
-            kwargs[key] = getattr(default, key)
+    for key, raw in data.items():
+        if key in names:
+            value = _coerce(raw, hints[key], f"{path}{key}", errs)
+            if value is not _BAD:
+                kwargs[key] = value
     return cls(**kwargs)
 
 
-_BAD = object()
-
-
-def _coerce(val: Any, hint: Any, path: str, errs: list[str]):
+def _coerce(value: Any, hint: Any, path: str, errs: list[str]):
+    """Prueft value gegen die Typangabe hint. Gibt den (umgewandelten) Wert oder _BAD zurueck."""
     origin = typing.get_origin(hint)
     args = typing.get_args(hint)
-    if origin is typing.Union:  # Optional[X]
-        if val is None:
+    if origin in (typing.Union, types.UnionType):  # Optional[X] oder X | None
+        if value is None:
             return None
         inner = [a for a in args if a is not type(None)][0]
-        return _coerce(val, inner, path, errs)
+        return _coerce(value, inner, path, errs)
     if dataclasses.is_dataclass(hint):
-        return _build(hint, val, path + ".", errs)
+        return _build(hint, value, path + ".", errs)
+    if hint is bool:
+        if not isinstance(value, bool):
+            errs.append(f"{path}. Muss true oder false sein")
+            return _BAD
+        return value
     if hint is float:
-        if not isinstance(val, (int, float)) or isinstance(val, bool) or not math.isfinite(val):
+        if not is_finite_number(value):
             errs.append(f"{path}. Muss eine endliche Zahl sein")
             return _BAD
-        return float(val)
+        return float(value)
     if hint is int:
-        if isinstance(val, bool) or not isinstance(val, (int, float)) or not math.isfinite(val) or int(val) != val:
+        if not is_finite_number(value) or int(value) != value:
             errs.append(f"{path}. Muss eine ganze Zahl sein")
             return _BAD
-        return int(val)
+        return int(value)
     if hint is str:
-        if not isinstance(val, str):
+        if not isinstance(value, str):
             errs.append(f"{path}. Muss Text sein")
             return _BAD
-        return val
+        return value
     if origin is list:
-        if not isinstance(val, list):
+        if not isinstance(value, list):
             errs.append(f"{path}. Liste erwartet")
             return _BAD
-        out = [_coerce(v, args[0], f"{path}[{i}]", errs) for i, v in enumerate(val)]
-        return [v for v in out if v is not _BAD] if _BAD in out else out
+        items = [_coerce(v, args[0], f"{path}[{i}]", errs) for i, v in enumerate(value)]
+        return [v for v in items if v is not _BAD]
     if origin is dict:
-        if not isinstance(val, dict):
+        if not isinstance(value, dict):
             errs.append(f"{path}. Objekt erwartet")
             return _BAD
-        return {str(k): _coerce(v, args[1], f"{path}[{k}]", errs) for k, v in val.items()}
-    return val
+        return {str(k): _coerce(v, args[1], f"{path}[{k}]", errs) for k, v in value.items()}
+    return value
 
 
 def motor_from_dict(data: Any) -> MotorSpec:
