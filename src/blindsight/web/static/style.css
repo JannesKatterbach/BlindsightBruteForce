@@ -42,3 +42,20 @@ table.grid input,table.grid select{width:100%;min-width:48px;padding:3px 4px}
 .handle{cursor:grab}
 .hint code{font-size:11px}
 [hidden]{display:none!important}
+/* Motor Skizze */
+#skRoot{display:grid;grid-template-columns:300px minmax(0,1fr) 290px;gap:14px;align-items:start}
+#skLeft,#skRight{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 12px 12px}
+#skCanvasWrap{position:relative}
+#skCanvas{height:68vh;min-height:420px;touch-action:none;cursor:default;user-select:none}
+#skInput{position:absolute;width:90px;z-index:5;border:2px solid var(--ac)}
+#skStatus{margin-top:8px;line-height:1.7}
+.skcons{display:grid;grid-template-columns:18px 1fr 70px 20px 24px;gap:4px;align-items:center;padding:2px 0;border-bottom:1px solid var(--bd);font-size:12px}
+.skcons .dot{color:var(--ac)}.skcons.conflict .dot{color:var(--bad)}.skcons.redundant .dot{color:#e08a00}.skcons.disabled{opacity:.5}
+.skcons input.skval{width:70px;padding:2px 4px}.skcons button{padding:0 6px}
+.skcons:not(:has(.skval)){grid-template-columns:18px 1fr 20px 24px}
+table.grid tr.sel{background:color-mix(in srgb,#ff9800 22%,transparent)}
+table.grid input.driven{border-color:var(--ac);font-weight:600}
+table.grid td button{padding:0 5px;margin-left:2px}
+.skCons button{font-size:12px;padding:3px 6px}
+@media (max-width:1100px){#skRoot{grid-template-columns:1fr}}
+#skCd{grid-template-columns:1fr 90px}

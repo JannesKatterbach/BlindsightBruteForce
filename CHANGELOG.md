@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+- Neuer Reiter Motor Skizze mit Zeichenfläche. Die Getriebestange liegt im Ursprung, der Motor dreht um sie (Drehvorschau, Hüllkurve, Loch und Eigenabstand Ring)
+- Parametrische Skizze mit Constraints. Länge, Winkel (benachbart und beliebig), parallel, rechtwinklig, gleich lang, horizontal, vertikal, Punkt fixieren, Koordinaten, Abstand zu Stange und Zahnrad
+- Solver in `sketch.py` mit Freiheitsgraden, redundanten und widersprüchlichen Constraints, Ziehen unter Constraints, Konvexitäts und Selbstschnitt Prüfung
+- Punkte einfügen, löschen, konvexe Hülle, Rückgängig und Wiederholen, Zoom und Pan, Eingabe an der Skizze und in Tabellen, Einheiten mm, cm, in
+- Modell rechnet im Stangenrahmen. Rückwärtskompatibel, per Golden Test gegen die alte Formel abgesichert
+- SVG Import erzeugt eine Skizze, Geometrie Reiter zeigt eine Vorschau mit der Stange
+- Fehlerbehebung. Bei einem Umriss, dessen Mitte nicht im Ursprung lag, saß das Zahnrad falsch (es hing an `depth / 2`, jetzt an der obersten Kante des Umrisses)
+- Fehlerbehebung. Der Browser feuerte beim Neuzeichnen von Tabellen ein zweites change Ereignis und löste doppelte Änderungen aus
+- Tests. Solver (Einzeltypen, Zufallsprüfung, Redundanz, Widerspruch, Ziehen, Randfälle), Modell, API, Browser Ende zu Ende
+
 ## 0.2.0
 - Schemagetriebene Validierung (`FIELD_META`), NaN, inf, falsche Typen und Bool werden abgewiesen, Fehler nennen den Feldpfad
 - Motorgehäuse als beliebiges konvexes Polygon (`motor.outline`), SVG Import übernimmt die Kontur

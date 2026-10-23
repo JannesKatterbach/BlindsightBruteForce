@@ -14,12 +14,14 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse, parse_qs
 
-from ..config import ConfigError, Project, schema
+from ..config import ConfigError, Project, motor_from_dict, schema
 from ..export import EXPORTERS, build_geometry
 from ..layout import Placement
 from ..model import Model
+from .. import sketch as sk
 from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
 from ..service import JobManager
 
@@ -48,6 +50,12 @@ def analyze(project: Project) -> dict:
     return {"planes": planes, "unit_radius": model.unit_radius, "required_gap": model.gap}
 
 
+def _int(v: Any) -> int:
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise ValueError("Ganze Zahl erwartet")
+    return v
+
+
 class App:
     def __init__(self, allowed_hosts: set[str] | None = None) -> None:
         self.jobs = JobManager()
@@ -70,6 +78,45 @@ class App:
             if (_u(origin).hostname or "") not in {x.strip("[]") for x in ok}:
                 return False
         return True
+
+    def _sketch_api(self, op: str, data: Any) -> tuple[int, str, bytes]:
+        """Endpunkte der Motor Skizze. Solver Ergebnisse (auch Widersprueche) sind normale Antworten mit ok=false."""
+        def js(obj, code=200):
+            return code, "application/json; charset=utf-8", json.dumps(obj, ensure_ascii=False).encode()
+
+        if not isinstance(data, dict):
+            raise ValueError("Objekt erwartet")
+        cd = data.get("cd", 5.0)
+        gear = data.get("gear")
+        if gear is not None:
+            if not (isinstance(gear, list) and len(gear) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in gear)):
+                raise ValueError("gear muss [Durchmesser, Breite] sein")
+            gear = (float(gear[0]), float(gear[1]))
+        if op == "from-motor":
+            motor = motor_from_dict(data.get("motor"))
+            skd = sk.legacy_to_sketch(motor, with_constraints=data.get("constraints", True))
+            return js(sk.solve(skd, cd=motor.center_distance, gear=(motor.gear_diameter, motor.gear_width)).as_dict())
+        skd = data.get("sketch")
+        if not isinstance(skd, dict):
+            raise ValueError("sketch (Objekt mit points und constraints) erforderlich")
+        skd = sk.sketch_dict(skd)
+        errs = sk.validate_structure(skd)
+        if errs:
+            return js({"ok": False, "errors": errs, "sketch": skd, "state": "invalid", "dof": 0, "constraints": [], "warnings": []})
+        try:
+            if op == "solve":
+                return js(sk.solve(skd, cd=cd, drag=data.get("drag"), gear=gear).as_dict())
+            if op == "hull":
+                skd = sk.hull_sketch(skd)
+            elif op == "insert":
+                skd = sk.insert_point(skd, _int(data.get("side")), float(data.get("t", 0.5)))
+            elif op == "delete":
+                skd = sk.delete_point(skd, _int(data.get("point")))
+            else:
+                return js({"error": "nicht gefunden"}, 404)
+        except sk.SketchError as exc:
+            return js({"ok": False, "errors": exc.errors, "sketch": skd, "state": "invalid", "dof": 0, "constraints": [], "warnings": []})
+        return js(sk.solve(skd, cd=cd, gear=gear).as_dict())
 
     def handle(self, method: str, path: str, query: dict, body: bytes) -> tuple[int, str, bytes]:
         def js(obj, code=200):
@@ -161,12 +208,18 @@ class App:
                 if path.startswith("/api/cancel/"):
                     self.jobs.cancel(path.rsplit("/", 1)[1])
                     return js({"ok": True})
+                if path.startswith("/api/sketch/"):
+                    return self._sketch_api(path.rsplit("/", 1)[1], data)
                 if path == "/api/svg-motor-import":
                     try:
                         o = outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
                     except ScaleRequired as exc:
                         return js({"scale_required": True, "message": str(exc)})
-                    return js({"width": o.width, "depth": o.depth, "outline": o.outline, "convex": o.was_convex, "notes": o.notes})
+                    out = {"width": o.width, "depth": o.depth, "outline": o.outline, "convex": o.was_convex, "notes": o.notes}
+                    if isinstance(data.get("motor"), dict):  # Skizze im Stangenrahmen passend zum aktuellen Motor
+                        motor = motor_from_dict(data["motor"])
+                        out["sketch"] = sk.sketch_from_outline(o.outline, motor)
+                    return js(out)
         except ConfigError as exc:
             return js({"errors": exc.errors}, 400)
         except SvgImportError as exc:

@@ -203,75 +203,37 @@ function readZones() {
   cfg.stack.mount_zones = out;
 }
 
-// --- Motor Editor ----------------------------------------------------------------------
-let motorDrag = null, outlinePts = [];
-function motorGeom() {
-  const m = cfg.motor, r = cfg.rod.diameter / 2;
-  const gy = m.depth / 2 + m.gear_gap + m.gear_width / 2, rx = m.shaft_x + m.center_distance;
-  return { m, r, gy, rx };
+// --- Motor Vorschau (Geometrie Reiter, nur Anzeige. Bearbeiten im Reiter Motor Skizze) ----------------------
+function motorPolygonRod(m) {
+  // Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse, y nach oben). Mit Skizze direkt deren Punkte.
+  if (m.sketch && m.sketch.points && m.sketch.points.length >= 3) return m.sketch.points;
+  const top = m.outline && m.outline.length ? Math.max(...m.outline.map((p) => p[1])) : m.depth / 2;
+  const rx = m.shaft_x + m.center_distance, ry = top + m.gear_gap + m.gear_width / 2;
+  const poly = m.outline && m.outline.length >= 3 ? m.outline : [[-m.width / 2, -m.depth / 2], [m.width / 2, -m.depth / 2], [m.width / 2, m.depth / 2], [-m.width / 2, m.depth / 2]];
+  return poly.map(([x, y]) => [x - rx, y - ry]);
 }
 function drawMotor() {
   const svg = $("#motorPreview"); svg.innerHTML = "";
-  if (![cfg.motor.width, cfg.motor.depth, cfg.rod.diameter].every((v) => v > 0)) return;
-  const { m, r, gy, rx } = motorGeom();
-  const poly = m.outline && m.outline.length >= 3 ? m.outline : null;
-  const xs = (poly ? poly.map((p) => p[0]) : [-m.width / 2, m.width / 2]).concat([m.shaft_x - m.gear_diameter / 2, rx + r, rx - r]);
-  const ys = (poly ? poly.map((p) => p[1]) : [-m.depth / 2]).concat([m.depth / 2 + m.gear_gap + m.gear_width, gy + r, -m.depth / 2]);
+  const m = cfg.motor, r = cfg.rod.diameter / 2;
+  if (![m.width, m.depth, cfg.rod.diameter, m.gear_diameter, m.gear_width].every((v) => v > 0)) return;
+  const poly = motorPolygonRod(m), gr = m.gear_diameter / 2, gh = m.gear_width / 2, cd = m.center_distance;
+  const xs = poly.map((p) => p[0]).concat([-cd - gr, -cd + gr, r, -r]), ys = poly.map((p) => p[1]).concat([-gh, gh, r, -r]);
   const pad = 8, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
   svg.setAttribute("viewBox", `${x0} ${-y1} ${x1 - x0} ${y1 - y0}`);
-  const Y = (y) => -y;
-  const hs = Math.max(0.8, (x1 - x0) / 80);
-  if (poly) el("polygon", { points: poly.map((p) => `${p[0]},${Y(p[1])}`).join(" "), fill: "#999", "fill-opacity": 0.5, stroke: "#555", "stroke-width": 0.3 }, svg);
-  else el("rect", { x: -m.width / 2, y: Y(m.depth / 2), width: m.width, height: m.depth, fill: "#999", "fill-opacity": 0.5, stroke: "#555", "stroke-width": 0.3 }, svg);
-  el("rect", { x: m.shaft_x - m.gear_diameter / 2, y: Y(m.depth / 2 + m.gear_gap + m.gear_width), width: m.gear_diameter, height: m.gear_width, fill: "#f28e2b", stroke: "#333", "stroke-width": 0.3 }, svg);
-  el("circle", { cx: rx, cy: Y(gy), r, fill: "#222" }, svg);
-  el("line", { x1: m.shaft_x, y1: Y(gy), x2: rx, y2: Y(gy), stroke: "#e00", "stroke-width": 0.3, "stroke-dasharray": "1 1" }, svg);
-  const handle = (id, x, y, title) => { const h = el("circle", { cx: x, cy: Y(y), r: hs, fill: "#2f6fed", stroke: "#fff", "stroke-width": 0.3, class: "handle", "data-h": id }, svg); const t = el("title", {}, h); t.textContent = title; };
-  handle("gear", m.shaft_x, gy, "Zahnrad ziehen (Achsversatz, Abstand zum Gehaeuse)");
-  handle("rod", rx, gy, "Stange ziehen (Achsabstand)");
-  if (poly) poly.forEach((p, i) => handle("v" + i, p[0], p[1], "Eckpunkt ziehen"));
-  else { handle("hw", m.width / 2, 0, "Breite"); handle("hd", 0, m.depth / 2, "Tiefe"); }
-  if (drawing) outlinePts.forEach((p) => el("circle", { cx: p[0], cy: Y(p[1]), r: hs, fill: "#e00" }, svg));
+  const Y = (y) => -y, sw = (x1 - x0) / 300;
+  el("polygon", { points: poly.map((p) => `${p[0]},${Y(p[1])}`).join(" "), fill: "#999", "fill-opacity": 0.5, stroke: "#555", "stroke-width": sw }, svg);
+  el("rect", { x: -cd - gr, y: Y(gh), width: 2 * gr, height: 2 * gh, fill: "#f28e2b", stroke: "#333", "stroke-width": sw }, svg);
+  el("circle", { cx: 0, cy: 0, r: r + cfg.rod.hole_clearance, fill: "none", stroke: "currentColor", "stroke-dasharray": `${sw * 3} ${sw * 3}`, "stroke-width": sw }, svg);
+  el("circle", { id: "previewRod", cx: 0, cy: 0, r, fill: "#222" }, svg);
+  el("line", { x1: -cd, y1: 0, x2: 0, y2: 0, stroke: "#e00", "stroke-width": sw, "stroke-dasharray": `${sw * 3} ${sw * 3}` }, svg);
+  const sk = !!(m.sketch && m.sketch.points && m.sketch.points.length);
+  $("#sketchNote").hidden = !sk;
+  for (const f of ["motor.width", "motor.depth", "motor.shaft_x", "motor.gear_gap"]) { const inp = document.querySelector(`[data-path="${f}"]`); if (inp) { inp.disabled = sk; inp.title = sk ? "Wird von der Motor Skizze bestimmt" : ""; } }
 }
 function svgPoint(svg, ev) { const pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const p = pt.matrixTransform(svg.getScreenCTM().inverse()); return [p.x, -p.y]; }
-function initMotorEditor() {
-  const svg = $("#motorPreview");
-  const snap = (v) => Math.round(v * 10) / 10;
-  svg.addEventListener("pointerdown", (ev) => {
-    if (drawing) { const p = svgPoint(svg, ev); outlinePts.push([snap(p[0]), snap(p[1])]); drawMotor(); return; }
-    const h = ev.target.dataset && ev.target.dataset.h; if (!h) return;
-    motorDrag = h; svg.setPointerCapture(ev.pointerId); ev.preventDefault();
-  });
-  svg.addEventListener("pointermove", (ev) => {
-    if (!motorDrag) return; const [x, y] = svgPoint(svg, ev).map(snap), m = cfg.motor;
-    if (motorDrag === "gear") { m.shaft_x = x; m.gear_gap = Math.max(0, snap(y - m.depth / 2 - m.gear_width / 2)); }
-    else if (motorDrag === "rod") m.center_distance = Math.max(0, snap(x - m.shaft_x));
-    else if (motorDrag === "hw") m.width = Math.max(0.5, Math.abs(x) * 2);
-    else if (motorDrag === "hd") m.depth = Math.max(0.5, Math.abs(y) * 2);
-    else if (motorDrag[0] === "v") { m.outline[+motorDrag.slice(1)] = [x, y]; updateBBox(); }
-    writeInputs(); drawMotor();
-  });
-  const end = () => { if (motorDrag) { motorDrag = null; refresh(); } };
-  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
-  $("#btnDraw").addEventListener("click", () => { drawing = true; outlinePts = []; $("#btnDrawDone").hidden = false; $("#btnDraw").hidden = true; drawMotor(); });
-  $("#btnDrawDone").addEventListener("click", () => {
-    drawing = false; $("#btnDrawDone").hidden = true; $("#btnDraw").hidden = false;
-    if (outlinePts.length >= 3) { cfg.motor.outline = hull(outlinePts); updateBBox(); }
-    outlinePts = []; writeInputs(); drawMotor(); refresh();
-  });
-  $("#btnRectReset").addEventListener("click", () => { cfg.motor.outline = null; drawing = false; $("#btnDrawDone").hidden = true; $("#btnDraw").hidden = false; drawMotor(); refresh(); });
-}
-function hull(pts) { // konvexe Huelle (Monotone Chain), damit gezeichnete Konturen immer konvex sind
-  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]); const cr = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const lo = [], up = [];
-  for (const q of p) { while (lo.length >= 2 && cr(lo.at(-2), lo.at(-1), q) <= 0) lo.pop(); lo.push(q); }
-  for (const q of p.reverse()) { while (up.length >= 2 && cr(up.at(-2), up.at(-1), q) <= 0) up.pop(); up.push(q); }
-  return lo.slice(0, -1).concat(up.slice(0, -1));
-}
-function updateBBox() {
-  const o = cfg.motor.outline; if (!o) return;
-  const xs = o.map((p) => p[0]), ys = o.map((p) => p[1]);
-  cfg.motor.width = round(Math.max(...xs) - Math.min(...xs)); cfg.motor.depth = round(Math.max(...ys) - Math.min(...ys));
+function initMotorPreview() {
+  $("#btnOpenSketch").addEventListener("click", () => switchTab("sketch"));
+  $("#btnDropSketch").addEventListener("click", () => { cfg.motor.sketch = null; writeInputs(); refresh(); if (window.skReload) skReload(); });
 }
 
 // --- Motor Bibliothek ------------------------------------------------------------------------
@@ -281,22 +243,22 @@ function libRender() { const l = libLoad(); $("#libSel").innerHTML = Object.keys
 function initLibrary() {
   libRender();
   $("#libSave").addEventListener("click", () => { const n = $("#libName").value.trim(); if (!n) return; const l = libLoad(); l[n] = cfg.motor; if (libStore(l)) libRender(); });
-  $("#libLoad").addEventListener("click", () => { const l = libLoad(), n = $("#libSel").value; if (l[n]) { cfg.motor = { ...defaults.motor, ...l[n] }; writeInputs(); refresh(); } });
+  $("#libLoad").addEventListener("click", () => { const l = libLoad(), n = $("#libSel").value; if (l[n]) { cfg.motor = { ...defaults.motor, ...l[n] }; writeInputs(); refresh(); if (window.skReload) skReload(); } });
   $("#libDel").addEventListener("click", () => { const l = libLoad(); delete l[$("#libSel").value]; libStore(l); libRender(); });
   $("#libExport").addEventListener("click", () => download("blindsight-motor.json", JSON.stringify(cfg.motor, null, 2), "application/json"));
-  $("#libImport").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { cfg.motor = { ...defaults.motor, ...JSON.parse(await f.text()) }; writeInputs(); refresh(); } catch (er) { alert("Keine gueltige Motor Datei."); } });
+  $("#libImport").addEventListener("change", async (e) => { const f = e.target.files[0]; if (!f) return; try { cfg.motor = { ...defaults.motor, ...JSON.parse(await f.text()) }; writeInputs(); refresh(); if (window.skReload) skReload(); } catch (er) { alert("Keine gueltige Motor Datei."); } });
   $("#svgMotor").addEventListener("change", async (e) => {
     const f = e.target.files[0]; if (!f) return; const body = { svg: await f.text() };
     for (;;) {
-      const { data: j } = await api("/api/svg-motor-import", body);
+      body.motor = cfg.motor; const { data: j } = await api("/api/svg-motor-import", body);
       if (j.errors) { $("#svgMotorMsg").textContent = j.errors.join(" "); return; }
       if (j.scale_required) {
         const v = prompt(j.message + "\nmm pro SVG Einheit (zum Beispiel 1 bei Einheit mm, 0.2646 bei px mit 96 dpi):");
         if (!v) { $("#svgMotorMsg").textContent = "Abgebrochen. Kein Massstab."; return; }
         body.mm_per_unit = parseFloat(v); continue;
       }
-      cfg.motor.outline = j.outline; cfg.motor.width = j.width; cfg.motor.depth = j.depth;
-      writeInputs(); drawMotor(); refresh();
+      cfg.motor.outline = null; cfg.motor.sketch = { points: j.sketch.points, constraints: [] }; cfg.motor.width = j.width; cfg.motor.depth = j.depth;
+      writeInputs(); drawMotor(); refresh(); if (window.skReload) skReload();
       $("#svgMotorMsg").textContent = `Uebernommen. ${j.width.toFixed(2)} x ${j.depth.toFixed(2)} mm ${j.notes.join(" ")}`; return;
     }
   });
@@ -575,20 +537,21 @@ async function loadResultFile(file) {
 
 // --- Allgemein ------------------------------------------------------------------------------------------
 function switchTab(name) {
+  if (name === "sketch" && window.skReload) setTimeout(skReload, 0);
   document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
 }
 async function loadCfg(obj) {
   const base = JSON.parse(JSON.stringify(defaults));
   const merge = (a, b) => { for (const k of Object.keys(b)) { if (b[k] && typeof b[k] === "object" && !Array.isArray(b[k]) && a[k] && typeof a[k] === "object" && !Array.isArray(a[k])) merge(a[k], b[k]); else a[k] = b[k]; } return a; };
-  cfg = merge(base, obj); writeInputs(); await refresh();
+  cfg = merge(base, obj); writeInputs(); await refresh(); if (window.skReload) skReload();
 }
 
 async function init() {
   schema = (await api("/api/schema")).data; defaults = (await api("/api/default")).data;
-  buildForms(); initMotorEditor(); initLibrary(); initIsoDrag(); initEdit();
+  buildForms(); initMotorPreview(); initLibrary(); if (window.initSketch) initSketch(); initIsoDrag(); initEdit();
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
-  $("#unitSel").addEventListener("change", () => { unit = $("#unitSel").value; writeInputs(); refresh(); });
+  $("#unitSel").addEventListener("change", () => { unit = $("#unitSel").value; writeInputs(); refresh(); if (window.skRender) skRender(); });
   $("#btnStart").addEventListener("click", start);
   $("#btnCancel").addEventListener("click", () => api("/api/cancel/" + jobId, {}));
   ["viewSel", "planeSel", "optDist"].forEach((id) => $("#" + id).addEventListener("change", drawView));
@@ -608,4 +571,4 @@ async function init() {
   $("#exampleSel").addEventListener("change", async (e) => { if (e.target.value) await loadCfg((await api("/api/example/" + e.target.value)).data); });
   await loadCfg({});
 }
-init();
+window.addEventListener("load", init);

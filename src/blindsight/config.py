@@ -45,10 +45,34 @@ class RodSpec:
 
 
 @dataclass
+class ConstraintSpec:
+    """Ein Constraint der Motor Skizze (siehe sketch.py)."""
+
+    type: str = "length"
+    a: Optional[int] = None
+    b: Optional[int] = None
+    value: Optional[float] = None
+    value2: Optional[float] = None
+    ref: str = "rod"
+    enabled: bool = True
+    name: str = ""
+
+
+@dataclass
+class SketchSpec:
+    """Parametrische Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse, mm)."""
+
+    points: list[list[float]] = field(default_factory=list)
+    constraints: list[ConstraintSpec] = field(default_factory=list)
+
+
+@dataclass
 class MotorSpec:
     """Motor mit seitlichem Antriebszahnrad, vereinfacht als Prisma plus Zahnradquader.
 
     Lokales Koordinatensystem in der Draufsicht (Motorwinkel 0 Grad).
+      Mit sketch gilt ein anderes System. Ursprung ist die Stangenachse, Zahnrad bei (-center_distance, 0),
+      width, depth, shaft_x, gear_gap und outline werden dann ignoriert (siehe sketch.py).
       Gehaeuse ist um (0, 0) zentriert. Ohne outline ein Rechteck width mal depth,
       mit outline ein konvexes Polygon (dann sind width und depth nur noch die
       Bounding Box fuer die Anzeige und die Lage des Zahnrads).
@@ -74,6 +98,7 @@ class MotorSpec:
     own_clearance: float = 0.2
     mount: str = "top"
     outline: Optional[list[list[float]]] = None
+    sketch: Optional[SketchSpec] = None  # ersetzt Rechteck und outline, siehe sketch.py
 
     @property
     def gear_radius(self) -> float:
@@ -81,7 +106,9 @@ class MotorSpec:
 
     @property
     def gear_center_y(self) -> float:
-        return self.depth / 2.0 + self.gear_gap + self.gear_width / 2.0
+        # Das Zahnrad sitzt hinter der obersten Kante der Kontur (bei zentrierter Kontur ist das depth / 2)
+        top = max(p[1] for p in self.outline) if self.outline else self.depth / 2.0
+        return top + self.gear_gap + self.gear_width / 2.0
 
     def center_distances(self) -> list[float]:
         """Zulaessige Achsabstaende (nominal, wenn kein Bereich angegeben ist)."""
@@ -319,7 +346,12 @@ class Project:
             errs.append("search.patterns. Mindestens ein Muster ist noetig")
         if se.angle_max <= se.angle_min:
             errs.append("search.angle_max. Muss groesser als angle_min sein")
-        if m.outline is not None:
+        if m.sketch is not None:
+            from .sketch import check_sketch_motor
+
+            _, serrs = check_sketch_motor(m)
+            errs.extend(serrs)
+        elif m.outline is not None:
             _check_outline(m.outline, errs)
         if m.center_distance_min is not None and m.center_distance_max is not None and m.center_distance_max < m.center_distance_min:
             errs.append("motor.center_distance_max. Muss >= center_distance_min sein")
@@ -589,6 +621,15 @@ def _coerce(val: Any, hint: Any, path: str, errs: list[str]):
             return _BAD
         return {str(k): _coerce(v, args[1], f"{path}[{k}]", errs) for k, v in val.items()}
     return val
+
+
+def motor_from_dict(data: Any) -> MotorSpec:
+    """Liest eine MotorSpec aus einem Dictionary (Typpruefung wie bei Project.from_dict, ohne Projektvalidierung)."""
+    errs: list[str] = []
+    motor = _build(MotorSpec, data, "motor.", errs)
+    if errs:
+        raise ConfigError(errs)
+    return motor
 
 
 def schema() -> dict[str, Any]:

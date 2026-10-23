@@ -19,6 +19,7 @@
 </header>
 <nav id="tabs">
   <button data-tab="geometry" class="active">Geometrie</button>
+  <button data-tab="sketch">Motor Skizze</button>
   <button data-tab="levels">Ebenen</button>
   <button data-tab="bounds">Bauraum</button>
   <button data-tab="optim">Optimierung</button>
@@ -32,16 +33,14 @@
         <h2>Gewindestange</h2><div class="form" id="f-rod"></div></div>
       <div><h2>Motor und Zahnrad</h2><div class="form" id="f-motor"></div></div>
       <div>
-        <h2>Motor Editor, Draufsicht</h2>
+        <h2>Motor Vorschau, Draufsicht</h2>
         <svg id="motorPreview" viewBox="0 0 100 100"></svg>
-        <p class="hint">Griffe ziehen. Orange Zahnrad, schwarz Stange, grau Gehaeuse, rot Achsabstand. Winkel 0 Grad.</p>
-        <div class="toolbar">
-          <button id="btnDraw">Kontur zeichnen</button>
-          <button id="btnDrawDone" hidden>Fertig</button>
-          <button id="btnRectReset">Rechteck</button>
-        </div>
+        <p class="hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehaeuse.</p>
+        <div id="sketchNote" class="statusBox" hidden>Die Kontur kommt aus der Motor Skizze. Breite, Tiefe, Achsversatz und Zahnradabstand werden ignoriert.
+          <button id="btnDropSketch">Skizze verwerfen</button></div>
+        <div class="toolbar"><button id="btnOpenSketch" class="primary">Kontur in der Motor Skizze bearbeiten</button></div>
         <details><summary>SVG Import</summary>
-          <p class="hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Massstab nicht eindeutig, wird er abgefragt.</p>
+          <p class="hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Massstab nicht eindeutig, wird er abgefragt. Das Ergebnis ist eine Skizze.</p>
           <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
         </details>
         <details><summary>Motor Bibliothek (lokal im Browser)</summary>
@@ -50,6 +49,51 @@
           <div class="toolbar"><button id="libExport">Motor als JSON</button><label class="btn">Motor JSON laden<input type="file" id="libImport" accept=".json" hidden></label></div>
         </details>
       </div>
+    </div>
+  </section>
+  <section id="tab-sketch" class="tab">
+    <div id="skRoot">
+      <aside id="skLeft">
+        <h2>Werkzeuge</h2>
+        <div class="toolbar">
+          <button id="skDraw" title="Klicken setzt Punkte. Doppelklick oder Enter schliesst. Esc bricht ab">Polygon zeichnen</button>
+          <button id="skFromMotor" title="Rechteck mit Massen aus den Motordaten">Aus Rechteck</button>
+          <button id="skHull" title="Ersetzt die Kontur durch ihre konvexe Huelle">Konvexe Huelle</button>
+        </div>
+        <div class="toolbar">
+          <button id="skUndo" title="Strg+Z">Rueckgaengig</button><button id="skRedo" title="Strg+Y">Wiederholen</button>
+          <button id="skFit">Einpassen</button>
+        </div>
+        <h2>Beziehungen und Masse</h2>
+        <p class="hint">Punkte oder Seiten anklicken (Umschalt fuer mehrere), dann ein Werkzeug waehlen.</p>
+        <div class="toolbar skCons" id="skConsBar">
+          <button data-sk-add="length">Laenge</button><button data-sk-add="angle">Winkel</button>
+          <button data-sk-add="parallel">Parallel</button><button data-sk-add="perpendicular">Rechtwinklig</button>
+          <button data-sk-add="equal">Gleich lang</button><button data-sk-add="horizontal">Horizontal</button>
+          <button data-sk-add="vertical">Vertikal</button><button data-sk-add="fix">Fixieren</button>
+          <button data-sk-add="dist_rod">Abstand Stange</button><button data-sk-add="dist_gear">Abstand Zahnrad</button>
+        </div>
+        <h2>Seiten</h2><div id="skSides"></div>
+        <h2>Punkte</h2><div id="skPoints"></div>
+      </aside>
+      <div id="skCenter">
+        <div class="toolbar">
+          <label>Drehvorschau <input type="range" id="skRot" min="0" max="360" step="1" value="0"> <span id="skRotVal">0</span> Grad</label>
+          <label><input type="checkbox" id="skSweep"> Huellkurve</label>
+          <label><input type="checkbox" id="skShowMeasures" checked> Masse</label>
+          <label>Raster <select id="skSnap"><option value="0.5">0.5 mm</option><option value="1">1 mm</option><option value="0.1">0.1 mm</option><option value="0">aus</option></select></label>
+          <button id="skZoomIn">+</button><button id="skZoomOut">-</button>
+        </div>
+        <div id="skCanvasWrap"><svg id="skCanvas"></svg><input id="skInput" type="text" hidden></div>
+        <div id="skStatus" class="statusBox"></div>
+      </div>
+      <aside id="skRight">
+        <h2>Constraints</h2><div id="skCons"></div>
+        <h2>Achsabstand</h2>
+        <div class="form" id="skCd"></div>
+        <p class="hint">Das Zahnrad liegt bei (-Achsabstand, 0), die Welle zeigt in y Richtung. Das Gehaeuse sitzt dahinter. Der ganze Motor dreht um die Stange im Ursprung.</p>
+        <button id="skDrop">Skizze verwerfen (zurueck zum Rechteck)</button>
+      </aside>
     </div>
   </section>
   <section id="tab-levels" class="tab">
@@ -126,5 +170,6 @@
   </section>
 </main>
 <script src="/static/app.js"></script>
+<script src="/static/sketch.js"></script>
 </body>
 </html>

@@ -57,6 +57,7 @@ python -m pytest                                       # Tests (braucht pytest)
 | `export/` | `build_geometry` (formatneutral), SVG, JSON, DXF, Bohrliste CSV, Protokoll `Exporter` für weitere Formate |
 | `service.py` | Hintergrundläufe in Threads mit Fortschritt und Abbruch |
 | `web/` | HTTP Server (stdlib) und Oberfläche (HTML, JS, CSS) |
+| `sketch.py` | parametrische Motor Skizze, Constraint Solver, Freiheitsgrade, Konvexität |
 | `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
 | `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
@@ -117,6 +118,69 @@ Zielfunktion (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
 
 Ehrlichkeit. Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die einfache
 Flächenschranke erreicht wird, wird Optimalität gemeldet.
+
+## Motor Skizze (CAD Stil)
+
+Im Reiter "Motor Skizze" wird die Gehäusekontur wie in einer CAD Skizze aufgebaut und bemaßt.
+
+Koordinatensystem
+- Der Ursprung ist die Achse der Gewindestange (Getriebestange). Sie ist als schwarzer Kreis gezeichnet, dazu das gestrichelte Loch (Stange plus Lochspiel) und der Ring des Eigenabstands (rot, wenn das Gehäuse zu nah kommt)
+- Das Zahnrad liegt fest bei (-Achsabstand, 0), die Welle zeigt in y Richtung, das Gehäuse sitzt dahinter
+- Der ganze Motor dreht bei der Platzierung um die Stange. Der Regler "Drehvorschau" zeigt das, "Hüllkurve" den größten Kreis, den der Motor überstreicht
+- Die Zahnradachse lässt sich in der Zeichnung ziehen (Achsabstand), das Gehäuse bleibt in der Skizze
+
+Bedienung
+- Polygon zeichnen. Klick setzt Punkte, Enter oder Doppelklick schließt. Punkte lassen sich ziehen (der Solver hält alle Constraints ein), Doppelklick auf eine Seite fügt einen Punkt ein, Rechtsklick oder Entf löscht ihn
+- Seiten und Punkte anklicken (Umschalt für mehrere), dann ein Werkzeug wählen. Werte erscheinen direkt an der Skizze
+- Alternativ die Tabellen "Seiten" und "Punkte". Länge, Winkel und Koordinaten eintippen setzt den passenden Constraint, die Auswahl "parallel zu" legt Parallelität fest
+- Rückgängig und Wiederholen (Strg+Z, Strg+Y), Zoom mit Mausrad, Verschieben mit der Maus auf leerer Fläche, Raster mit Fang
+- Maße lassen sich in mm, cm oder inch eingeben, Winkel immer in Grad
+
+Constraints
+| Typ | Bedeutung |
+|---|---|
+| `length` | Länge einer Seite |
+| `angle` | Innenwinkel an einem Punkt (benachbarte Seiten) |
+| `angle_sides` | Winkel zwischen zwei beliebigen Seiten |
+| `parallel` | zwei Seiten parallel (auch gegenläufig) |
+| `perpendicular` | zwei Seiten rechtwinklig |
+| `equal` | zwei Seiten gleich lang |
+| `horizontal`, `vertical` | Seite parallel zur x oder y Achse |
+| `fix`, `coord_x`, `coord_y` | Punkt festhalten oder eine Koordinate vorgeben |
+| `dist_point`, `dist_side` | Abstand eines Punktes oder einer Seite (Lot) zur Stange (`rod`) oder zur Zahnradachse (`gear`) |
+
+Jeder Constraint kann deaktiviert werden. Der Status steht an jeder Zeile
+- blau oder grün bestimmt (grün bei voll bestimmter Skizze, 0 Freiheitsgrade)
+- orange redundant (bereits durch andere bestimmt, aber widerspruchsfrei)
+- rot Widerspruch. Der Solver benennt den ersten Constraint, der nicht mehr zu den vorherigen passt, und behält die letzte widerspruchsfreie Lösung
+
+Eine Skizze muss nicht voll bestimmt sein. Unterbestimmt heißt nur, dass noch Freiheitsgrade bleiben. Die aktuelle Lösung wird verwendet.
+
+Datenformat in der Konfiguration (`motor.sketch`, Punkte im Stangenrahmen, gegen den Uhrzeigersinn)
+
+```json
+"sketch": {
+  "points": [[-13, -27], [3, -27], [0, -6], [-11, -6]],
+  "constraints": [
+    {"type": "horizontal", "a": 0},
+    {"type": "length", "a": 0, "value": 16.0},
+    {"type": "parallel", "a": 0, "b": 2},
+    {"type": "angle", "a": 1, "value": 78.0},
+    {"type": "dist_side", "a": 3, "ref": "rod", "value": 9.0}
+  ]
+}
+```
+
+Seite `i` geht von Punkt `i` nach Punkt `i+1` (zyklisch), der Winkel an Punkt `i` liegt zwischen Seite `i-1` und `i`.
+Beim Laden werden die Punkte als Startlage genommen und die Constraints gelöst, das Modell nutzt immer die gelöste Kontur.
+
+Regeln und Grenzen
+- Die Kontur muss konvex sein (Voraussetzung der Kollisionsprüfung). Nicht konvexe Konturen werden gemeldet, "Konvexe Hülle" repariert sie
+- Das Zahnrad darf nicht ins Gehäuse ragen (Warnung in der Skizze, Fehler in der Konfiguration), der Abstand der Stange zum Gehäuse muss `motor.own_clearance` einhalten
+- Mit Skizze werden `width`, `depth`, `shaft_x`, `gear_gap` und `outline` ignoriert, `width` und `depth` zeigen dann die Bounding Box
+- Höchstens 40 Punkte und 150 Constraints, der Solver bricht nach 3 s ab
+- Der Solver ist reines Python (Levenberg Marquardt mit Minimum Norm Schritten) und liegt in `sketch.py`, die UI ruft ihn über `/api/sketch/solve`, `from-motor`, `hull`, `insert` und `delete` auf
+- SVG Import erzeugt eine Skizze ohne Constraints, die Kontur wird wie ein Umriss zum Zahnrad gesetzt
 
 ## Optimierer
 
@@ -204,6 +268,7 @@ Weitere Felder ohne Tabellenzeile
 - `stack.max_per_plane` maximale Motoranzahl je Ebene, zum Beispiel `{"1": 6}`
 - `stack.plane_angles` erlaubte Winkel je Ebene, zum Beispiel `{"3": [0, 90, 180, 270]}`
 - `motor.outline` konvexes Polygon des Gehäuses im lokalen Motorsystem, ersetzt das Rechteck
+- `motor.sketch` parametrische Kontur mit Constraints im Stangenrahmen, ersetzt Rechteck und `outline` (siehe Abschnitt Motor Skizze)
 - `obstacles` feste Hindernisse (`shape` rect oder circle, `x`, `y`, `w`, `h`, `r`, `angle`, optional `z0`, `z1`, `plane` für eine Sperrzone nur auf einer Motorebene)
 
 Beispiele in `examples/` (im UI per Dropdown ladbar)
@@ -212,6 +277,8 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `polygon_motor_variable_center_distance.json` gezeichnete Motorkontur, Achsabstand wird mitoptimiert
 - `plane_rules.json` Kapazität, Winkel, Sperrzone und Dicke je Ebene
 - `exact_small.json` exakte Suche auf dem Raster
+- `sketch_trapezoid_motor.json` Trapez Motor mit Parallelität, Winkel, Länge und Abstand zur Stange
+- `sketch_rectangle_dimensions.json` Rechteck als bemaßte Skizze
 - `three_levels_mixed_gaps.json` ungleiche Ebenenabstände mit Hindernis
 - `bottom_mount_two_levels.json` Motoren unter den Ebenen
 - `area_too_small.json` Bauraum zu klein, ehrliche Teillösung
@@ -244,7 +311,7 @@ begrenzt die Größe von Anfragen.
 - Das Zahnrad ist ein Quader als Einhüllende, ohne Zahngeometrie. Der Eingriff steckt nur im Achsabstand. Ob das reale Zahnrad
   in das reale Gewinde passt, muss mit den echten Bauteilen geprüft werden
 - Standardwerte sind Platzhalter, keine Herstellerdaten
-- Gehäuse sind konvex (Rechteck oder konvexes Polygon). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
+- Gehäuse sind konvex (Rechteck, konvexes Polygon oder Skizze). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
 - Die Stange gilt über den ganzen Verfahrweg als Zylinder, auch eingefahren unterhalb des Motors. Das ist konservativ
 - Bauraum ist ein Rechteck, Ebenen sind keine Platinen mit Leiterbahnen, Kabel und Stecker fehlen
 - Die Suche ist heuristisch. Sehr große Aufgaben brauchen mehr Zeit. Bei kompakter Anordnung wird nur ein Fenster um die Mitte des Bauraums gerastert

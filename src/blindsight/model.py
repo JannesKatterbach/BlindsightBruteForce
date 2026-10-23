@@ -138,7 +138,8 @@ class Model:
             self._rod_geo[p.index] = self._compute_rod(p)
             self._plane_problems[p.index] = self._check_plane(p)
         self.obstacles = self._build_obstacles()
-        self.housing_local = self._housing_polygon()
+        self.housing_nominal = self._housing_polygon()
+        self._housing_cache: dict[float, list[tuple[float, float]]] = {}
         self.unit_radius = self._compute_unit_radius()
 
     # -- Gewindestange -------------------------------------------------------
@@ -228,8 +229,7 @@ class Model:
             return hit
         from .geometry import point_polygon_distance
 
-        rx, ry = m.rod_local(cd)
-        d = point_polygon_distance(rx, ry, self.housing_local) - self.rod_r
+        d = point_polygon_distance(0.0, 0.0, self.housing_rod(cd)) - self.rod_r
         msg = ""
         if d < m.own_clearance - 1e-9:
             msg = (
@@ -243,10 +243,31 @@ class Model:
         return self._plane_angles[plane_index]
 
     def _housing_polygon(self) -> list[tuple[float, float]]:
-        m = self.project.motor
-        if m.outline:
-            return [(float(x), float(y)) for x, y in Footprint.polygon(m.outline).pts]
-        return Footprint.rect(0, 0, m.width, m.depth).pts
+        """Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse) bei nominalem Achsabstand."""
+        from .sketch import SketchError, housing_polygon
+
+        try:
+            return housing_polygon(self.project.motor)
+        except SketchError as exc:
+            raise ConfigError(exc.errors) from exc
+
+    def housing_rod(self, cd: Optional[float] = None) -> list[tuple[float, float]]:
+        """Gehaeusekontur im Stangenrahmen. Ein anderer Achsabstand verschiebt das Gehaeuse in x,
+        denn Gehaeuse und Zahnradachse gehoeren zusammen und nur die Stange bleibt im Ursprung."""
+        nominal = self.project.motor.center_distance
+        if cd is None or cd == nominal:
+            return self.housing_nominal
+        key = round(cd, 9)
+        hit = self._housing_cache.get(key)
+        if hit is None:
+            dx = nominal - cd
+            hit = [(x + dx, y) for x, y in self.housing_nominal]
+            self._housing_cache[key] = hit
+        return hit
+
+    @property
+    def housing_local(self) -> list[tuple[float, float]]:  # Name aus frueheren Versionen
+        return self.housing_nominal
 
     def plane_problems(self, plane_index: int) -> list[str]:
         return self._plane_problems[plane_index]
@@ -263,16 +284,13 @@ class Model:
         """Obere Schranke fuer den Abstand aller Bauteilpunkte von der Stangenachse (fuer Raster)."""
         m = self.project.motor
         r = self.rod_r
-        gx0, gx1 = m.shaft_x - m.gear_radius, m.shaft_x + m.gear_radius
-        gy0 = m.depth / 2 + m.gear_gap
-        gy1 = gy0 + m.gear_width
+        gr, gh = m.gear_radius, m.gear_width / 2.0
         for cd in self.center_distances:
-            rx, ry = m.rod_local(cd)
-            for x, y in self.housing_local:
-                r = max(r, math.hypot(x - rx, y - ry))
-            for x in (gx0, gx1):
-                for y in (gy0, gy1):
-                    r = max(r, math.hypot(x - rx, y - ry))
+            for x, y in self.housing_rod(cd):
+                r = max(r, math.hypot(x, y))
+            for x in (-cd - gr, -cd + gr):
+                for y in (-gh, gh):
+                    r = max(r, math.hypot(x, y))
         return r
 
     def unit_parts(
@@ -290,15 +308,16 @@ class Model:
         geo = self._rod_geo[plane_index]
         plane = self.stack[plane_index]
         a = math.radians(angle_deg)
-        rx, ry = m.rod_local(cd)
+        ca, sa = math.cos(a), math.sin(a)
 
-        def world(lx: float, ly: float) -> tuple[float, float]:
-            return rotate_point(x + (lx - rx), y + (ly - ry), x, y, a)
+        def world(hx: float, hy: float) -> tuple[float, float]:
+            """Punkt im Stangenrahmen (Stange im Ursprung) in Weltkoordinaten. Der Motor dreht um die Stange."""
+            return (x + hx * ca - hy * sa, y + hx * sa + hy * ca)
 
         hz0, hz1 = self._housing_z(plane)
         gz0, gz1 = self._gear_z(plane)
-        housing = Footprint.polygon([world(px, py) for px, py in self.housing_local])
-        gcx, gcy = world(m.shaft_x, m.gear_center_y)
+        housing = Footprint.polygon([world(px, py) for px, py in self.housing_rod(cd)])
+        gcx, gcy = world(-(m.center_distance if cd is None else cd), 0.0)
         gear = Footprint.rect(gcx, gcy, m.gear_diameter, m.gear_width, a)
         rod = Footprint.circle(x, y, self.rod_r)
         parts = [
