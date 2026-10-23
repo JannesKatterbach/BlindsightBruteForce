@@ -32,6 +32,7 @@ from typing import Any, Optional
 from .errors import ConfigError
 from .geometry import is_convex_ccw, signed_area
 from .patterns import PATTERNS
+from .sketch import check_sketch_motor
 from .units import EPS, EPS_AREA, FAR_AWAY, is_finite_number, normalize_angle_deg
 
 MAX_ANGLE_COUNT = 100_000  # Schutz gegen winzige Winkelschritte
@@ -381,8 +382,6 @@ def _check_motor(proj: Project, errs: list[str]) -> None:
                 f"{lo:g} bis {hi:g}"
             )
     if motor.sketch is not None:
-        from .sketch import check_sketch_motor  # die Skizze nutzt MotorSpec, daher erst hier laden
-
         _, sketch_errors = check_sketch_motor(motor)
         errs.extend(sketch_errors)
     elif motor.outline is not None:

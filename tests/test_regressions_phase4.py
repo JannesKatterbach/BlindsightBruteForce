@@ -138,3 +138,114 @@ def test_model_unit_bbox_matches_parts():
     box = model.unit_bbox(50.0, 40.0, 1, 30.0)
     assert box[0] == pytest.approx(min(xs), abs=0.05)
     assert box[2] == pytest.approx(max(xs), abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Skizze
+# ---------------------------------------------------------------------------
+from blindsight import sketch as S  # noqa: E402
+from blindsight.sketch import motor as sketch_motor  # noqa: E402
+
+
+def _c(t, a=None, b=None, value=None, value2=None, ref="rod", enabled=True):
+    return {"type": t, "a": a, "b": b, "value": value, "value2": value2, "ref": ref, "enabled": enabled, "name": ""}
+
+
+SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+
+
+def test_solver_ok_always_matches_errors_on_random_sketches():
+    # Frueher lieferte die Konfliktdiagnose ok=False ohne Fehlermeldung (Residuum nicht neu bestimmt)
+    import random
+
+    rng = random.Random(7)
+    for _ in range(80):
+        n = rng.randint(3, 6)
+        pts = [[math.cos(2 * math.pi * i / n) * 10 + rng.uniform(-1, 1), math.sin(2 * math.pi * i / n) * 10
+                + rng.uniform(-1, 1)] for i in range(n)]
+        cons = []
+        for _ in range(rng.randint(1, 5)):
+            t = rng.choice(["length", "horizontal", "vertical", "parallel", "equal", "coord_x"])
+            a = rng.randrange(n)
+            b = (a + rng.randint(1, n - 1)) % n
+            cons.append(_c(t, a, b, value=rng.uniform(2, 15)))
+        res = S.solve({"points": pts, "constraints": cons})
+        assert res.ok == (not res.errors)
+        if res.ok:
+            assert all(e.get("residual", 0.0) < S.TOL_OK for e in res.constraints)
+
+
+def test_drag_on_clockwise_sketch_moves_the_dragged_point():
+    clockwise = list(reversed(SQUARE))  # Punkt 0 ist (0, 10)
+    res = S.solve({"points": clockwise, "constraints": []}, drag={"point": 0, "target": [-3.0, 13.0]})
+    assert res.ok and res.reoriented
+    assert [-3.0, 13.0] in [[round(x, 6), round(y, 6)] for x, y in res.sketch["points"]]
+    assert [0.0, 10.0] not in [[round(x, 6), round(y, 6)] for x, y in res.sketch["points"]]
+
+
+def test_rejected_drag_returns_the_unchanged_sketch():
+    # Punkt 0 liegt auf der Stange, die Startlage wird intern leicht verschoben. Der Widerspruch
+    # erzwingt die Ablehnung. Frueher kam die verschobene Startlage zurueck
+    pts = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+    cons = [_c("dist_point", 0, value=0.0), _c("length", 1, value=10.0), _c("length", 1, value=12.0)]
+    res = S.solve({"points": pts, "constraints": cons}, drag={"point": 2, "target": [12.0, 12.0]})
+    assert not res.ok and res.errors
+    assert res.sketch["points"] == pts
+
+
+def test_conflict_without_diagnosis_reports_an_error():
+    cons = [_c("length", 0, value=10.0), _c("length", 0, value=12.0)]
+    res = S.solve({"points": SQUARE, "constraints": cons}, diagnose=False)
+    assert not res.ok and res.errors
+    assert res.sketch["points"] == SQUARE
+
+
+def test_self_intersection_is_always_reported():
+    star = [[math.cos(math.radians(90 + 144 * i)) * 10, math.sin(math.radians(90 + 144 * i)) * 10] for i in range(5)]
+    report = S.polygon_report(star)
+    assert not report["simple"]
+    assert any("schneidet sich selbst" in p for p in report["problems"])
+
+
+@pytest.mark.parametrize("bad", [{"points": 5, "constraints": []}, {"points": [], "constraints": 3}, {"points": None}])
+def test_solve_rejects_non_list_input_without_crash(bad):
+    res = S.solve(bad)
+    assert not res.ok and res.state == "invalid" and res.errors
+
+
+@pytest.mark.parametrize("t", [float("nan"), 0.0, 1.0, -0.5, 1.5, "0.5"])
+def test_insert_point_checks_parameter(t):
+    with pytest.raises(S.SketchError):
+        S.insert_point({"points": SQUARE, "constraints": []}, 0, t)
+
+
+def test_constraint_enabled_must_be_bool():
+    res = S.solve({"points": SQUARE, "constraints": [_c("length", 0, value=10.0, enabled="no")]})
+    assert not res.ok and any("enabled" in e for e in res.errors)
+
+
+def test_motor_sketch_is_solved_once(monkeypatch):
+    calls = []
+    original = sketch_motor.solve
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sketch_motor, "solve", counting)
+    sketch_motor._motor_cache.clear()
+    p = Project()
+    p.motor.sketch = S.legacy_to_sketch(p.motor)
+    data = p.to_dict()
+    data["motor"]["sketch"] = S.legacy_to_sketch(p.motor)
+    project = Project.from_dict(data)
+    project.validate()
+    Model(project)
+    assert len(calls) == 1
+
+
+def test_constraint_registry_matches_spec_and_schema():
+    assert set(S.SPEC) == set(S.CONSTRAINT_TYPES) == {t["name"] for t in S.constraint_schema()}
+    for name, ctype in S.CONSTRAINT_TYPES.items():
+        assert ctype.index_fields, name
+        assert ctype.value in (None, "len", "deg")

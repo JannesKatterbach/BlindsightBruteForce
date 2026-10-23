@@ -34,6 +34,7 @@ from typing import Optional
 from .config import ConfigError, Project
 from .errors import SketchError
 from .geometry import BBox, Footprint, Point, Prism, point_polygon_distance, rotate, z_gap
+from .sketch import housing_polygon
 from .units import EPS, KEY_DIGITS
 
 PARTS_CACHE_LIMIT = 400_000  # Anzahl zwischengespeicherter Platzierungen, danach wird geleert
@@ -270,8 +271,6 @@ class Model:
     # -- Gehaeuse im Stangenrahmen ------------------------------------------------
     def _housing_polygon(self) -> list[Point]:
         """Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse) bei nominalem Achsabstand."""
-        from .sketch import housing_polygon  # spaet geladen, die Skizze ist ein eigenes Paket mit Solver
-
         try:
             return housing_polygon(self.project.motor)
         except SketchError as exc:
