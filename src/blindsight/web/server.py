@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from .. import sketch as sk
 from ..analysis import analyze
 from ..config import ConfigError, Project, motor_from_dict, schema
+from .. import holes as hole_files
 from ..export import EXPORTERS, build_geometry, exporter_schema
 from ..i18n import LANGUAGE_NAMES, LANGUAGES, LocalText, current_language, localize, negotiate, normalize_language, tr, use_language
 from ..layout import Placement
@@ -229,7 +230,7 @@ class App:
                 if not prefix and path == r_path:
                     return getattr(self, name)(Request(method, path, query, body))
             return error_response(404, tr("server.not_found"))
-        except ConfigError as exc:
+        except (ConfigError, hole_files.HolesError) as exc:
             return error_response(400, exc.errors)
         except SvgImportError as exc:
             return error_response(400, _message(exc))
@@ -379,6 +380,22 @@ class App:
     @route("POST", "/api/analyze")
     def analyze_project(self, req: Request) -> Response:
         return json_response(analyze(Project.from_dict(req.data)))
+
+    # -- Hole patterns -------------------------------------------------------------------
+    @route("POST", "/api/holes/parse")
+    def holes_parse(self, req: Request) -> Response:
+        """Read a hole pattern file (blindsight.holes or a rod positions export) and return it normalised."""
+        return json_response(hole_files.parse(req.data).as_dict())
+
+    @route("POST", "/api/holes/check")
+    def holes_check(self, req: Request) -> Response:
+        """Problems of single holes for the generator ({project, holes} -> {problems})."""
+        data = req.dict_data()
+        project = Project.from_dict(data.get("project", {}))
+        doc = hole_files.parse({"holes": data.get("holes", [])}) if data.get("holes") else hole_files.HoleDocument()
+        if len(doc.holes) > MAX_PLACEMENTS:
+            raise BadRequest(tr("server.too_many_placements", max=MAX_PLACEMENTS))
+        return json_response({"problems": hole_files.check(project, doc.holes)})
 
     # -- Motor -------------------------------------------------------------------------
     @route("POST", "/api/svg-motor-import")

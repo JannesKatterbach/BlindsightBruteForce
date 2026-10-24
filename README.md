@@ -294,7 +294,7 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `bounds.height` | Höhe (y). Ausdehnung des Bauraums in y ab dem Ursprung unten links | mm | > 0, <= 1e+06 |
 | `bounds.edge_margin` | Randabstand. Zusätzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
 | `bounds.parts_in_bounds` | Im Bauraum müssen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
-| `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` / `periodic_tile` |
+| `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` / `periodic_tile` / `fixed_holes` |
 | `search.layout_goal` | Anordnungsziel. compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum |  | `compact` / `spread` |
 | `search.patterns` | Muster (square, hex_x, hex_y). Verteilungsstruktur der Kandidaten |  |  |
 | `search.fixed_pitch` | Feste Teilung (optional). Nur diese Rasterteilung verwenden statt sie zu suchen | mm | > 0, <= 100000 |

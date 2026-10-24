@@ -311,6 +311,8 @@ class Project:
     bounds: BoundsSpec = field(default_factory=BoundsSpec)
     obstacles: list[ObstacleSpec] = field(default_factory=list)
     search: SearchSpec = field(default_factory=SearchSpec)
+    # Fixed G0 holes [x, y] in mm (optimizer fixed_holes, from a hole pattern file). The holes replace target_count.
+    holes: Optional[list[list[float]]] = None
 
     @property
     def required_gap(self) -> float:
@@ -502,6 +504,10 @@ def _check_search(proj: Project, errs: list[str]) -> None:
     if sum(search.weights.as_dict().values()) <= 0:
         errs.append(tr("config.weights_zero"))
     _check_custom_tile(search, errs)
+    if proj.holes is not None and any(len(h) != 2 for h in proj.holes):
+        errs.append(tr("config.holes_format"))
+    elif search.optimizer == "fixed_holes" and not proj.holes:
+        errs.append(tr("config.holes_missing"))
     try:
         proj.allowed_angle_list()
     except ConfigError as exc:
@@ -610,7 +616,8 @@ FIELD_META: list[Meta] = [
     Meta("bounds.height", "len", 0, 1e6, True, group="bounds"),
     Meta("bounds.edge_margin", "len", 0, 1e6, group="bounds"),
     Meta("bounds.parts_in_bounds", "enum", options=("all", "rods"), group="bounds"),
-    Meta("search.optimizer", "enum", options=("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile"), group="search"),
+    Meta("search.optimizer", "enum", options=("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile", "fixed_holes"),
+         group="search"),
     Meta("search.layout_goal", "enum", options=("compact", "spread"), group="search"),
     Meta("search.patterns", "liststr", group="search"),
     Meta("search.fixed_pitch", "len", 0, 100000, True, group="search", optional=True),

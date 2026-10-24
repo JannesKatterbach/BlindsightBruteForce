@@ -3,6 +3,7 @@
 
 function switchTab(name) {
   if (name === "sketch" && window.skReload) setTimeout(skReload, 0);
+  if (name === "holes") setTimeout(holesChanged, 0);  // the build area may have changed
   $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
 }
@@ -89,7 +90,9 @@ async function changeLanguage(language) {
   schema = (await api("/api/schema")).data;
   buildForms();
   buildExportFormats();
+  buildHoleFillPatterns();
   writeInputs();
+  holesChanged();
   await refresh();
   if (jobId && !JOB_DONE_STATES.includes(lastJobState)) pollStatus();
   if (resultSource === "job" && jobId) await loadResult(solIndex);
@@ -113,6 +116,7 @@ async function init() {
   bindTabs();
   await loadExamples();
   await loadCfg({});
+  initHoles();
 }
 
 window.addEventListener("load", init);

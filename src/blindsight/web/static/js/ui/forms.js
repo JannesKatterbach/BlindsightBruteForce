@@ -16,6 +16,7 @@ function optionLabel(path, value) {
 // Fields that only matter for some settings. They are hidden otherwise (the values stay in cfg)
 const usesPattern = (c) => c.search.optimizer === "periodic_tile";
 const FIELD_VISIBLE = {
+  "target_count": (c) => c.search.optimizer !== "fixed_holes",
   "search.pattern": usesPattern,
   "search.pattern_pitch": (c) => usesPattern(c) && c.search.pattern !== "free",
   "search.pattern_pitch_y": (c) => usesPattern(c) && ["rectangle", "staggered"].includes(c.search.pattern),
@@ -39,6 +40,7 @@ function updateFieldVisibility() {
     const next = input.nextElementSibling;
     if (next && next.classList.contains("errmsg")) next.hidden = !show;
   }
+  renderHolesInfo();
 }
 const inputId = (path) => "in-" + path.replace(/\./g, "-");
 

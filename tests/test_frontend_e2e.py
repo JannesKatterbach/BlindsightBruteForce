@@ -206,3 +206,58 @@ def test_language_switch_translates_the_whole_ui(page):
     assert page.inner_text("[data-tab=results]") == "Résultats"  # the choice is remembered
     page.select_option("#langSel", "de")
     page.wait_for_function("document.querySelector('[data-tab=results]').textContent === 'Ergebnisse'")
+
+
+def test_hole_generator_builds_a_file_and_runs_fixed_holes(page):
+    page.click("[data-tab=holes]")
+    page.click("text=Aus Text einfügen")
+    page.fill("#holePaste", "30;30\n60;30\n90;30\n30,5;60\n60 60\n90\t60")
+    page.click("#holePasteReplace")
+    assert page.locator("#holeTable tr").count() == 7  # header plus six holes
+    assert page.inner_text("#holeTable tr:nth-child(5) td:first-child") == "4"
+    assert page.input_value("#holeTable [data-hole='3'][data-c='0']") == "30.5"
+    # A click into the free preview area places a hole, too close holes are reported by the core
+    box = page.locator("#holePreview").bounding_box()
+    page.mouse.click(box["x"] + box["width"] * 0.9, box["y"] + box["height"] * 0.1)
+    assert page.locator("#holeTable tr").count() == 8
+    page.fill("#holeTable [data-hole='6'][data-c='0']", "31")
+    page.dispatch_event("#holeTable [data-hole='6'][data-c='0']", "change")
+    page.fill("#holeTable [data-hole='6'][data-c='1']", "30")
+    page.dispatch_event("#holeTable [data-hole='6'][data-c='1']", "change")
+    page.wait_for_function("document.querySelector('#holeProblems').innerText.includes('zu nah')")
+    page.click("#holeTable [data-hole-del='6']")
+    page.wait_for_function("document.querySelector('#holeProblems').innerText === ''")
+    with page.expect_download() as download:
+        page.click("#holeDownload")
+    data = json.loads(open(download.value.path(), encoding="utf-8").read())
+    assert data["format"] == "blindsight.holes" and len(data["holes"]) == 6 and data["holes"][3]["x"] == 30.5
+    page.click("#holeUse")
+    page.wait_for_function("cfg.search.optimizer === 'fixed_holes' && cfg.holes.length === 6")
+    assert "6 Löchern" in page.inner_text("#holesInfo")
+    change(page, "#in-search-time_limit_s", "4")
+    page.click("#btnStart")
+    page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
+    assert "6 von 6" in page.inner_text("#statusBox")
+    assert "Alle 6 Löcher" in page.inner_text("#messages")
+
+
+def test_hole_generator_tile_mode_sets_an_own_pattern(page):
+    page.click("[data-tab=holes]")
+    page.check("input[name=holeMode][value=tile]")
+    page.fill("#holeTileW", "40")
+    page.dispatch_event("#holeTileW", "change")
+    page.fill("#holeTileH", "34")
+    page.dispatch_event("#holeTileH", "change")
+    page.click("text=Aus Text einfügen")
+    page.fill("#holePaste", "0;0\n20;17\n45;3")
+    page.click("#holePasteReplace")
+    page.wait_for_function("document.querySelector('#holeProblems').innerText.includes('Loch 3')")
+    page.click("#holeTable [data-hole-del='2']")
+    page.click("#holeUse")
+    page.wait_for_function("cfg.search.pattern === 'custom' && cfg.search.custom_tile.holes.length === 2")
+    assert cfg_value(page, "search.optimizer") == "periodic_tile"
+    assert "40 x 34 mm" in page.inner_text("#holesInfo")
+
+
+def cfg_value(page, path):
+    return page.evaluate(f"getPath(cfg, '{path}')")

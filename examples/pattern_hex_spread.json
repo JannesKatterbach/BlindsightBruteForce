@@ -1,0 +1,91 @@
+{
+  "name": "Hexagonales Muster verteilt",
+  "target_count": 10,
+  "clearance": 1.0,
+  "tolerance": 0.05,
+  "rod": {
+    "diameter": 4.0,
+    "stroke": 50.0,
+    "engage_below": 10.0,
+    "engage_above": 10.0,
+    "length_tolerance": 2.0,
+    "retract_depth": 0.0,
+    "hole_clearance": 0.5
+  },
+  "motor": {
+    "width": 12.0,
+    "depth": 24.0,
+    "height": 10.0,
+    "shaft_x": 0.0,
+    "axis_height": 5.0,
+    "gear_diameter": 6.0,
+    "gear_width": 4.0,
+    "gear_gap": 1.0,
+    "center_distance": 5.0,
+    "center_distance_min": null,
+    "center_distance_max": null,
+    "center_distance_steps": 1,
+    "own_clearance": 0.2,
+    "mount": "top",
+    "outline": null,
+    "sketch": null
+  },
+  "stack": {
+    "n_motor_planes": 3,
+    "mode": "uniform",
+    "uniform_spacing": 20.0,
+    "gaps": [],
+    "distances": [],
+    "thickness": 1.6,
+    "g0_thickness": 6.0,
+    "thicknesses": null,
+    "allowed_planes": null,
+    "mount_zones": {},
+    "max_per_plane": {},
+    "plane_angles": {}
+  },
+  "bounds": {
+    "width": 120.0,
+    "height": 120.0,
+    "edge_margin": 0.0,
+    "parts_in_bounds": "all"
+  },
+  "obstacles": [],
+  "search": {
+    "weights": {
+      "count": 10.0,
+      "area": 8.0,
+      "uniformity": 2.0,
+      "regularity": 1.0
+    },
+    "optimizer": "periodic_tile",
+    "patterns": [
+      "square",
+      "hex_x",
+      "hex_y"
+    ],
+    "layout_goal": "spread",
+    "fixed_pitch": null,
+    "angle_step": 15.0,
+    "angle_min": 0.0,
+    "angle_max": 360.0,
+    "allowed_angles": null,
+    "time_limit_s": 12,
+    "max_candidates": 2000000,
+    "seed": 1,
+    "top_k": 5,
+    "refine_fraction": 0.35,
+    "stagnation_s": 6.0,
+    "workers": 1,
+    "pattern": "hex",
+    "pattern_pitch": null,
+    "pattern_pitch_y": null,
+    "max_block_holes": 12,
+    "custom_tile": null,
+    "tile_rods": 2,
+    "tile_width": null,
+    "tile_height": null,
+    "tile_step": 0.5
+  },
+  "holes": null
+}

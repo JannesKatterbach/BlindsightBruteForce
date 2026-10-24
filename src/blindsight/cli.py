@@ -13,9 +13,11 @@ Exit codes
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
+from . import holes as hole_files
 from .config import ConfigError, Project
 from .export import JsonExporter, RodPositionsExporter, SvgExporter, build_geometry
 from .i18n import LANGUAGES, normalize_language, tr, use_language
@@ -43,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("--svg", help=tr("cli.svg"))
     ap.add_argument("--json", help=tr("cli.json"))
     ap.add_argument("--rods", help=tr("cli.rods"))
+    ap.add_argument("--holes", help=tr("cli.holes"))
     ap.add_argument("--time", type=float, help=tr("cli.time"))
     ap.add_argument("--seed", type=int, help=tr("cli.seed"))
     ap.add_argument("--lang", choices=LANGUAGES, help=tr("cli.lang"))
@@ -57,7 +60,27 @@ def _load(args: argparse.Namespace) -> Model:
         project.search.time_limit_s = args.time
     if args.seed is not None:
         project.search.seed = args.seed
+    if args.holes:
+        apply_hole_file(project, args.holes)
     return Model(project)
+
+
+def apply_hole_file(project: Project, path: str) -> None:
+    """Fixed holes switch to the optimizer fixed_holes, an own tile to the repeating pattern."""
+    with open(path, encoding="utf-8") as fh:
+        try:
+            doc = hole_files.parse(json.load(fh))
+        except json.JSONDecodeError as exc:
+            raise ConfigError(tr("config.invalid_json", error=str(exc))) from exc
+        except hole_files.HolesError as exc:
+            raise ConfigError([tr("cli.holes_error", error=e) for e in exc.errors]) from exc
+    if doc.holes:
+        project.holes = doc.holes
+        project.search.optimizer = "fixed_holes"
+    else:
+        project.search.custom_tile = doc.tile
+        project.search.pattern = "custom"
+        project.search.optimizer = "periodic_tile"
 
 
 def _write(path: str, text: str, what: str) -> None:

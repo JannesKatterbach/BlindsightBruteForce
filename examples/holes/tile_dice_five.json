@@ -1,0 +1,24 @@
+{
+  "format": "blindsight.holes",
+  "version": 1,
+  "units": {
+    "length": "mm"
+  },
+  "origin": "bottom left corner of the build area, x to the right, y up",
+  "holes": [],
+  "tile": {
+    "width": 40.0,
+    "height": 40.0,
+    "scalable": true,
+    "holes": [
+      {
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "x": 20.0,
+        "y": 20.0
+      }
+    ]
+  }
+}

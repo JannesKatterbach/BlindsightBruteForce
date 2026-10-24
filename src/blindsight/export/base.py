@@ -63,6 +63,7 @@ def build_geometry(model: Model, placements: list[Placement]) -> dict:
         "tolerance": proj.tolerance,
         "required_gap": model.gap,
         "rod_diameter": proj.rod.diameter,
+        "center_distance_nominal": proj.motor.center_distance,
         "hole_diameter": 2 * model.hole_r,
         "stroke": proj.rod.stroke,
         "planes": [

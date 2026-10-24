@@ -1,0 +1,59 @@
+{
+  "format": "blindsight.holes",
+  "version": 1,
+  "units": {
+    "length": "mm"
+  },
+  "origin": "bottom left corner of the build area, x to the right, y up",
+  "build_area": {
+    "width": 120.0,
+    "height": 120.0
+  },
+  "holes": [
+    {
+      "id": 0,
+      "x": 30.0,
+      "y": 30.0
+    },
+    {
+      "id": 1,
+      "x": 60.0,
+      "y": 30.0
+    },
+    {
+      "id": 2,
+      "x": 90.0,
+      "y": 30.0
+    },
+    {
+      "id": 3,
+      "x": 30.0,
+      "y": 60.0
+    },
+    {
+      "id": 4,
+      "x": 60.0,
+      "y": 60.0
+    },
+    {
+      "id": 5,
+      "x": 90.0,
+      "y": 60.0
+    },
+    {
+      "id": 6,
+      "x": 30.0,
+      "y": 90.0
+    },
+    {
+      "id": 7,
+      "x": 60.0,
+      "y": 90.0
+    },
+    {
+      "id": 8,
+      "x": 90.0,
+      "y": 90.0
+    }
+  ]
+}
