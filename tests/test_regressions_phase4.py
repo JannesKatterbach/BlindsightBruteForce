@@ -1,4 +1,4 @@
-"""Regressionstests fuer Fehler, die bei der Ueberarbeitung (Version 0.4.0) gefunden wurden."""
+"""Regression tests for bugs found during the rework (version 0.4.0)."""
 
 import math
 from pathlib import Path
@@ -21,7 +21,7 @@ def _nearest_neighbor_distances(points):
 
 @pytest.mark.parametrize("kind", ["hex_x", "hex_y"])
 def test_hex_lattice_neighbors_have_pitch_distance(kind):
-    # Frueher wurde jede Reihe einzeln zentriert. Nachbarn lagen dann nur 0.9 x Teilung auseinander
+    # Every row used to be centred on its own. Neighbours were then only 0.9 x pitch apart
     pts = pattern_points(kind, 10.0, (0.0, 0.0, 95.0, 87.0))
     assert len(pts) > 20
     for dist in _nearest_neighbor_distances(pts):
@@ -42,7 +42,7 @@ def test_unknown_pattern_is_rejected():
 
 @pytest.mark.parametrize("value", ["no", 0, 1, None])
 def test_bool_fields_are_type_checked(value):
-    # Frueher galt "enabled": "no" als aktiv
+    # "enabled": "no" used to count as active
     data = Project().to_dict()
     data["motor"]["sketch"] = {
         "points": [[-20, -10], [-2, -10], [-2, 10], [-20, 10]],
@@ -56,7 +56,7 @@ def test_bool_fields_are_type_checked(value):
 def test_overlapping_planes_fail_validation():
     p = Project()
     p.stack.mode = "distances"
-    p.stack.distances = [10.0, 11.0, 30.0]  # G1 und G2 liegen naeher als die Plattendicke
+    p.stack.distances = [10.0, 11.0, 30.0]  # G1 and G2 are closer than the board thickness
     with pytest.raises(ConfigError) as exc:
         p.validate()
     assert any("überlappen" in e for e in exc.value.errors)
@@ -106,7 +106,7 @@ def test_angle_list_has_no_duplicate_zero_and_360():
 
 
 def test_diagnose_probes_the_whole_center_distance_range():
-    # Nur der nominale Achsabstand scheitert. Frueher meldete die Diagnose "keine Einzeleinheit moeglich"
+    # Only the nominal centre distance fails. The diagnosis used to report "no single unit possible"
     p = Project()
     p.motor.own_clearance = 6.0
     p.motor.center_distance = 5.0
@@ -142,7 +142,7 @@ def test_model_unit_bbox_matches_parts():
 
 
 # ---------------------------------------------------------------------------
-# Skizze
+# Sketch
 # ---------------------------------------------------------------------------
 from blindsight import sketch as S  # noqa: E402
 from blindsight.sketch import motor as sketch_motor  # noqa: E402
@@ -156,7 +156,7 @@ SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
 
 
 def test_solver_ok_always_matches_errors_on_random_sketches():
-    # Frueher lieferte die Konfliktdiagnose ok=False ohne Fehlermeldung (Residuum nicht neu bestimmt)
+    # The conflict diagnosis used to return ok=False without a message (residual not determined again)
     import random
 
     rng = random.Random(7)
@@ -177,7 +177,7 @@ def test_solver_ok_always_matches_errors_on_random_sketches():
 
 
 def test_drag_on_clockwise_sketch_moves_the_dragged_point():
-    clockwise = list(reversed(SQUARE))  # Punkt 0 ist (0, 10)
+    clockwise = list(reversed(SQUARE))  # point 0 is (0, 10)
     res = S.solve({"points": clockwise, "constraints": []}, drag={"point": 0, "target": [-3.0, 13.0]})
     assert res.ok and res.reoriented
     assert [-3.0, 13.0] in [[round(x, 6), round(y, 6)] for x, y in res.sketch["points"]]
@@ -185,8 +185,8 @@ def test_drag_on_clockwise_sketch_moves_the_dragged_point():
 
 
 def test_rejected_drag_returns_the_unchanged_sketch():
-    # Punkt 0 liegt auf der Stange, die Startlage wird intern leicht verschoben. Der Widerspruch
-    # erzwingt die Ablehnung. Frueher kam die verschobene Startlage zurueck
+    # Point 0 lies on the rod, the start position is moved slightly internally. The conflict
+    # forces the rejection. The moved start position used to come back
     pts = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
     cons = [_c("dist_point", 0, value=0.0), _c("length", 1, value=10.0), _c("length", 1, value=12.0)]
     res = S.solve({"points": pts, "constraints": cons}, drag={"point": 2, "target": [12.0, 12.0]})
@@ -253,7 +253,7 @@ def test_constraint_registry_matches_spec_and_schema():
 
 
 # ---------------------------------------------------------------------------
-# Bewertung und Optimierer
+# Scoring and optimizers
 # ---------------------------------------------------------------------------
 import dataclasses  # noqa: E402
 import random  # noqa: E402
@@ -271,7 +271,7 @@ from blindsight.scoring import OBJECTIVES, evaluate, upper_bound_count  # noqa: 
 
 
 def test_upper_bound_is_at_least_one_when_a_single_rod_fits():
-    # Frueher ergab die Flaechenschranke fuer kleine Bereiche 0, obwohl eine Stange passt
+    # The area bound used to give 0 for small regions although one rod fits
     p = Project()
     p.bounds.width = p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
     p.bounds.height = p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
@@ -281,13 +281,13 @@ def test_upper_bound_is_at_least_one_when_a_single_rod_fits():
 def test_upper_bound_counts_rods_on_a_line():
     p = Project()
     d = p.rod.diameter + p.required_gap
-    p.bounds.width = p.rod.diameter + 2 * p.bounds.edge_margin + 4 * d  # 5 Stangen in einer Reihe
+    p.bounds.width = p.rod.diameter + 2 * p.bounds.edge_margin + 4 * d  # 5 rods in a row
     p.bounds.height = p.rod.diameter + 2 * p.bounds.edge_margin
     assert upper_bound_count(Model(p)) >= 5
 
 
 def test_regularity_has_no_jump_between_one_and_few_units():
-    # Frueher 1.0 fuer eine Einheit und 0 fuer zwei bis vier Einheiten
+    # Used to be 1.0 for one unit and 0 for two to four units
     model = Model(Project())
     weights = WeightsSpec()
     one = evaluate(model, [Placement(60, 60, 1, 0.0)], weights, 4)
@@ -360,7 +360,7 @@ def test_registries_match_configuration_options():
 
 
 # ---------------------------------------------------------------------------
-# Server, Import, Export, Dienst, CLI
+# Server, import, export, service, CLI
 # ---------------------------------------------------------------------------
 import json  # noqa: E402
 
@@ -394,7 +394,7 @@ SQUARE_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="1
     {"svg": SQUARE_SVG, "mm_per_unit": -1}, [],
 ])
 def test_svg_import_rejects_bad_input_with_400(body):
-    # Frueher stuerzte der Handler bei Listen, Zahlen und Text als Massstab ab
+    # The handler used to crash with lists, numbers and text as scale
     code, payload = _post(App(), "/api/svg-motor-import", body)
     assert code == 400 and payload["errors"] and payload["error"]
 
@@ -415,7 +415,7 @@ def test_motor_from_svg_does_not_share_lists_with_base():
 @pytest.mark.parametrize("t", [None, "nan", "x", 2])
 def test_sketch_insert_with_bad_t_answers_valid_json(t):
     code, payload = _post(App(), "/api/sketch/insert", {"sketch": {"points": SQUARE, "constraints": []}, "side": 0, "t": t})
-    # Frueher. float(None) stuerzte ab, "nan" erzeugte ungueltiges JSON mit NaN
+    # Earlier. float(None) crashed, "nan" produced invalid JSON with NaN
     assert code == 200
     assert payload["ok"] is False and payload["errors"]
 
@@ -506,16 +506,16 @@ def _cli_config(tmp_path, **search):
 
 def test_cli_exit_codes(tmp_path):
     cfg = _cli_config(tmp_path)
-    assert cli_main([str(cfg), "--time", "0", "--quiet"]) == 2  # frueher still ignoriert
+    assert cli_main([str(cfg), "--time", "0", "--quiet"]) == 2  # used to be ignored silently
     bad = tmp_path / "bad.json"
     bad.write_bytes(b"\xff\xfe\x00")
     assert cli_main([str(bad), "--quiet"]) == 2
-    assert cli_main([str(cfg), "--quiet", "--svg", str(tmp_path)]) == 3  # Verzeichnis statt Datei
+    assert cli_main([str(cfg), "--quiet", "--svg", str(tmp_path)]) == 3  # directory instead of a file
     assert cli_main([str(cfg), "--quiet", "--svg", str(tmp_path / "out.svg")]) == 0
 
 
 def test_version_has_one_source():
     text = open(Path(__file__).resolve().parents[1] / "pyproject.toml", encoding="utf-8").read()
     assert 'dynamic = ["version"]' in text and "blindsight.__version__" in text
-    assert __version__ == "0.4.0"
+    assert __version__ == "0.5.0"
     assert 'blindsight = "blindsight.web.server:main"' in text

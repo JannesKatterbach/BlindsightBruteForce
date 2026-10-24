@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.0
+Neue Funktionen
+- Wiederholendes Muster (`periodic_tile`) neu. Regelmäßige Lochbilder Quadrat, Würfel Fünf, Hexagonal (auch 90 Grad gedreht),
+  versetzte Reihen und Rechteck mit festem oder gesuchtem Lochabstand, dazu die frühere freie Kachel (Schrauben je Kachel) und
+  eigene Kacheln aus dem Lochbild Generator (fest oder skalierbar). Die Motoranordnung wiederholt sich im kleinsten gültigen
+  Block, die Zielanzahl wird genau erreicht (keine Rundung auf ganze Kacheln mehr)
+- Feste Löcher (`fixed_holes`). Für vorgegebene G0 Löcher werden Ebene, Motorwinkel und Achsabstand bestimmt, exakt mit
+  Nachweis der Unmöglichkeit oder als größte Teillösung mit Grund je nicht bedientem Loch
+- Lochbild Dateien `blindsight.holes` und neuer Reiter Lochbild (Tabelle, Einfügen aus Text oder Excel, Muster füllen,
+  Klicken in der Vorschau, Prüfung durch den Kern, Download, direkte Übernahme). CLI `--holes`, API `/api/holes/parse` und
+  `/api/holes/check`
+- Export der Schraubenpositionen je Ebene als JSON (G0 bis Gn, immer da, nur eingefahren da, nur ausgefahren da) mit
+  Motorlage je Stange. CLI `--rods`
+- Sprachen Deutsch, Englisch, Französisch für Oberfläche und alle Meldungen des Kerns. Sprachwahl im Kopf, Server antwortet
+  je Anfrage in der gewählten Sprache (auch für frühere Ergebnisse), CLI `--lang`
+
+Änderungen
+- Alles in mm, Ursprung (0, 0) unten links. Der Bauraum hat nur noch `width` und `height`, die Einheitenwahl der UI entfällt
+- Code, Kommentare und Docstrings auf Englisch, sichtbare Texte nur noch in den Katalogen
+- Der Optimierer Reiter zeigt nur die Felder, die zum gewählten Optimierer und Muster passen
+- Konfigurationen älterer Versionen mit `bounds.xmin` usw. oder `search.tile_rods` ohne Muster müssen angepasst werden
+  (`bounds.width`, `bounds.height`, `search.pattern: "free"`)
+
 ## 0.4.0
 Überarbeitung für Lesbarkeit und Erweiterbarkeit, ohne neue Funktionen. Alle bisherigen Abläufe, Dateiformate, API Pfade und
 öffentlichen Namen bleiben erhalten.

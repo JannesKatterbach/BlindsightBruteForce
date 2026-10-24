@@ -1,8 +1,12 @@
 # Project Blindsight, Motor und Gewindestangen Optimierer
 
-Erste lauffähige Version eines geometrischen Optimierers. Berechnet, wie viele Gewindestangen mit seitlichen Motoren
-in einem mehrschichtigen Aufbau (G0 bis Gn) dicht, gleichmäßig und kollisionsfrei angeordnet werden können.
-Nur Python Standardbibliothek, keine Laufzeitabhängigkeiten.
+Geometrischer Optimierer. Berechnet, wie viele Gewindestangen mit seitlichen Motoren in einem mehrschichtigen Aufbau
+(G0 bis Gn) dicht, gleichmäßig und kollisionsfrei angeordnet werden können, auf Wunsch in einem regelmäßigen, leicht zu
+bohrenden Lochbild oder für fest vorgegebene Löcher. Nur Python Standardbibliothek, keine Laufzeitabhängigkeiten.
+Oberfläche und Meldungen auf Deutsch, Englisch und Französisch.
+
+Einheiten. Alle Längen in mm, Winkel in Grad, Zeiten in Sekunden. Der Ursprung (0, 0) liegt unten links im Bauraum,
+x nach rechts, y nach oben, z = 0 an der Oberseite von G0.
 
 ## Installation und Start
 
@@ -39,6 +43,8 @@ Weitere Befehle
 ```bash
 python run.py --port 9000 --no-browser                 # anderer Port, Browser nicht öffnen
 PYTHONPATH=src python -m blindsight.cli examples/small_hex.json --svg out.svg --json out.json --time 20
+PYTHONPATH=src python -m blindsight.cli examples/small_hex.json --rods rods.json --lang en   # Schraubenpositionen, Ausgabe Englisch
+PYTHONPATH=src python -m blindsight.cli examples/small_hex.json --holes examples/holes/grid_3x3.json --rods rods.json
 python -m pytest                                       # Tests (braucht pytest, Browser Tests zusätzlich Playwright)
 ```
 
@@ -57,20 +63,22 @@ Exitcodes der Kommandozeile
 |---|---|
 | `units.py` | Einheiten, zentrale Toleranzen (`EPS`, `ANGLE_TOL_DEG`, ...), Zahlprüfung, Winkelnormierung |
 | `errors.py` | Fehlerklassen mit Meldungsliste (`ValidationError`, `ConfigError`, `SketchError`) |
+| `i18n/` | Kataloge `de.json`, `en.json`, `fr.json`, `tr()` liefert `LocalText`, das in jeder Sprache neu darstellbar ist |
+| `holes.py` | Lochbild Dateien (`blindsight.holes`, auch der Schraubenpositionen Export), Prüfung einzelner Löcher |
 | `config.py` | Eingabedaten als Dataclasses, JSON laden und speichern, `FIELD_META` (Schema für Validierung, UI und Doku), Prüfung je Abschnitt |
 | `geometry.py` | Prismen (Kreis oder konvexes Polygon plus Z Intervall), exakte Abstände, SAT, Hülle, Flächen, Rotation |
 | `model.py` | Ebenen, Stangenlängen, Bauteile je Platzierung, Bauraum, statische Prüfung je Ebene |
 | `layout.py` | Menge platzierter Einheiten, Einheitenregeln (`UNIT_RULES`), inkrementelle Kollisionsprüfung mit Raumraster |
 | `patterns.py` | Kandidatenmuster (`PATTERNS`) und Reihenfolgen (`ORDER_TABLE`) |
 | `scoring.py` | Zielfunktion mit Teilzielen (`OBJECTIVES`), Kennzahlen, Obergrenze der Anzahl (Ungleichung von Oler) |
-| `optimizers/` | Register (`registry.py`), Basisklasse mit Rahmen (`base.py`), gemeinsame Suche und lokale Suche (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `parallel` |
+| `optimizers/` | Register (`registry.py`), Basisklasse mit Rahmen (`base.py`), gemeinsame Suche und lokale Suche (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `periodic_tile`, `fixed_holes`, `parallel` |
 | `diagnose.py` | verständliche Gründe, wenn keine Lösung existiert |
 | `analysis.py` | abgeleitete Größen ohne Optimierung (Ebenen, Stangenlängen, Probleme) |
 | `sketch/` | Motor Skizze. `constraints` (Register der Typen), `structure`, `polygon`, `numeric` (Levenberg Marquardt, Rang), `solver`, `motor` |
-| `export/` | `build_geometry` (formatneutral), Register `EXPORTERS` mit SVG, JSON, DXF, Bohrliste CSV |
+| `export/` | `build_geometry` (formatneutral), Register `EXPORTERS` mit SVG, Schraubenpositionen JSON, JSON, DXF, Bohrliste CSV |
 | `service.py` | Hintergrundläufe in Threads mit Fortschritt, Abbruch und Herunterfahren |
 | `web/server.py` | HTTP Server (stdlib) mit Routentabelle, einheitlicher Fehlerform, Host, Origin und Content Type Prüfung |
-| `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand), `ui` (Reiter), `sketch` (Skizze) |
+| `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand, Sprachen), `i18n` (Kataloge der UI), `ui` (Reiter), `sketch` (Skizze) |
 | `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
 | `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
@@ -82,19 +90,21 @@ Entscheidungen
 
 ## Konventionen
 
-- Längen intern immer in mm. Die UI rechnet Eingaben in cm oder inch um, gespeichert wird in mm
+- Alle Längen in mm (Eingabe, Speicherung, Rechenkern, Export), andere Größen in SI Einheiten, Winkel in Grad. Nur der SVG Import rechnet echte SVG Einheiten (cm, in, pt) in mm um
 - Winkel in der Konfiguration in Grad (`angle_deg`), im Rechenkern in Radiant (`angle_rad`). Winkellisten werden auf 0 bis unter 360 Grad normiert
 - Koordinaten. Welt mit z = 0 an der Oberseite von G0, nach unten negativ. Motoren im Stangenrahmen, Ursprung ist die eigene Gewindestange, das Zahnrad liegt bei (-Achsabstand, 0)
 - Polygone gegen den Uhrzeigersinn. Seite i geht von Punkt i nach Punkt i+1
 - Meldungen beginnen mit dem Feldpfad (`rod.diameter. Muss größer als 0 sein`), damit die UI sie dem Feld zuordnet. Prüfungen sammeln alle Probleme statt beim ersten abzubrechen
-- Sprache. Sichtbare Texte und Meldungen mit Umlauten, Code, Kommentare und Docstrings in ASCII
+- Sprache. Code, Kommentare und Docstrings auf Englisch. Sichtbare Texte stehen nur in den Katalogen (`src/blindsight/i18n/*.json` für den Kern, `web/static/js/i18n/*.js` für die UI), alle Sprachen haben dieselben Schlüssel und Platzhalter (geprüft in `tests/test_i18n.py`). Standardsprache ist Deutsch
+- Sprachwahl. Die UI sendet die gewählte Sprache mit jeder Anfrage (`X-Language`), der Server antwortet darin, auch für Ergebnisse früherer Läufe. Die CLI nutzt `--lang` oder `BLINDSIGHT_LANG`
 
 ## Erweitern
 
 Neuer Constraint Typ der Skizze
 1. In `sketch/constraints.py` eine Residuen Fabrik `(c, geo) -> (x -> Liste)` schreiben
 2. Einen `ConstraintType` in `CONSTRAINT_TYPES` eintragen (Seiten und Punktfelder, Werteart `len` oder `deg`, Wertebereich, Verhalten beim Teilen einer Seite)
-3. Optional einen Knopf mit `data-sk-add` in `index.html` und einen Eintrag in `TOOLS` (`js/sketch/constraints.js`). Bezeichnung und Werteart kommen über `/api/schema`
+3. Bezeichnung `constraint.<name>` in den Katalogen des Kerns
+4. Optional einen Knopf mit `data-sk-add` und `data-i18n` in `index.html` und einen Eintrag in `TOOLS` (`js/sketch/constraints.js`). Werteart kommt über `/api/schema`
 
 Neues Kandidatenmuster
 1. Funktion `(pitch, region) -> Punkte` in `patterns.py`, Eintrag in `PATTERNS` und `PATTERN_DENSITY`
@@ -102,15 +112,19 @@ Neues Kandidatenmuster
 
 Neuer Optimierer
 1. Modul in `optimizers/` mit einer Unterklasse von `Optimizer`, die `search` implementiert und mit `@register` markiert ist. Den Rahmen (Zähler, Abbruch, Machbarkeit) übernimmt `Optimizer.run`, gemeinsame Bausteine liegen in `common.SearchBase`
-2. Import in `optimizers/__init__.py`, Option in `search.optimizer` (`FIELD_META`). `supports_parallel = False`, wenn weitere Seeds nichts bringen
+2. Import in `optimizers/__init__.py`, Option in `search.optimizer` (`FIELD_META`) mit Text `option.search.optimizer.<name>` in den Katalogen. `supports_parallel = False`, wenn weitere Seeds nichts bringen
 
 Neues Teilziel der Bewertung
 1. Funktion `(LayoutStats) -> float` in `scoring.OBJECTIVES`
 2. Gleichnamiges Feld in `config.WeightsSpec` und ein `FIELD_META` Eintrag in der Gruppe `weights`. Der Regler in der UI entsteht daraus
 
 Neues Exportformat
-1. Klasse mit `extension`, `mime`, `label` und `export(geometry) -> str` in `export/`
+1. Klasse mit `name`, `extension`, `filename`, `mime` und `export(geometry) -> str` in `export/`, Bezeichnung `export.<name>` in den Katalogen
 2. Eintrag in `_EXPORTER_CLASSES` (`export/__init__.py`). Server, CLI und Formatauswahl der UI kennen es dann
+
+Neue Sprache
+1. Kataloge `src/blindsight/i18n/<code>.json` und `web/static/js/i18n/<code>.js` mit allen Schlüsseln anlegen
+2. Code in `LANGUAGES` und `LANGUAGE_NAMES` (`i18n/__init__.py`) und in `LANGUAGES` (`js/core/i18n.js`) eintragen, Skript in `index.html` einbinden
 
 Neue Ergebnisansicht oder Einheitenregel
 - Ansicht. Zeichenfunktion in `VIEWS` (`js/ui/views.js`) und eine Option in `#viewSel`
@@ -167,7 +181,60 @@ Zielfunktion (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
 
 Gleichmäßigkeit gilt für eine einzelne Einheit als erfüllt. Regelmäßigkeit braucht mindestens 4 Nachbarn und ist sonst 0.
 
-Ehrlichkeit. Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die
+## Wiederholendes Muster (`periodic_tile`)
+
+Für ein regelmäßiges, leicht zu bohrendes Lochbild. Eingabe im Reiter Optimierung, sichtbar sind nur die Felder des gewählten Musters
+
+| Muster (`search.pattern`) | Lochbild | Abstände |
+|---|---|---|
+| `square` | Quadrat | a |
+| `centered_square` | Würfel Fünf, Quadrat mit Mittelloch | a zu den vier nächsten Löchern |
+| `hex`, `hex_rotated` | Hexagonal, Reihen in x oder (gedreht) in y | a zu allen sechs Nachbarn |
+| `staggered` | versetzte Reihen wie aneinandergelegte Kreise, jede zweite Reihe um a/2 verschoben | a in der Reihe, Reihenabstand b (leer heißt dicht, b = a·0.866) |
+| `rectangle` | Rechteck | a in x, b in y (leer heißt b = a) |
+| `free` | frühere Kachel. `tile_rods` Schrauben je Kachel, optional `tile_width` und `tile_height` | in x und y getrennt gesucht |
+| `custom` | eigene Kachel aus dem Lochbild Generator (`search.custom_tile`), fest oder skalierbar | wie gezeichnet |
+
+- a ist `search.pattern_pitch`, b ist `search.pattern_pitch_y`. Leer heißt automatisch. `compact` sucht den kleinsten Abstand
+  auf dem Raster `search.tile_step`, `spread` den größten, bei dem die Zielanzahl in den Bauraum passt
+- Ebene, Motorwinkel und Achsabstand je Loch werden per Backtracking für einen Block aus m x n Zellen gesucht und wiederholen
+  sich mit dem Block. Blöcke werden nach Lochzahl aufsteigend probiert (höchstens `search.max_block_holes` Löcher), die
+  Motoranordnung wiederholt sich also so früh wie möglich. Ein Block ist gültig, wenn er gegen alle seine Kopien in Reichweite
+  kollisionsfrei ist. Dann ist das ganze unendliche Gitter gültig, und jede Teilmenge davon auch
+- Platziert werden einzelne Löcher des Gitters, jedes muss Rand, Hindernisse, Montagebereiche und Kapazität einhalten. Die
+  Anzahl ist genau die Zielanzahl. Die Ergebnisansicht zeigt Muster, Abstand und Wiederholblock (gestrichelte Blockgrenzen)
+- Der gefundene Abstand ist der kleinste auf dem Raster gefundene, nicht als kleinster bewiesen
+
+## Feste Löcher (`fixed_holes`) und Lochbild Generator
+
+Sind die Löcher von G0 vorgegeben, bestimmt `fixed_holes` je Loch Motorebene, Motorwinkel und Achsabstand.
+- Exakte Suche. Das Loch mit den wenigsten verbleibenden Möglichkeiten zuerst, nach jeder Wahl werden kollidierende
+  Möglichkeiten der Nachbarn gestrichen. Endet die Suche ohne Lösung und ohne Zeit oder Knotenlimit, ist bewiesen, dass nicht
+  alle Löcher gleichzeitig bedient werden können
+- Ohne vollständige Lösung gibt es die größte gefundene Menge bedienter Löcher (gierig in vielen Reihenfolgen plus
+  Umsetzen eines blockierenden Nachbarn). Jedes übrige Loch wird mit Grund gemeldet (außerhalb des Bauraums, kollidiert mit
+  den bedienten Löchern 3, 4 und 8, Kapazität erschöpft)
+- Die Löcher stehen in `holes` der Konfiguration, die Zielanzahl ist dann die Lochzahl
+
+Reiter Lochbild (Generator). Löcher als Tabelle eingeben, aus Text oder Excel einfügen (`x;y`, `x,y`, Tabulator), mit einem
+Muster füllen, in der Vorschau klicken, ziehen und per Rechtsklick löschen. Der Kern prüft live auf Löcher außerhalb des
+Bauraums und zu nahe Löcher. Umschalter Eigene Kachel für ein wiederholendes Muster (Breite, Höhe, Löcher in der Kachel,
+fest oder skalierbar). Knöpfe JSON herunterladen, JSON laden und Für Optimierung verwenden.
+
+Dateiformat `blindsight.holes` (mm, Ursprung unten links). Gelesen wird auch der Export der Schraubenpositionen, so lässt
+sich ein Ergebnis wieder als festes Lochbild laden
+
+```json
+{"format": "blindsight.holes", "version": 1, "units": {"length": "mm"},
+ "holes": [{"id": 0, "x": 30, "y": 30}, {"id": 1, "x": 60, "y": 30}],
+ "tile": {"width": 40, "height": 40, "scalable": true, "holes": [{"x": 0, "y": 0}, {"x": 20, "y": 20}]}}
+```
+
+`holes` ist das feste Lochbild, `tile` die eigene Kachel (eines von beiden genügt). Beispiele in `examples/holes/`.
+
+## Ehrlichkeit der Ergebnisse
+
+Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die
 Obergrenze der Anzahl erreicht wird, wird Optimalität gemeldet. Die Obergrenze folgt aus der Ungleichung von Oler für
 Punkte mit Mindestabstand d (Stangendurchmesser plus Sicherheitsabstand) im Rechteck der zulässigen Stangenmitten mit
 Fläche A und Umfang P, N <= 2/sqrt(3) A/d² + P/(2d) + 1. Motoren bleiben dabei unberücksichtigt.
@@ -187,7 +254,7 @@ Bedienung
 - Seiten und Punkte anklicken (Umschalt für mehrere), dann ein Werkzeug wählen. Werte erscheinen direkt an der Skizze
 - Alternativ die Tabellen "Seiten" und "Punkte". Länge, Winkel und Koordinaten eintippen setzt den passenden Constraint, die Auswahl "parallel zu" legt Parallelität fest
 - Rückgängig und Wiederholen (Strg+Z, Strg+Y oder Strg+Umschalt+Z), Zoom mit Mausrad, Verschieben mit der Maus auf leerer Fläche, Raster mit Fang
-- Maße lassen sich in mm, cm oder inch eingeben, Winkel immer in Grad
+- Maße in mm, Winkel in Grad
 
 Constraints
 | Typ | Bedeutung |
@@ -242,6 +309,8 @@ Regeln und Grenzen
 | `pattern_greedy` | Quadrat und Hexagonalraster, gierige Zuordnung, Teilungssuche, lokale Suche | beste gefundene Lösung |
 | `anneal_free` | freie Verteilung, Mehrfachstart, Simulated Annealing | beste gefundene Lösung |
 | `exhaustive_small` | Backtracking auf diskretem Raster, Fenster der Stangenmitten mit den wenigsten Rasterpunkten | bewiesen nur bezogen auf das Raster und nur ohne Knotenlimit, bis 14 Stangen |
+| `periodic_tile` | wiederholendes Lochbild, Motoranordnung je Block per Backtracking (siehe oben) | kleinster gefundener Abstand auf dem Raster |
+| `fixed_holes` | vorgegebene Löcher, exaktes Backtracking mit Vorausprüfung, sonst größte Teilmenge | Unmöglichkeit bewiesen, wenn die Suche vollständig war |
 
 Anordnungsziel `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
 `search.workers` größer 1 startet unabhängige Seeds in getrennten Prozessen und führt die Ergebnisse zusammen.
@@ -329,6 +398,8 @@ Weitere Felder ohne Tabellenzeile
 - `stack.plane_angles` erlaubte Winkel je Ebene, zum Beispiel `{"3": [0, 90, 180, 270]}`
 - `motor.outline` konvexes Polygon des Gehäuses im lokalen Motorsystem, ersetzt das Rechteck
 - `motor.sketch` parametrische Kontur mit Constraints im Stangenrahmen, ersetzt Rechteck und `outline` (siehe Abschnitt Motor Skizze)
+- `search.custom_tile` eigene Kachel (`width`, `height`, `holes` [[x, y], ...], `scalable`) für das Muster `custom`
+- `holes` feste Löcher von G0 [[x, y], ...] in mm für den Optimierer `fixed_holes`
 - `obstacles` feste Hindernisse (`shape` rect oder circle, `x`, `y`, `w`, `h`, `r`, `angle`, optional `z0`, `z1`, `plane` für eine Sperrzone nur auf einer Motorebene)
 
 Beispiele in `examples/` (im UI per Dropdown ladbar)
@@ -337,6 +408,9 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `polygon_motor_variable_center_distance.json` gezeichnete Motorkontur, Achsabstand wird mitoptimiert
 - `plane_rules.json` Kapazität, Winkel, Sperrzone und Dicke je Ebene
 - `exact_small.json` exakte Suche auf dem Raster
+- `repeating_tile.json` wiederholendes Muster Würfel Fünf
+- `pattern_hex_spread.json` hexagonales Muster gleichmäßig über den Bauraum verteilt
+- `fixed_holes_grid.json` feste Löcher 3 x 3, Motorlage je Loch wird bestimmt
 - `sketch_trapezoid_motor.json` Trapez Motor mit Parallelität, Winkel, Länge und Abstand zur Stange
 - `sketch_rectangle_dimensions.json` Rechteck als bemaßte Skizze
 - `three_levels_mixed_gaps.json` ungleiche Ebenenabstände mit Hindernis
@@ -345,6 +419,11 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `infeasible_motor_too_tall.json` keine Lösung, Gründe werden gemeldet
 
 ## Export
+
+Schraubenpositionen (JSON, `blindsight.rod_positions`). Je Ebene G0 bis Gn die Stangen, getrennt nach `always_present`
+(Stange steckt in jeder Lage des Hubs in der Ebene), `present_when_retracted` (nur eingefahren, tiefe Ebenen),
+`present_when_extended` und `present_during_travel`. Koordinaten in mm ab (0, 0) unten links. Dazu `motors` mit Ebene,
+Winkel, Achsabstand und Lage der Zahnradachse je Stange. CLI `--rods datei.json`.
 
 SVG im Maßstab 1:1 (`width` und `height` in mm, `viewBox` in mm). Gruppe `top` ist die Draufsicht, `plane-N` je Motorebene mit
 Gehäusen, Zahnrädern, Stangen und Durchgangslöchern. Die Y Achse ist gespiegelt (Ursprung links unten im Bauraum).
@@ -355,14 +434,16 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 
 ## Oberfläche
 
-- Reiter Geometrie. Formulare mit Tooltips, Einheitenwahl, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
+- Kopfzeile. Sprachwahl Deutsch, Englisch, Französisch (gemerkt im Browser, Start in der Browsersprache)
+- Reiter Geometrie. Formulare mit Tooltips, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
   SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
 - Reiter Motor Skizze. Kontur zeichnen und bemaßen (siehe oben), Zahnradachse ziehen
 - Reiter Ebenen. Abstandsmodi, Tabelle je Ebene (erlaubt, Kapazität, Winkel, Dicke), berechnete Stangenlängen und Seitenschnitt
 - Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
-- Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter, Fortschritt, Live Vorschau der besten Lösung
+- Reiter Lochbild. Generator für feste Löcher und eigene Kacheln (siehe oben)
+- Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter (nur die zum Optimierer und Muster passenden), Fortschritt, Live Vorschau der besten Lösung
 - Reiter Ergebnisse. Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht (mit der Maus drehen), Kollisionen, engste Stellen,
-  Vergleich der Top Lösungen, manuelles Bearbeiten mit sofortiger Prüfung, Export (SVG, DXF, CSV, JSON), Ergebnis speichern und laden
+  Vergleich der Top Lösungen, manuelles Bearbeiten mit sofortiger Prüfung, Export (SVG, Schraubenpositionen, DXF, CSV, JSON), Ergebnis speichern und laden
 
 Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten,
 `Origin: null` wird abgewiesen), nimmt POST nur als `application/json` an, weist NaN und zu tief verschachteltes JSON ab und

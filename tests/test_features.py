@@ -1,4 +1,4 @@
-"""Tests der Erweiterungen. Motorkontur, Achsabstand, Ebenenregeln, Modi, Exporte, Optimierer."""
+"""Tests of the extensions. Motor outline, centre distance, layer rules, modes, exports, optimizers."""
 
 import math
 
@@ -31,7 +31,7 @@ def test_center_distance_range_options():
     assert 4.0 in m.center_distances and 7.0 in m.center_distances and 5.0 in m.center_distances
     a = m.unit_parts(0, 60, 60, 1, 0, 4.0)[0].prism.fp
     b = m.unit_parts(0, 60, 60, 1, 0, 7.0)[0].prism.fp
-    assert math.isclose(abs(a.cx - b.cx), 3.0, abs_tol=1e-9)  # Gehaeuse wandert mit dem Achsabstand
+    assert math.isclose(abs(a.cx - b.cx), 3.0, abs_tol=1e-9)  # the housing moves with the centre distance
 
 
 def test_optimizer_can_use_center_distance_range():
@@ -69,9 +69,9 @@ def test_plane_keepout_obstacle_only_affects_that_plane():
     m = make_model(obstacles=[ObstacleSpec(shape="rect", x=60, y=60, w=30, h=30, plane=1, name="Sperre")])
     lay = Layout(m)
     assert not lay.check(pl(60, 60, 1, 0)).ok
-    # Auf Ebene 3 ist der Bereich frei, solange die Stange nicht die Sperrzone von G1 durchquert (Stange laeuft durch G1)
+    # On layer 3 the area is free as long as the rod does not pass the keep out zone of G1 (the rod runs through G1)
     r = lay.check(pl(60, 60, 3, 0))
-    assert not r.ok  # die Stange von G3 durchquert die Sperrzone auf G1
+    assert not r.ok  # the rod of G3 passes through the keep out zone on G1
     assert lay.check(pl(95, 40, 3, 0)).ok
 
 
@@ -151,7 +151,7 @@ def test_dxf_structure_and_scale():
     assert "G2_MOTOR" in txt and "G2_GEAR" in txt and "TOP_RODS" in txt and "G0_HOLES" in txt
     i = lines.index("CIRCLE")
     assert lines[i + 2] == "TOP_RODS" or "HOLES" in lines[i + 2]
-    # Kreis der Stange. Mittelpunkt 60/40, Radius 2
+    # circle of the rod. Centre 60/40, radius 2
     k = [j for j, v in enumerate(lines) if v == "TOP_RODS" and lines[j - 2] == "CIRCLE"][0]
     assert lines[k + 2] == "60.000000" and lines[k + 4] == "40.000000" and lines[k + 8] == "2.000000"
 
@@ -160,7 +160,7 @@ def test_drill_csv_has_hole_per_crossed_plane():
     m = make_model(stack__n_motor_planes=3)
     geo = build_geometry(m, [pl(60, 60, 1, 0)])
     rows = EXPORTERS["csv"]().export(geo).strip().split("\n")[1:]
-    assert len(rows) == 4  # G0 bis G3 (die eingefahrene Stange haengt durch alle Ebenen)
+    assert len(rows) == 4  # G0 to G3 (the retracted rod hangs through all layers)
     assert all(r.split(",")[2] == "60.0000" for r in rows)
 
 
@@ -191,7 +191,7 @@ def test_svg_import_scale_ambiguous_and_invalid():
 
 
 def test_scoring_footprint_respects_center_distance():
-    """Regression. Die Flaechenbewertung muss den gewaehlten Achsabstand beruecksichtigen."""
+    """Regression. The area score must take the chosen centre distance into account."""
     from blindsight.scoring import footprint_bbox
 
     m = make_model(motor__center_distance_min=4.0, motor__center_distance_max=9.0, motor__center_distance_steps=3)

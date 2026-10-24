@@ -12,7 +12,7 @@ def pytest_configure(config):
 
 @pytest.fixture(autouse=True)
 def fast_stagnation(request, monkeypatch):
-    """Haelt die Testlaufzeit klein. Sobald die Zielanzahl erreicht ist und 0.5 s keine Verbesserung kommt, endet die Suche."""
+    """Keeps the test run time small. Once the target count is reached and nothing improves for 0.5 s, the search ends."""
     if request.node.get_closest_marker("real_time"):
         return
     from blindsight.model import Model

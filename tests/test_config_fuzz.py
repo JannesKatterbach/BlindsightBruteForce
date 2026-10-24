@@ -1,4 +1,4 @@
-"""Fuzz der Konfigurationsvalidierung. Es darf nur ConfigError geben, nie eine andere Ausnahme."""
+"""Fuzzing of the configuration validation. Only ConfigError may occur, never another exception."""
 
 import copy
 import json
@@ -34,7 +34,7 @@ def test_fuzz_every_field_with_bad_values():
             set_path(d, path, bad)
             try:
                 p = Project.from_dict(d)
-                Model(p)  # was validiert, muss auch das Modell bauen
+                Model(p)  # what validates must also build the model
             except ConfigError:
                 pass
 

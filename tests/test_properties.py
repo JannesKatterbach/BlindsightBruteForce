@@ -1,4 +1,4 @@
-"""Eigenschaftstests mit Zufallskonfigurationen. Jede Ausgabe muss geometrisch gueltig sein."""
+"""Property tests with random configurations. Every output must be geometrically valid."""
 
 import math
 import random
@@ -59,7 +59,7 @@ def test_random_projects_always_yield_valid_layouts():
 
 
 def test_incremental_check_matches_full_check():
-    """Jede per check akzeptierte Platzierung muss auch die vollstaendige Pruefung bestehen."""
+    """Every placement accepted by check must also pass the full check."""
     rng = random.Random(11)
     for _ in range(8):
         p = random_project(rng)
@@ -77,7 +77,7 @@ def test_incremental_check_matches_full_check():
             pl = Placement(rng.uniform(b.xmin, b.xmax), rng.uniform(b.ymin, b.ymax), plane, rng.choice(model.angles_for(plane)))
             lay.try_add(pl)
         assert lay.all_collisions() == []
-        # Umgekehrt. Eine abgelehnte Platzierung erzeugt in der Vollpruefung mindestens eine Kollision
+        # Conversely. A rejected placement causes at least one collision in the full check
         for _ in range(60):
             plane = rng.choice(usable)
             pl = Placement(rng.uniform(b.xmin, b.xmax), rng.uniform(b.ymin, b.ymax), plane, rng.choice(model.angles_for(plane)))
@@ -111,14 +111,14 @@ def _surface_samples(prism):
 
     pts = sample_boundary(prism.fp, 25)
     zs = [prism.z0, (prism.z0 + prism.z1) / 2, prism.z1]
-    n = 4 if prism.z1 - prism.z0 > 20 else 1  # lange Stangen dichter in z abtasten
+    n = 4 if prism.z1 - prism.z0 > 20 else 1  # sample long rods more densely in z
     zs = [prism.z0 + (prism.z1 - prism.z0) * i / (2 * n) for i in range(2 * n + 1)]
     return [(x, y, z) for x, y in pts for z in zs]
 
 
 def test_valid_layouts_pass_independent_sampling_check():
-    """Unabhaengige Gegenprobe. Die abgetasteten Oberflaechenpunkte verschiedener Einheiten
-    duerfen nie naeher als der Sicherheitsabstand liegen (sonst waere die Pruefung zu lax)."""
+    """Independent cross check. Sampled surface points of different units must never be closer than the safety
+    clearance (otherwise the check would be too lax)."""
     rng = random.Random(99)
     checked = 0
     for _ in range(4):

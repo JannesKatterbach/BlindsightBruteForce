@@ -1,4 +1,4 @@
-"""Referenztest. Exakte Abstandsberechnung gegen dichte Stichprobe der Konturen."""
+"""Reference test. Exact distance computation against a dense sample of the outlines."""
 
 import math
 import random
@@ -56,7 +56,7 @@ def test_distance_symmetric_and_nonnegative():
 
 def test_touching_and_contained():
     a = Footprint.rect(0, 0, 10, 10)
-    assert footprint_distance(a, Footprint.rect(10, 0, 10, 10)) == 0.0  # beruehren sich
+    assert footprint_distance(a, Footprint.rect(10, 0, 10, 10)) == 0.0  # they touch
     assert footprint_distance(a, Footprint.rect(0, 0, 2, 2)) == 0.0  # enthalten
     assert footprint_distance(a, Footprint.circle(0, 0, 1)) == 0.0
     assert math.isclose(footprint_distance(a, Footprint.rect(10.0 + 1e-6, 0, 10, 10)), 1e-6, rel_tol=1e-3)

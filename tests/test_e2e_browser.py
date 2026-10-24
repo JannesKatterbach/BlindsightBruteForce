@@ -1,4 +1,4 @@
-"""Ende zu Ende Test der Oberflaeche mit Playwright. Wird uebersprungen, wenn Playwright oder Chromium fehlt."""
+"""End to end test of the UI with Playwright. Skipped when Playwright or Chromium is missing."""
 
 import os
 import threading
@@ -27,7 +27,7 @@ def browser():
     with playwright.sync_playwright() as p:
         try:
             b = p.chromium.launch(executable_path=CHROMIUM) if os.path.exists(CHROMIUM) else p.chromium.launch()
-        except Exception as exc:  # kein Browser installiert
+        except Exception as exc:  # no browser installed
             pytest.skip(f"Chromium nicht verfuegbar. {exc}")
         yield b
         b.close()
@@ -42,21 +42,21 @@ def test_full_flow(browser, base_url):
     pg.wait_for_selector("#in-motor-width")
     pg.select_option("#exampleSel", "small_hex")
     pg.wait_for_function("document.querySelector('#in-target_count').value === '7'")
-    # Feldfehler werden am Feld angezeigt
+    # field errors are shown at the field
     pg.fill("#in-rod-diameter", "-3")
     pg.dispatch_event("#in-rod-diameter", "change")
     pg.wait_for_selector("#in-rod-diameter.err")
     pg.fill("#in-rod-diameter", "4")
     pg.dispatch_event("#in-rod-diameter", "change")
     pg.wait_for_selector("#in-rod-diameter:not(.err)")
-    errors.clear()  # die absichtlich ungueltige Eingabe erzeugt eine 400 Antwort im Browser Log
-    # Alle Laengen in mm, Bauraum ab dem Ursprung unten links
+    errors.clear()  # the deliberately invalid input causes a 400 response in the browser log
+    # All lengths in mm, build area from the origin at the bottom left
     assert pg.locator("#unitSel").count() == 0
     assert "[mm]" in pg.inner_text("[data-label-for='rod.diameter']")
     assert pg.locator("#in-bounds-xmin").count() == 0 and pg.locator("#in-bounds-width").count() == 1
     # Optimierung
     pg.click("[data-tab=optim]")
-    # Zeitpuffer fuer volle Testlaeufe. Nach erreichter Zielanzahl beendet die Stagnation den Lauf frueh
+    # Time buffer for full test runs. Once the target count is reached, stagnation ends the run early
     pg.fill("#in-search-time_limit_s", "10")
     pg.dispatch_event("#in-search-time_limit_s", "change")
     pg.click("#btnStart")
@@ -65,9 +65,9 @@ def test_full_flow(browser, base_url):
     for view in ("plane", "section", "iso", "top"):
         pg.select_option("#viewSel", view)
         assert pg.locator("#view").inner_html() != ""
-    # Bearbeiten und Export
+    # Editing and export
     pg.check("#optEdit")
-    # Regression. Ziehen einer Stange auf eine andere muss Kollisionen melden (Hilfslinien duerfen Klicks nicht abfangen)
+    # Regression. Dragging a rod onto another must report collisions (helper lines must not catch clicks)
     def center(unit):
         bb = pg.locator(f"#view circle[data-unit='{unit}']").first.bounding_box()
         return bb["x"] + bb["width"] / 2, bb["y"] + bb["height"] / 2

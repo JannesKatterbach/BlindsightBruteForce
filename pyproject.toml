@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "blindsight"
-dynamic = ["version"]  # aus blindsight.__version__
-description = "Project Blindsight, geometrischer Optimierer fuer Motoren und Gewindestangen"
+dynamic = ["version"]  # from blindsight.__version__
+description = "Project Blindsight, geometric optimizer for motors and threaded rods"
 requires-python = ">=3.10"
 dependencies = []
 
@@ -13,8 +13,8 @@ dependencies = []
 dev = ["pytest"]
 
 [project.scripts]
-blindsight = "blindsight.web.server:main"  # Web Oberflaeche
-blindsight-cli = "blindsight.cli:main"  # Kommandozeile
+blindsight = "blindsight.web.server:main"  # web UI
+blindsight-cli = "blindsight.cli:main"  # command line
 
 [tool.setuptools.dynamic]
 version = { attr = "blindsight.__version__" }

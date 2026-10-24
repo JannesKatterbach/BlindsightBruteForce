@@ -1,4 +1,4 @@
-"""Skizze im Modell. Stangenrahmen, Rueckwaertskompatibilitaet, Validierung, Optimierung, Export."""
+"""Sketch in the model. Rod frame, backwards compatibility, validation, optimization, export."""
 
 import copy
 import math
@@ -15,7 +15,7 @@ from blindsight.optimizers import run_optimizer
 
 
 def old_world_parts(m, x, y, angle_deg, cd):
-    """Unabhaengige Nachbildung der frueheren Formel (Gehaeusesystem, Drehung um die Stange)."""
+    """Independent rebuild of the earlier formula (housing frame, rotation about the rod)."""
     mo = m.project.motor
     a = math.radians(angle_deg)
     rx, ry = mo.rod_local(cd)
@@ -93,9 +93,9 @@ def _with_sketch(p, sketch):
 
 
 def test_uncentered_legacy_outline_places_gear_behind_outline_top():
-    """Regression. Ein nicht zentrierter Umriss platzierte das Zahnrad frueher falsch (es hing an depth / 2)."""
+    """Regression. An outline that is not centred used to place the gear wrongly (it depended on depth / 2)."""
     p = Project()
-    p.motor.outline = [[-6, 0], [6, 0], [6, 30], [-6, 30]]  # y von 0 bis 30, Mitte bei 15
+    p.motor.outline = [[-6, 0], [6, 0], [6, 30], [-6, 30]]  # y from 0 to 30, centre at 15
     p.motor.depth = 30.0
     m = Model(p)
     gear = next(q for q in m.unit_parts(0, 0, 0, 1, 0) if q.kind == "gear")
@@ -105,7 +105,7 @@ def test_uncentered_legacy_outline_places_gear_behind_outline_top():
     assert math.isclose(bottom_gear - top, p.motor.gear_gap, abs_tol=1e-9)
 
 
-# ---- Skizzenmotor ---------------------------------------------------------------------------------
+# ---- Sketch motor ---------------------------------------------------------------------------------
 def sketch_project(points=None, constraints=None, **motor):
     p = Project()
     p.stack.n_motor_planes = 3
@@ -119,7 +119,7 @@ def sketch_project(points=None, constraints=None, **motor):
     return Project.from_dict(d)
 
 
-# Gehaeuse unterhalb der Zahnradachse (Zahnrad liegt bei (-5, 0), Welle zeigt nach +y, Gehaeuse dahinter)
+# housing below the gear axis (gear at (-5, 0), shaft points to +y, housing behind it)
 TRAP_MOTOR = [[-11, -26], [1, -26], [3, -3], [-13, -3]]
 
 
@@ -133,7 +133,7 @@ def test_sketch_motor_rotates_about_the_rod():
         assert radii is None or r == radii
         radii = r
         assert (parts["rod"].prism.fp.cx, parts["rod"].prism.fp.cy) == (55, 65)
-    # Bei 0 Grad liegen die Eckpunkte exakt wie in der Skizze relativ zur Stange
+    # at 0 degrees the corners lie exactly as in the sketch relative to the rod
     parts = {q.kind: q for q in m.unit_parts(0, 55, 65, 1, 0)}
     assert pts_close(parts["housing"].prism.fp.pts, [(55 + x, 65 + y) for x, y in TRAP_MOTOR], 1e-9)
 
@@ -168,7 +168,7 @@ def test_unit_radius_covers_all_part_points():
 
 
 def test_own_clearance_uses_housing_distance_to_rod():
-    # Gehaeuse nur 0.1 mm von der Stange (Radius 2) entfernt -> Eigenabstand 0.2 verletzt
+    # housing only 0.1 mm from the rod (radius 2) -> own clearance 0.2 violated
     pts = [[-12, -26], [4, -26], [4, -2.1], [-12, -2.1]]
     p = sketch_project(pts)
     m = Model(p)
@@ -193,7 +193,7 @@ def test_sketch_errors_are_reported_with_paths():
 
 
 def test_gear_overlapping_housing_is_rejected():
-    pts = [[-12, -26], [4, -26], [4, 0], [-12, 0]]  # reicht bis y = 0, das Zahnrad belegt y von -2 bis 2
+    pts = [[-12, -26], [4, -26], [4, 0], [-12, 0]]  # reaches down to y = 0, the gear occupies y from -2 to 2
     with pytest.raises(ConfigError) as e:
         sketch_project(pts)
     assert "Zahnrad ragt" in " ".join(e.value.errors)
@@ -208,7 +208,7 @@ def test_sketch_config_roundtrip_json():
 
 
 def test_constraints_are_enforced_when_the_model_is_built():
-    """Die gespeicherten Punkte genuegen den Constraints nicht ganz. Das Modell nutzt die geloeste Kontur."""
+    """The stored points do not quite satisfy the constraints. The model uses the solved outline."""
     pts = TRAP_MOTOR
     p = sketch_project(pts, [{"type": "length", "a": 0, "value": 15.0}])
     m = Model(p)
@@ -246,7 +246,7 @@ def test_sketch_ignores_legacy_fields():
 
 
 def test_sketch_from_outline_is_equivalent_to_the_legacy_outline():
-    """SVG Import und gezeichnete Konturen landen an derselben Stelle wie ein Umriss ohne Skizze."""
+    """SVG import and drawn outlines end up at the same place as an outline without a sketch."""
     outline = [[-6, -12], [6, -12], [6, 2], [2, 12], [-2, 12], [-6, 2]]
     p = Project()
     p.motor.outline = outline

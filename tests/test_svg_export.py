@@ -13,7 +13,7 @@ def test_svg_positions_are_true_to_scale():
     placements = [pl(40, 50, 1, 0), pl(90, 100, 2, 90)]
     geo = build_geometry(m, placements)
     root = ET.fromstring(SvgExporter().export(geo))
-    # Mass der Zeichnung in mm
+    # size of the drawing in mm
     assert root.get("height") == "120mm"
     assert root.get("viewBox").split()[3] == "120"
     top = next(g for g in root.iter(SVG + "g") if g.get("id") == "top")
@@ -21,7 +21,7 @@ def test_svg_positions_are_true_to_scale():
     for uid, p in enumerate(placements):
         c = rods[uid]
         assert math.isclose(float(c.get("cx")), p.x, abs_tol=1e-3)
-        assert math.isclose(float(c.get("cy")), 120.0 - p.y, abs_tol=1e-3)  # Y gespiegelt
+        assert math.isclose(float(c.get("cy")), 120.0 - p.y, abs_tol=1e-3)  # Y mirrored
         assert math.isclose(float(c.get("r")), m.project.rod.diameter / 2, abs_tol=1e-3)
 
 
@@ -54,7 +54,7 @@ def test_svg_has_sheet_per_plane_with_holes():
     ids = [g.get("id") for g in root.iter(SVG + "g")]
     assert {"top", "plane-1", "plane-2", "plane-3"} <= set(ids)
     holes = [e for e in root.iter(SVG + "circle") if e.get("class") == "hole"]
-    assert len(holes) == 3  # die Stange durchquert G1, G2 und G3
+    assert len(holes) == 3  # the rod passes through G1, G2 and G3
 
 
 def test_svg_marks_collisions():

@@ -1,4 +1,4 @@
-"""Browser Regressionstests fuer Fehler der Oberflaeche (Version 0.4.0). Uebersprungen ohne Playwright oder Chromium."""
+"""Browser regression tests of the UI (since version 0.4.0). Skipped without Playwright or Chromium."""
 
 import json
 import os
@@ -60,13 +60,13 @@ GOOD = [{"x": 30, "y": 60, "plane": 1, "angle": 0}, {"x": 90, "y": 60, "plane": 
 
 
 def test_plane_table_follows_plane_count(page):
-    # Frueher blieb die Tabelle bei 3 Zeilen und das Lesen stuerzte ab
+    # The table used to stay at 3 rows and reading it crashed
     page.click("[data-tab=levels]")
     change(page, "#in-stack-n_motor_planes", "5")
     page.wait_for_selector("[data-pt='cap'][data-i='5']")
     change(page, "[data-pt='cap'][data-i='5']", "2")
     assert page.evaluate("cfg.stack.max_per_plane[5]") == 2
-    # Erlaubte Ebenen und Dicken haben nur noch einen Editor (die Tabelle)
+    # Permitted layers and thicknesses have only one editor now (the table)
     assert page.locator("#in-stack-allowed_planes").count() == 0
     assert page.locator("#in-stack-thicknesses").count() == 0
 
@@ -110,18 +110,18 @@ def test_loaded_result_click_reset_and_export(page):
     page.set_input_files("#fileResult", result_file(GOOD))
     page.wait_for_selector("#resultBox:not([hidden])")
     page.check("#optEdit")
-    # Klick ohne Bewegung waehlt nur aus und markiert nichts als bearbeitet
+    # A click without movement only selects and marks nothing as edited
     page.click("#view circle[data-unit='0']")
     page.wait_for_selector("#edX")
     page.wait_for_timeout(300)
     assert page.evaluate("edited") is False
-    # Bearbeiten in mm, dann Zuruecksetzen auf den geladenen Stand
+    # Edit in mm, then reset to the loaded state
     assert page.input_value("#edX") == "30"
     change(page, "#edX", "50")
     page.wait_for_function("edited && lastGeo.units[0].x === 50")
     page.click("#edReset")
     page.wait_for_function("!edited && lastGeo.units[0].x === 30")
-    # Gleiche Datei erneut laden loest wieder aus
+    # Loading the same file again triggers again
     page.evaluate("lastGeo = null")
     page.set_input_files("#fileResult", result_file(GOOD))
     page.wait_for_function("lastGeo && lastGeo.units.length === 2")
@@ -139,7 +139,7 @@ def test_empty_result_clears_old_views(page):
 
 
 def test_sketch_drag_with_slow_server_answers(page):
-    # Spaete Antworten nach dem Loslassen warfen frueher einen TypeError
+    # Late answers after the release used to throw a TypeError
     def slow(route):
         page.wait_for_timeout(150)
         route.continue_()

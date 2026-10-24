@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Startet Project Blindsight direkt aus dem Quellordner, ohne Installation und ohne Abhaengigkeiten.
+"""Starts Project Blindsight directly from the source folder, without installation and without dependencies.
 
-  python run.py                 Web UI auf http://127.0.0.1:8765
-  python run.py --port 9000     anderer Port
+  python run.py                 web UI at http://127.0.0.1:8765
+  python run.py --port 9000     other port
 """
 
 import sys

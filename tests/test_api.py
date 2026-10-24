@@ -1,4 +1,4 @@
-"""API und Server. Fehlerfaelle, Sicherheit, parallele Laeufe, Abbruch."""
+"""API and server. Error cases, security, parallel runs, cancellation."""
 
 import json
 import threading
@@ -135,7 +135,7 @@ def test_real_http_server_security_and_limits():
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req)
         assert e.value.code == 400
-        # Seitenuebergreifend ohne Vorabfrage sendbare Typen werden abgewiesen (CSRF Schutz)
+        # Types a browser may send cross site without a preflight request are rejected (CSRF protection)
         req = urllib.request.Request(base + "/api/start", data=b"{}", method="POST", headers={"Content-Type": "text/plain"})
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req)

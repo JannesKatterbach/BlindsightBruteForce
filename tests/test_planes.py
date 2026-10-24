@@ -46,5 +46,5 @@ def test_tall_motor_flags_plane():
 def test_bottom_mount_uses_space_below():
     m = make_model(motor__mount="bottom")
     g = m.rod_geometry(1)
-    assert g.z_mount < m.stack[1].z_top  # haengt unter der Ebene (Unterseite)
+    assert g.z_mount < m.stack[1].z_top  # hangs below the layer (bottom face)
     assert g.z_axis < g.z_mount

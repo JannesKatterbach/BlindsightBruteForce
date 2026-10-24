@@ -1,4 +1,4 @@
-"""Alle Beispielkonfigurationen muessen laden und gueltige oder verstaendlich abgelehnte Ergebnisse liefern."""
+"""All example configurations must load and give valid or understandably rejected results."""
 
 import glob
 import os
@@ -28,7 +28,7 @@ def test_example_runs_and_is_valid(path):
     assert res.best is not None
     lay = layout_from_placements(model, res.best.placements)
     assert lay.all_collisions() == []
-    # Regeln je Ebene werden eingehalten
+    # rules per layer are kept
     for plane, cap in model.capacity.items():
         assert sum(1 for p in res.best.placements if p.plane == plane) <= cap
     for p in res.best.placements:

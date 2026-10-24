@@ -1,4 +1,4 @@
-"""Solver der Motor Skizze. Alle Pruefungen messen das Ergebnis unabhaengig vom Solver nach."""
+"""Solver of the motor sketch. All checks measure the result again independently of the solver."""
 
 import math
 import random
@@ -42,7 +42,7 @@ def run(points, cons, **kw):
     return r
 
 
-# ---- einzelne Constraint Typen -------------------------------------------------------------
+# ---- Single constraint types -------------------------------------------------------------
 def test_length():
     r = run(RECT, [C("length", 0, value=30.0)])
     assert r.ok and math.isclose(length(r.sketch["points"], 0), 30.0, abs_tol=1e-8)
@@ -69,7 +69,7 @@ def test_parallel():
 
 
 def test_parallel_trapezoid_opposite_sides():
-    """Trapez. Seiten 0 und 2 parallel, Laengen und Winkel gesetzt."""
+    """Trapezoid. Sides 0 and 2 parallel, lengths and angles set."""
     r = run(TRAP, [C("parallel", 0, 2), C("length", 0, value=20.0), C("length", 2, value=12.0), C("angle", 0, value=80.0), C("angle", 1, value=80.0)])
     p = r.sketch["points"]
     assert r.ok
@@ -109,22 +109,22 @@ def test_distance_to_rod_and_gear():
 
 
 def test_distance_side_to_rod_keeps_side_of_line():
-    """Rechteck rechts neben der Stange. Seite 3 (links) soll 4 mm von der Stange entfernt sein."""
+    """Rectangle to the right of the rod. Side 3 (left) shall be 4 mm from the rod."""
     box = [[4, -10], [16, -10], [16, 10], [4, 10]]
     r = run(box, [C("dist_side", 3, value=7.0, ref="rod")])
     p = r.sketch["points"]
-    # Lotabstand der Geraden durch Seite 3 zum Ursprung
+    # perpendicular distance of the line through side 3 to the origin
     d = side(p, 3)
     dist = abs(cross(d, (0 - p[3][0], 0 - p[3][1]))) / math.hypot(*d)
     assert r.ok and math.isclose(dist, 7.0, abs_tol=1e-7)
-    assert p[3][0] > 0 and p[0][0] > 0  # Die Seite bleibt rechts der Stange
+    assert p[3][0] > 0 and p[0][0] > 0  # the side stays to the right of the rod
 
 
-# ---- Reihenfolge, Orientierung --------------------------------------------------------------
+# ---- Order, orientation --------------------------------------------------------------
 def test_clockwise_input_is_reoriented_with_constraints_remapped():
     cw = [list(reversed(RECT))[i] for i in range(4)]
     n = 4
-    # Constraint auf die Seite, die in CCW "Seite 0" waere. In CW Reihenfolge ist es Seite n-2-0 = 2
+    # constraint on the side that would be "side 0" in CCW order. In CW order it is side n-2-0 = 2
     r = run(cw, [C("length", 2, value=31.0)])
     p = r.sketch["points"]
     assert r.reoriented and r.ok
@@ -132,7 +132,7 @@ def test_clockwise_input_is_reoriented_with_constraints_remapped():
     assert math.isclose(length(p, 0), 31.0, abs_tol=1e-7)
 
 
-# ---- Freiheitsgrade, Redundanz, Widerspruch ----------------------------------------------------
+# ---- Degrees of freedom, redundancy, conflict ----------------------------------------------------
 def test_dof_counting():
     r = run(RECT, [])
     assert r.dof == 8 and r.state == "under"
@@ -169,7 +169,7 @@ def test_conflict_names_the_first_offending_constraint():
     assert not r.ok and r.state == "conflict"
     assert r.constraints[2]["status"] == "conflict" and r.constraints[0]["status"] == "ok"
     assert "Nr. 3" in r.errors[0]
-    # Rueckgabe ist die letzte widerspruchsfreie Loesung
+    # the result is the last consistent solution
     assert math.isclose(length(r.sketch["points"], 0), 20.0, abs_tol=1e-6)
 
 
@@ -184,7 +184,7 @@ def test_disabled_constraint_is_ignored():
     assert r.ok and r.constraints[0]["status"] == "disabled" and math.isclose(length(r.sketch["points"], 0), 24.0)
 
 
-# ---- Ziehen --------------------------------------------------------------------------------
+# ---- Dragging --------------------------------------------------------------------------------
 def test_drag_free_vertex_follows_target():
     r = run(RECT, [], drag={"point": 2, "target": [20.0, 10.0]})
     assert r.ok and r.sketch["points"][2] == pytest.approx([20.0, 10.0], abs=1e-6)
@@ -198,7 +198,7 @@ def test_drag_keeps_constraints():
     assert abs(cross(side(p, 0), side(p, 2))) < 1e-6 * length(p, 0) * length(p, 2)
     assert math.isclose(interior(p, 1), 90.0, abs_tol=1e-5)
     assert math.isclose(length(p, 0), 24.0, abs_tol=1e-6)
-    # Das Rechteck wurde in y verlaengert (Zielpunkt liegt oberhalb), die Breite blieb
+    # the rectangle was lengthened in y (the target lies above), the width stayed
     assert p[2][1] > 2.0
 
 
@@ -214,7 +214,7 @@ def test_drag_rejects_bad_arguments():
     assert not run(RECT, [], drag={"target": [1, 1]}).ok
 
 
-# ---- Struktur und Randfaelle --------------------------------------------------------------------
+# ---- Structure and edge cases --------------------------------------------------------------------
 @pytest.mark.parametrize("points", [[[0, 0], [1, 0]], [[0, 0]] * 3, [[0, 0], [1, 0], [float("nan"), 1]], [[0, 0], [1, 0], [float("inf"), 1]], [[0, 0], [1], [2, 2]], [[0, 0], ["a", 0], [1, 1]]])
 def test_bad_points_are_reported(points):
     r = run(points, [])
@@ -280,7 +280,7 @@ def test_solver_is_fast_enough_for_dragging():
     assert (time.time() - t) / 10 < 0.25
 
 
-# ---- Index Umrechnung ----------------------------------------------------------------------------
+# ---- Index conversion ----------------------------------------------------------------------------
 def base_sketch():
     return {"points": [list(p) for p in PENT], "constraints": [C("length", 0, value=10.0), C("angle", 2, value=100.0), C("parallel", 1, 3), C("fix", 4, value=-3.0, value2=7.0), C("equal", 0, 2)]}
 
@@ -289,12 +289,12 @@ def test_insert_point_shifts_indices():
     sk = S.insert_point(base_sketch(), 1)
     assert len(sk["points"]) == 6
     types = [(c["type"], c["a"], c["b"]) for c in sk["constraints"]]
-    assert ("length", 0, None) in types  # Seite 0 unveraendert
-    assert ("angle", 3, None) in types  # Punkt 2 wurde Punkt 3
+    assert ("length", 0, None) in types  # side 0 unchanged
+    assert ("angle", 3, None) in types  # point 2 became point 3
     assert ("fix", 5, None) in types
-    # parallel(1,3) bezieht sich auf die Gerade der Seite 1. Beide Haelften (1 und 2) werden an Seite 4 gebunden
+    # parallel(1,3) refers to the line of side 1. Both halves (1 and 2) are tied to side 4
     assert ("parallel", 1, 4) in types and ("parallel", 2, 4) in types
-    # equal(0,2) wird zu equal(0,3)
+    # equal(0,2) becomes equal(0,3)
     assert ("equal", 0, 3) in types
     assert S.solve(sk).ok
 
@@ -308,8 +308,8 @@ def test_delete_point_drops_dependent_constraints():
     sk = S.delete_point(base_sketch(), 2)
     assert len(sk["points"]) == 4
     types = [c["type"] for c in sk["constraints"]]
-    assert "angle" not in types  # Punkt 2 entfernt
-    assert "parallel" not in types  # Seite 1 und 2 verschmolzen, Seite 3 bleibt, aber Seite 1 entfaellt
+    assert "angle" not in types  # point 2 removed
+    assert "parallel" not in types  # sides 1 and 2 merged, side 3 stays, but side 1 is dropped
     assert "length" in types
     assert S.solve(sk).ok
 
@@ -330,7 +330,7 @@ def test_hull_drops_inner_points():
     assert S.polygon_report(h["points"])["convex"]
 
 
-# ---- Zufallspruefung ------------------------------------------------------------------------------
+# ---- Random check ---------------------------------------------------------------------------------
 def random_convex(rng, n):
     angs = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
     for _ in range(50):
@@ -341,8 +341,8 @@ def random_convex(rng, n):
 
 
 def test_random_constraints_derived_from_a_real_polygon_are_always_satisfiable():
-    """Misst ein zufaelliges Polygon, leitet daraus Constraints ab und startet mit gestoerten Punkten.
-    Der Solver muss alle Constraints erfuellen (es existiert nachweislich eine Loesung)."""
+    """Measures a random polygon, derives constraints from it and starts with disturbed points.
+    The solver must satisfy all constraints (a solution provably exists)."""
     rng = random.Random(1234)
     solved = 0
     for _ in range(60):
@@ -359,7 +359,7 @@ def test_random_constraints_derived_from_a_real_polygon_are_always_satisfiable()
         start = [[x + rng.uniform(-0.4, 0.4), y + rng.uniform(-0.4, 0.4)] for x, y in true]
         r = run(start, cons)
         if not r.ok:
-            continue  # sehr selten, schlechte Startlage. Wird unten gezaehlt
+            continue  # very rare, bad start position. Counted below
         p = r.sketch["points"]
         for c in cons:
             if c["type"] == "length":
@@ -387,7 +387,7 @@ def test_random_parallel_and_perpendicular_relations():
 
 
 def test_solver_moves_points_minimally():
-    """Eine kleine Aenderung der Laenge darf die Kontur nur wenig verschieben."""
+    """A small change of a length may only move the outline a little."""
     r = run(RECT, [C("length", 0, value=25.0)])
     moved = max(math.dist(a, b) for a, b in zip(RECT, r.sketch["points"]))
     assert r.ok and moved < 1.01
@@ -399,9 +399,9 @@ def test_time_limit_returns_error_instead_of_hanging():
     assert not r.ok and r.errors
 
 
-# ---- Fuzz mit unabhaengiger Pruefung aller Constraint Typen -------------------------------------------------
+# ---- Fuzzing with an independent check of all constraint types -------------------------------------------------
 def satisfied(p, c, cd):
-    """Misst einen Constraint ohne den Solver (eigene Formeln). Rueckgabe Abweichung."""
+    """Measures a constraint without the solver (own formulas). Returns the deviation."""
     t, a, b, v, v2 = c["type"], c["a"], c["b"], c["value"], c["value2"]
     ref = (0.0, 0.0) if c["ref"] == "rod" else (-cd, 0.0)
     if t == "length":
@@ -467,7 +467,7 @@ def test_fuzz_random_constraint_sets_never_crash_and_ok_results_are_correct():
         cons = []
         for _ in range(rng.randint(0, 6)):
             c = random_constraint(rng, n, true)
-            # Wert aus dem echten Polygon messen (meist erfuellbar), manchmal absichtlich verfaelscht
+            # measure the value on the real polygon (mostly satisfiable), sometimes falsified on purpose
             mm = S.measures(true)
             t = c["type"]
             if t == "length":

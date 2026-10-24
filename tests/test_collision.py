@@ -15,7 +15,7 @@ def test_single_rod_with_motor_is_modelled():
     assert math.isclose(rod.prism.fp.r, m.project.rod.diameter / 2)
     assert Layout(m).check(pl(60, 60, 1, 0)).ok is True
     assert lay.all_collisions() == []
-    # Gehaeuse sitzt seitlich neben der Stange, nicht darunter
+    # The housing sits beside the rod, not below it
     housing = next(p for p in lay.parts_of(uid) if p.kind == "housing")
     assert math.hypot(housing.prism.fp.cx - 60, housing.prism.fp.cy - 60) > m.project.rod.diameter
 
@@ -24,7 +24,7 @@ def test_overlapping_motors_rejected():
     m = make_model()
     lay = Layout(m)
     lay.add(pl(50, 60, 1, 0))
-    res = lay.check(pl(53, 60, 1, 0))  # gleiche Ebene, ueberlappen sich
+    res = lay.check(pl(53, 60, 1, 0))  # same layer, they overlap
     assert not res.ok
     assert "kollidiert" in res.reason
 
@@ -48,17 +48,16 @@ def test_separated_motors_collision_free():
 
 
 def test_rod_blocks_motor_on_other_plane():
-    """Die Stange einer tiefen Ebene durchquert die Ebene darueber und darf dort keinen Motor treffen."""
+    """The rod of a deep layer passes through the layer above and must not hit a motor there."""
     m = make_model()
     lay = Layout(m)
-    lay.add(pl(60, 60, 3, 0))  # Stange laeuft durch G1 und G2
-    # Motor auf G1 dessen Gehaeuse genau auf der Stange waere
+    lay.add(pl(60, 60, 3, 0))  # the rod runs through G1 and G2
+    # motor on G1 whose housing would sit exactly on the rod
     assert not lay.check(pl(60 - m.project.motor.center_distance - 1, 60, 1, 0)).ok
 
 
 def test_different_planes_allow_overlapping_footprints():
-    """Gehaeuse auf verschiedenen Ebenen duerfen sich in der Draufsicht ueberlappen,
-    solange keine Stange oder kein Zahnrad im Weg ist."""
+    """Housings on different layers may overlap in top view as long as no rod or gear is in the way."""
     from blindsight.geometry import footprint_distance
 
     m = make_model()
@@ -79,11 +78,11 @@ def test_different_planes_allow_overlapping_footprints():
 
 
 def test_clearance_boundary():
-    """Abstand knapp unter dem Sicherheitsabstand ist ungueltig, knapp darueber gueltig."""
+    """A distance just below the safety clearance is invalid, just above it valid."""
     m = make_model(clearance=5.0, tolerance=0.0, stack__n_motor_planes=1, stack__uniform_spacing=40.0, motor__height=12.0, motor__axis_height=9.0)
     lay = Layout(m)
     lay.add(pl(40, 60, 1, 0))
-    lo, hi = 0.0, 40.0  # Verschiebung in x, lo kollidiert, hi ist frei
+    lo, hi = 0.0, 40.0  # shift in x, lo collides, hi is free
     assert not lay.check(pl(40 + lo, 60, 1, 0)).ok and lay.check(pl(40 + hi, 60, 1, 0)).ok
     for _ in range(40):
         mid = (lo + hi) / 2
@@ -93,7 +92,7 @@ def test_clearance_boundary():
             lo = mid
     ok = lay.check(pl(40 + hi, 60, 1, 0))
     assert ok.ok
-    # Genau an der Grenze entspricht der kleinste Abstand dem geforderten Sicherheitsabstand
+    # Exactly at the limit the smallest distance equals the required safety clearance
     assert m.gap <= ok.min_gap < m.gap + 1e-6
     assert not lay.check(pl(40 + hi - 0.01, 60, 1, 0)).ok
 
@@ -101,7 +100,7 @@ def test_clearance_boundary():
 def test_bounds_respected():
     m = make_model()
     lay = Layout(m)
-    assert not lay.check(pl(2, 60, 1, 0)).ok  # Gehaeuse ragt aus dem Bauraum
+    assert not lay.check(pl(2, 60, 1, 0)).ok  # the housing sticks out of the build area
     assert not lay.check(pl(500, 500, 1, 0)).ok
 
 
@@ -121,6 +120,6 @@ def test_through_hole_reported_in_geometry():
     geo = build_geometry(m, [pl(60, 60, 3, 0)])
     assert geo["hole_diameter"] > geo["rod_diameter"]
     u = geo["units"][0]
-    # Stange von Ebene 3 durchquert G0 bis G3
+    # the rod of layer 3 passes through G0 to G3
     for plane in geo["planes"]:
         assert u["rod"]["bottom_retracted"] <= plane["z_top"]

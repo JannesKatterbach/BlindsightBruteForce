@@ -1,2 +1,2 @@
-# Laufzeit hat keine Abhaengigkeiten (nur Python-Standardbibliothek)
-pytest>=7  # nur fuer Tests
+# The runtime has no dependencies (Python standard library only)
+pytest>=7  # tests only

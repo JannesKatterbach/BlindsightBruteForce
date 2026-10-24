@@ -1,4 +1,4 @@
-"""API der Motor Skizze."""
+"""API of the motor sketch."""
 
 import json
 import math
@@ -51,7 +51,7 @@ def test_from_motor_builds_a_dimensioned_rectangle():
     sides = r["measures"]["sides"]
     assert sides == pytest.approx([12.0, 24.0, 12.0, 24.0], abs=1e-6)
     assert r["measures"]["angles"] == pytest.approx([90.0] * 4, abs=1e-6)
-    # Gehaeuse liegt unterhalb des Zahnrads, Stange im Ursprung
+    # the housing lies below the gear, rod at the origin
     ys = [p[1] for p in r["sketch"]["points"]]
     assert max(ys) < 0
 
@@ -84,7 +84,7 @@ def test_bad_arguments():
     assert call("/api/sketch/insert", {"sketch": sk, "side": "x"})[0] == 400
     assert call("/api/sketch/insert", {"sketch": sk, "side": True})[0] == 400
     assert call("/api/sketch/solve", {"sketch": sk, "gear": "x"})[0] == 400
-    # NaN ist kein gueltiges JSON und wird schon beim Lesen abgewiesen, ein ungueltiger Wert vom Solver
+    # NaN is not valid JSON and is rejected when reading, an invalid value by the solver
     code, body = call("/api/sketch/solve", {"sketch": sk, "cd": float("nan")})
     assert code == 400 and body["errors"]
     assert call("/api/sketch/solve", {"sketch": sk, "cd": -1})[1]["ok"] is False

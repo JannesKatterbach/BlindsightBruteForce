@@ -1,4 +1,4 @@
-"""Belastungs und Grenzfalltests. Keine Abstuerze, alle Ergebnisse gueltig."""
+"""Stress and edge case tests. No crashes, all results valid."""
 
 import time
 

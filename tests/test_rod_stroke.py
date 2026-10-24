@@ -10,8 +10,8 @@ from helpers import make_model
     dict(stack__mode="distances", stack__distances=[12, 40, 95]),
 ])
 def test_every_rod_reaches_full_stroke_above_g0(mode_kw):
-    """Unabhaengig von der Motorebene muss die Spitze bei Maximalhub exakt stroke ueber G0 liegen
-    und das Gewinde unter der Zahnradachse noch greifen."""
+    """Independent of the motor layer the tip at full stroke must lie exactly stroke above G0 and the thread
+    below the gear axis must still engage."""
     m = make_model(stack__n_motor_planes=3, **mode_kw)
     for plane in m.stack.motor_planes:
         g = m.rod_geometry(plane.index)
@@ -25,7 +25,7 @@ def test_deeper_plane_needs_longer_rod():
     m = make_model(stack__n_motor_planes=3)
     lengths = [m.rod_geometry(i).length for i in (1, 2, 3)]
     assert lengths[0] < lengths[1] < lengths[2]
-    # Unterschied entspricht genau dem Ebenenabstand
+    # the difference equals the layer distance exactly
     assert math.isclose(lengths[1] - lengths[0], m.project.stack.uniform_spacing)
 
 

@@ -1,6 +1,6 @@
-"""Ende zu Ende Test der Motor Skizze im Browser. Wird uebersprungen, wenn Playwright oder Chromium fehlt.
+"""End to end test of the motor sketch in the browser. Skipped when Playwright or Chromium is missing.
 
-Die Ergebnisse werden unabhaengig vom Solver in Python nachgemessen (Laengen, Parallelitaet, Winkel)."""
+The results are measured again in Python independently of the solver (lengths, parallelism, angles)."""
 
 import math
 import os
@@ -83,7 +83,7 @@ def test_rod_is_drawn_at_the_origin_and_motor_rotates_about_it(page):
     page.fill("#skRot", "50")
     page.dispatch_event("#skRot", "input")
     assert "rotate(50)" in page.locator("#skCanvas g[opacity]").first.get_attribute("transform")
-    # Die Stange bleibt beim Drehen stehen
+    # the rod stays in place while rotating
     assert float(page.locator("#skRod").get_attribute("cx")) == 0
     assert page.locator("#skCanvas").inner_html().count("Stange") >= 1
 
@@ -92,20 +92,20 @@ def test_draw_polygon_set_length_parallel_and_angle(page):
     draw_trapezoid(page)
     p = pts(page)
     assert len(p) == 4
-    # Laenge ueber die Tabelle
+    # length via the table
     page.fill("[data-sk-len='0']", "18")
     page.dispatch_event("[data-sk-len='0']", "change")
     settle(page)
     p = pts(page)
     assert math.hypot(*side(p, 0)) == pytest.approx(18.0, abs=1e-6)
-    # Parallelitaet ueber die Tabelle
+    # parallelism via the table
     page.select_option("[data-sk-par='0']", "2")
     settle(page)
     p = pts(page)
     a, b = side(p, 0), side(p, 2)
     assert abs(a[0] * b[1] - a[1] * b[0]) / (math.hypot(*a) * math.hypot(*b)) < 1e-7
     assert math.hypot(*side(p, 0)) == pytest.approx(18.0, abs=1e-6)
-    # Winkel ueber die Werkzeugleiste und das Eingabefeld an der Skizze
+    # angle via the toolbar and the input field at the sketch
     page.evaluate("skSelect([1], [])")
     page.click("[data-sk-add=angle]")
     page.fill("#skInput", "80")
@@ -115,7 +115,7 @@ def test_draw_polygon_set_length_parallel_and_angle(page):
     u, v = (p[0][0] - p[1][0], p[0][1] - p[1][1]), (p[2][0] - p[1][0], p[2][1] - p[1][1])
     ang = math.degrees(math.atan2(abs(u[0] * v[1] - u[1] * v[0]), u[0] * v[0] + u[1] * v[1]))
     assert ang == pytest.approx(80.0, abs=1e-5)
-    # Alles zusammen steht in der Konfiguration, die an den Server geht
+    # everything together is in the configuration sent to the server
     cfg_cons = page.evaluate("cfg.motor.sketch.constraints.map(c => c.type)")
     assert cfg_cons == ["length", "parallel", "angle"]
     assert page.errors == []
@@ -242,12 +242,12 @@ def test_toolbar_constraints_parallel_equal_horizontal_fix(page):
     assert abs(cross2(side(p, 0), side(p, 2))) < 1e-6 * math.hypot(*side(p, 0)) * math.hypot(*side(p, 2))
     assert math.hypot(*side(p, 1)) == pytest.approx(math.hypot(*side(p, 3)), abs=1e-6)
     assert p[0] == pytest.approx(fixed_at, abs=1e-6)
-    # Gleiche Beziehung zweimal ist nicht moeglich
+    # the same relation twice is not possible
     page.evaluate("skSelect([], [0, 2])")
     page.click("[data-sk-add=parallel]")
     settle(page)
     assert "existiert bereits" in page.inner_text("#skStatus")
-    # Fixierter Punkt bleibt beim Ziehen eines anderen Punktes stehen
+    # a fixed point stays when another point is dragged
     x, y = screen(page, *p[2])
     page.mouse.move(x, y)
     page.mouse.down()

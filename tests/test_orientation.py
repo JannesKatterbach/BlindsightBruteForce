@@ -5,11 +5,11 @@ from helpers import make_model, pl
 
 
 def test_orientation_changes_collision_result():
-    """Gleicher Stangenabstand. Zeigen die Motoren zueinander, kollidieren sie, zeigen sie weg, nicht."""
+    """Same rod distance. Motors facing each other collide, motors facing away do not."""
     m = make_model(stack__n_motor_planes=1, clearance=1.0)
     d = 22.0
     lay = Layout(m)
-    lay.add(pl(50, 60, 1, 0))  # Motor liegt bei 0 Grad in +y Richtung ausgerichtet
+    lay.add(pl(50, 60, 1, 0))  # at 0 degrees the motor points in +y
     results = {}
     for ang in range(0, 360, 15):
         results[ang] = lay.check(pl(50 + d, 60, 1, ang)).ok
@@ -17,13 +17,13 @@ def test_orientation_changes_collision_result():
 
 
 def test_rotation_by_180_moves_motor_to_other_side():
-    """Rotation um 180 Grad spiegelt die Lage des Gehaeuses an der Stangenachse."""
+    """A rotation by 180 degrees mirrors the housing position at the rod axis."""
     m = make_model(stack__n_motor_planes=1)
     g0 = m.unit_parts(0, 60, 60, 1, 0)[0].prism.fp
     g180 = m.unit_parts(0, 60, 60, 1, 180)[0].prism.fp
     assert math.isclose(g0.cx - 60, -(g180.cx - 60), abs_tol=1e-9)
     assert math.isclose(g0.cy - 60, -(g180.cy - 60), abs_tol=1e-9)
-    # Gehaeusemitte liegt um (center_distance, gear_center_y) versetzt zur Stange (bei 0 Grad)
+    # the housing centre is offset by (center_distance, gear_center_y) from the rod (at 0 degrees)
     rx, ry = m.project.motor.rod_local()
     assert math.isclose(g0.cx, 60 - rx, abs_tol=1e-9) and math.isclose(g0.cy, 60 - ry, abs_tol=1e-9)
 

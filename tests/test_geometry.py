@@ -24,7 +24,7 @@ def test_rect_rect_distance_and_overlap():
 
 def test_rotated_rect_distance():
     a = Footprint.rect(0, 0, 10, 2)
-    b = Footprint.rect(0, 10, 10, 2, math.pi / 2)  # steht hochkant, Unterkante bei y = 5
+    b = Footprint.rect(0, 10, 10, 2, math.pi / 2)  # upright, lower edge at y = 5
     assert math.isclose(footprint_distance(a, b), 4.0)
 
 
