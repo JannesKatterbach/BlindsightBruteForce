@@ -1,7 +1,8 @@
 """Schnittstelle fuer Optimierer, Fortschritt, Abbruch und Ergebnisse.
 
-Ein Optimierer ist ein Objekt mit run(model, progress, stop) -> OptimizationResult.
-Neue Strategien registrieren sich in optimizers/__init__.py.
+Ein Optimierer ist eine Unterklasse von ``Optimizer`` und implementiert ``search``. Die
+Template Methode ``run`` erledigt den gemeinsamen Rahmen (Zaehler, Abbruch, Machbarkeitspruefung
+einer Einzeleinheit). Neue Strategien registrieren sich mit ``registry.register``.
 """
 
 from __future__ import annotations
@@ -9,11 +10,20 @@ from __future__ import annotations
 import threading
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Callable, Optional
 
+from ..diagnose import single_unit_report
 from ..layout import Counter, Placement
-from ..scoring import Score
+from ..scoring import Score, upper_bound_count
+
+# Status eines Laufs (OptimizationResult.status und StopToken.reason)
+STATUS_COMPLETED = "completed"
+STATUS_TIME_LIMIT = "time_limit"
+STATUS_CANDIDATE_LIMIT = "candidate_limit"
+STATUS_CANCELLED = "cancelled"
+STATUS_STAGNATION = "stagnation"
+STATUS_INFEASIBLE = "infeasible"
 
 
 @dataclass
@@ -30,21 +40,24 @@ class ProgressInfo:
     phase: str
     candidates: int
     elapsed: float
-    best_count: int = 0
+    best_count: int = 0  # Anzahl der bisher bestbewerteten Anordnung
     best_score: float = 0.0
     message: str = ""
     fraction: float = 0.0  # grober Fortschritt 0..1 (Zeitbasis)
     best_placements: list = field(default_factory=list)  # beste bisherige Anordnung (Live Vorschau)
 
     def as_dict(self, with_best: bool = True) -> dict:
-        d = dict(self.__dict__)
+        out = asdict(self)
         if not with_best:
-            d.pop("best_placements")
-        return d
+            out.pop("best_placements")
+        return out
 
 
 class StopToken:
-    """Abbruch ueber Zeitlimit, Kandidatenlimit oder manuelles Cancel."""
+    """Abbruch ueber Zeitlimit, Kandidatenlimit, Stagnation oder manuelles Cancel.
+
+    reason ist leer, solange der Lauf weitergehen darf, sonst einer der STATUS_* Werte.
+    Der erste gesetzte Grund bleibt erhalten."""
 
     def __init__(self, time_limit_s: float, max_candidates: int, counter: Counter):
         self.start = time.monotonic()
@@ -57,6 +70,10 @@ class StopToken:
     def cancel(self) -> None:
         self._cancel.set()
 
+    def set_reason(self, reason: str) -> None:
+        """Setzt den Abbruchgrund, wenn noch keiner gesetzt ist."""
+        self.reason = self.reason or reason
+
     @property
     def elapsed(self) -> float:
         return time.monotonic() - self.start
@@ -67,11 +84,11 @@ class StopToken:
 
     def should_stop(self) -> bool:
         if self._cancel.is_set():
-            self.reason = self.reason or "cancelled"
+            self.set_reason(STATUS_CANCELLED)
         elif self.elapsed >= self.time_limit:
-            self.reason = self.reason or "time_limit"
+            self.set_reason(STATUS_TIME_LIMIT)
         elif self.counter.checks >= self.max_candidates:
-            self.reason = self.reason or "candidate_limit"
+            self.set_reason(STATUS_CANDIDATE_LIMIT)
         return bool(self.reason)
 
 
@@ -81,7 +98,7 @@ ProgressCallback = Callable[[ProgressInfo], None]
 @dataclass
 class OptimizationResult:
     solutions: list[Solution] = field(default_factory=list)
-    status: str = "completed"  # completed | time_limit | candidate_limit | cancelled | infeasible
+    status: str = STATUS_COMPLETED
     candidates: int = 0
     elapsed: float = 0.0
     target: int = 0
@@ -94,6 +111,11 @@ class OptimizationResult:
     @property
     def best(self) -> Optional[Solution]:
         return self.solutions[0] if self.solutions else None
+
+    @property
+    def max_count(self) -> int:
+        """Groesste Einheitenzahl unter allen Loesungen (die bestbewertete kann weniger haben)."""
+        return max((len(s.placements) for s in self.solutions), default=0)
 
     def as_dict(self) -> dict:
         return {
@@ -111,9 +133,11 @@ class OptimizationResult:
 
 
 class Optimizer(ABC):
-    name = "base"
+    """Basisklasse aller Strategien."""
 
-    @abstractmethod
+    name = "base"
+    supports_parallel = True  # mehrere unabhaengige Laeufe mit verschiedenen Seeds sind sinnvoll
+
     def run(
         self,
         model,
@@ -122,6 +146,33 @@ class Optimizer(ABC):
         counter: Optional[Counter] = None,
     ) -> OptimizationResult:
         """Berechnet Loesungen fuer das kompilierte Modell."""
+        search = model.project.search
+        counter = counter or Counter()
+        stop = stop or StopToken(search.time_limit_s, search.max_candidates, counter)
+        res, infeasible = begin(model, stop, counter, self.name)
+        if infeasible:
+            return res
+        return self.search(model, res, progress, stop, counter)
+
+    @abstractmethod
+    def search(
+        self, model, res: OptimizationResult, progress: Optional[ProgressCallback], stop: StopToken, counter: Counter
+    ) -> OptimizationResult:
+        """Eigentliche Suche. res ist vorbereitet (Ziel, Obergrenze), am Ende ``finish`` aufrufen."""
+
+
+# ---------------------------------------------------------------------------
+# Gemeinsamer Rahmen
+# ---------------------------------------------------------------------------
+MSG_NO_SOLUTION = (
+    "Es wurde keine gueltige Anordnung gefunden. Moegliche Ursachen. Bauraum zu klein, Sicherheitsabstand zu gross, "
+    "Motoren zu hoch oder zu breit fuer die Ebenenabstaende, zu wenige erlaubte Winkel oder Ebenen."
+)
+STATUS_MESSAGES = {
+    STATUS_TIME_LIMIT: "Das Zeitlimit wurde erreicht. Mehr Rechenzeit kann bessere Ergebnisse liefern.",
+    STATUS_CANDIDATE_LIMIT: "Das Kandidatenlimit wurde erreicht.",
+    STATUS_STAGNATION: "Beendet, weil sich das Ergebnis nach erreichter Zielanzahl nicht mehr verbesserte (Stagnation).",
+}
 
 
 def describe_result(res: OptimizationResult, grid_exact: bool = False) -> None:
@@ -131,59 +182,60 @@ def describe_result(res: OptimizationResult, grid_exact: bool = False) -> None:
     bezogen auf dieses Raster aussagekraeftig).
     """
     target = res.target
-    best = res.best
-    n = len(best.placements) if best else 0
-    if n == 0:
-        if res.status in ("completed", "stagnation"):
-            res.status = "infeasible"
-        res.messages.append(
-            "Es wurde keine gueltige Anordnung gefunden. Moegliche Ursachen. Bauraum zu klein, Sicherheitsabstand zu gross, "
-            "Motoren zu hoch oder zu breit fuer die Ebenenabstaende, zu wenige erlaubte Winkel oder Ebenen."
-        )
+    found = res.max_count
+    if found == 0:
+        if res.status in (STATUS_COMPLETED, STATUS_STAGNATION):
+            res.status = STATUS_INFEASIBLE
+        res.messages.append(MSG_NO_SOLUTION)
         res.optimality_note = "Keine Loesung gefunden. Das beweist nicht, dass keine existiert."
         return
-    if n >= target:
+    if found >= target:
         res.proven_optimal = False
-        res.optimality_note = (
-            f"Zielanzahl {target} erreicht, die Anzahl kann nicht weiter steigen. Grundflaeche, Gleichmaessigkeit und "
-            "Regelmaessigkeit sind beste gefundene Werte und nicht als optimal bewiesen."
-        )
         if grid_exact:
             res.optimality_note = (
                 f"Zielanzahl {target} erreicht. Die kleinste Grundflaeche ist nur bezogen auf das untersuchte Raster "
                 "optimal, nicht im stetigen Raum."
             )
-    elif n >= res.upper_bound:
+        else:
+            res.optimality_note = (
+                f"Zielanzahl {target} erreicht, die Anzahl kann nicht weiter steigen. Grundflaeche, Gleichmaessigkeit und "
+                "Regelmaessigkeit sind beste gefundene Werte und nicht als optimal bewiesen."
+            )
+    elif found >= res.upper_bound:
         res.proven_optimal = True
-        res.optimality_note = f"{n} Stangen erreichen die theoretische Obergrenze des Bauraums."
+        res.optimality_note = f"{found} Stangen erreichen die theoretische Obergrenze des Bauraums."
     else:
         res.optimality_note = (
-            f"Nur {n} von {target} Stangen platzierbar. Beste gefundene Loesung, nicht als optimal bewiesen "
+            f"Nur {found} von {target} Stangen platzierbar. Beste gefundene Loesung, nicht als optimal bewiesen "
             f"(einfache Flaechenschranke {res.upper_bound})."
         )
         res.messages.append(
-            f"Nur {n} von {target} Einheiten konnten kollisionsfrei platziert werden. "
+            f"Nur {found} von {target} Einheiten konnten kollisionsfrei platziert werden. "
             "Hilfreich waeren ein groesserer Bauraum, mehr Motorebenen, kleinerer Sicherheitsabstand, "
             "kleinere Motoren oder mehr erlaubte Winkel. Oder mehr Rechenzeit."
         )
-    if res.status == "time_limit":
-        res.messages.append("Das Zeitlimit wurde erreicht. Mehr Rechenzeit kann bessere Ergebnisse liefern.")
-    if res.status == "candidate_limit":
-        res.messages.append("Das Kandidatenlimit wurde erreicht.")
-    if res.status == "stagnation":
-        res.messages.append("Beendet, weil sich das Ergebnis nach erreichter Zielanzahl nicht mehr verbesserte (Stagnation).")
+    best_count = len(res.best.placements) if res.best else 0
+    if best_count < found:
+        res.messages.append(
+            f"Die bestbewertete Anordnung hat {best_count} Einheiten. Anordnungen mit {found} Einheiten sind unter den "
+            "Ergebnissen, liegen nach der Gewichtung der Ziele aber dahinter."
+        )
+    if res.status in STATUS_MESSAGES:
+        res.messages.append(STATUS_MESSAGES[res.status])
 
 
-def begin(model, stop, counter, optimizer_name: str):
-    """Gemeinsamer Start. Liefert (Ergebnisobjekt, Fehlmeldungen einer nicht moeglichen Einzeleinheit)."""
-    from ..diagnose import single_unit_report
-    from ..scoring import upper_bound_count
+def begin(model, stop: StopToken, counter: Counter, optimizer_name: str) -> tuple[OptimizationResult, bool]:
+    """Gemeinsamer Start. Legt das Ergebnis an und prueft, ob ueberhaupt eine Einzeleinheit passt.
 
-    res = OptimizationResult(target=model.project.target_count, upper_bound=upper_bound_count(model), optimizer=optimizer_name)
-    diag = single_unit_report(model)
-    if diag:
-        res.status = "infeasible"
-        res.messages = diag
+    Rueckgabe (Ergebnis, nicht machbar). Ist die Aufgabe nicht machbar, enthaelt das Ergebnis
+    bereits Status und Diagnose und kann direkt zurueckgegeben werden."""
+    res = OptimizationResult(
+        target=model.project.target_count, upper_bound=upper_bound_count(model), optimizer=optimizer_name
+    )
+    diagnosis = single_unit_report(model)
+    if diagnosis:
+        res.status = STATUS_INFEASIBLE
+        res.messages = diagnosis
         res.optimality_note = "Keine gueltige Loesung. Bereits eine einzelne Einheit ist nicht platzierbar."
         res.candidates = counter.checks
         res.elapsed = stop.elapsed
@@ -191,10 +243,11 @@ def begin(model, stop, counter, optimizer_name: str):
     return res, False
 
 
-def finish(res: OptimizationResult, search, stop, counter, grid_exact: bool = False) -> OptimizationResult:
+def finish(res: OptimizationResult, search, stop: StopToken, counter: Counter, grid_exact: bool = False) -> OptimizationResult:
+    """Gemeinsamer Abschluss. Uebernimmt die besten Loesungen, Zaehler, Zeit, Status und Hinweise."""
     res.solutions = search.finalize()
     res.candidates = counter.checks
     res.elapsed = stop.elapsed
-    res.status = stop.reason or "completed"
+    res.status = stop.reason or STATUS_COMPLETED
     describe_result(res, grid_exact)
     return res

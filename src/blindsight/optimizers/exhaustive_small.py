@@ -1,9 +1,10 @@
 """Exakte Suche auf einem diskreten Raster fuer kleine Aufgaben (Backtracking mit frueher Verwerfung).
 
-Vorgehen. Fenster der Stangenmittelpunkte (Raster mal Raster) werden nach Flaeche aufsteigend untersucht.
-Je Fenster sucht ein Backtracking alle Kombinationen aus Position, Ebene, Winkel und Achsabstand. Ungueltige
-Teilkonfigurationen werden sofort verworfen. Das erste Fenster mit gueltiger Loesung hat die kleinste Flaeche
-dieses Rasters, sofern alle kleineren Fenster vollstaendig widerlegt wurden.
+Vorgehen. Fenster der Stangenmittelpunkte (w mal h Rasterpunkte) werden nach der Anzahl ihrer
+Rasterpunkte aufsteigend untersucht. Je Fenster sucht ein Backtracking alle Kombinationen aus
+Position, Ebene, Winkel und Achsabstand. Ungueltige Teilkonfigurationen werden sofort verworfen.
+Das erste Fenster mit gueltiger Loesung ist das Fenster mit den wenigsten Rasterpunkten, sofern
+alle kleineren Fenster vollstaendig widerlegt wurden.
 
 Aussage. Optimalitaet gilt nur bezogen auf das Raster (nicht im stetigen Raum) und nur, wenn kein Knotenlimit
 erreicht wurde. Sonst wird ehrlich gemeldet, dass die Widerlegung unvollstaendig ist.
@@ -11,41 +12,55 @@ erreicht wurde. Sonst wird ehrlich gemeldet, dass die Widerlegung unvollstaendig
 
 from __future__ import annotations
 
+import math
 import random
-from typing import Optional
+from typing import Iterator, Optional
 
-from ..layout import Counter, Layout
+from ..layout import Counter, Layout, Placement
 from ..model import Model
-from .base import Optimizer, OptimizationResult, ProgressCallback, StopToken, begin, finish
+from .base import STATUS_INFEASIBLE, OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import SearchBase
+from .registry import register
 
-MAX_TARGET = 14
-
-
-class _Budget(Exception):
-    pass
+MAX_TARGET = 14  # groessere Aufgaben sind fuer das Backtracking zu teuer
+NODE_LIMIT = 30000  # Knoten je Fenster, danach gilt die Widerlegung als unvollstaendig
 
 
+class _Abort(Exception):
+    """Knotenlimit oder Abbruch der Suche."""
+
+
+def windows_by_size(nx: int, ny: int, min_points: int) -> Iterator[tuple[int, int, int]]:
+    """Fenster (Punkte, w, h) mit w <= nx, h <= ny und w * h >= min_points, aufsteigend nach (w * h, w).
+
+    Die Fenster werden erst bei Bedarf erzeugt. Je Punktzahl a werden nur die Teiler bis sqrt(a)
+    durchsucht, so bleibt auch ein riesiges Raster ohne Speicherproblem."""
+    for points in range(max(1, min_points), nx * ny + 1):
+        pairs = []
+        for w in range(1, math.isqrt(points) + 1):
+            if points % w:
+                continue
+            h = points // w
+            for a, b in {(w, h), (h, w)}:
+                if a <= nx and b <= ny:
+                    pairs.append((a, b))
+        for w, h in sorted(pairs):
+            yield points, w, h
+
+
+@register
 class ExhaustiveSmallOptimizer(Optimizer):
     name = "exhaustive_small"
+    supports_parallel = False  # das Ergebnis ist deterministisch, weitere Seeds bringen nichts
 
-    def run(
-        self,
-        model: Model,
-        progress: Optional[ProgressCallback] = None,
-        stop: Optional[StopToken] = None,
-        counter: Optional[Counter] = None,
-    ) -> OptimizationResult:
+    def search(self, model: Model, res: OptimizationResult, progress: Optional[ProgressCallback], stop: StopToken,
+               counter: Counter) -> OptimizationResult:
         se = model.project.search
-        counter = counter or Counter()
-        stop = stop or StopToken(se.time_limit_s, se.max_candidates, counter)
-        res, infeasible = begin(model, stop, counter, self.name)
-        if infeasible:
-            return res
-        if model.project.target_count > MAX_TARGET:
-            res.status = "infeasible"
+        target = model.project.target_count
+        if target > MAX_TARGET:
+            res.status = STATUS_INFEASIBLE
             res.messages.append(
-                f"Der exakte Modus ist nur fuer bis zu {MAX_TARGET} Stangen gedacht (Zielanzahl {model.project.target_count}). "
+                f"Der exakte Modus ist nur fuer bis zu {MAX_TARGET} Stangen gedacht (Zielanzahl {target}). "
                 "Bitte 'pattern_greedy' oder 'anneal_free' verwenden."
             )
             res.optimality_note = "Nicht ausgefuehrt."
@@ -57,31 +72,28 @@ class ExhaustiveSmallOptimizer(Optimizer):
         x0, y0, x1, y1 = search.region
         nx = int((x1 - x0) / step) + 1
         ny = int((y1 - y0) / step) + 1
-        windows = sorted(((w * h, w, h) for w in range(1, nx + 1) for h in range(1, ny + 1) if w * h >= search.target))
         complete = True  # alle bisher untersuchten kleineren Fenster vollstaendig widerlegt
-        node_limit = 30000
         found = False
-        for _, w, h in windows:
+        for _, w, h in windows_by_size(nx, ny, search.target):
             if search.halted():
                 complete = False
                 break
-            pts = [(x0 + i * step, y0 + j * step) for j in range(h) for i in range(w)]
-            if not self._window_dfs(search, pts, node_limit):
-                if search.halted():
-                    complete = False
-                    break
-                if search.last_budget_hit:
-                    complete = False
-                search.report(f"Fenster {w} x {h} widerlegt" + (" (unvollstaendig)" if search.last_budget_hit else ""))
-                continue
-            found = True
-            break
+            points = [(x0 + i * step, y0 + j * step) for j in range(h) for i in range(w)]
+            found, budget_hit = self._window_dfs(search, points)
+            if found:
+                break
+            if search.halted():
+                complete = False
+                break
+            complete = complete and not budget_hit
+            search.report(f"Fenster {w} x {h} widerlegt" + (" (unvollstaendig)" if budget_hit else ""))
         out = finish(res, search, stop, counter, grid_exact=True)
         if found and complete and out.best:
             out.proven_optimal = True
             out.optimality_note = (
-                f"Kleinstes Fenster der Stangenmittelpunkte auf dem Raster {step:.2f} mm bewiesen (alle kleineren Fenster vollstaendig "
-                "widerlegt, Fenster in der Ecke des Bauraums). Im stetigen Raum oder an anderer Stelle kann eine kleinere Anordnung existieren."
+                f"Fenster mit den wenigsten Rasterpunkten auf dem Raster {step:.2f} mm bewiesen (alle kleineren Fenster "
+                "vollstaendig widerlegt, Fenster in der Ecke des Bauraums). Im stetigen Raum oder an anderer Stelle "
+                "kann eine kleinere Anordnung existieren."
             )
         elif found:
             out.optimality_note = (
@@ -90,43 +102,40 @@ class ExhaustiveSmallOptimizer(Optimizer):
             )
         return out
 
-    def _window_dfs(self, search: SearchBase, pts, node_limit: int) -> bool:
-        model = search.model
+    def _window_dfs(self, search: SearchBase, points: list[tuple[float, float]]) -> tuple[bool, bool]:
+        """Backtracking ueber die Punkte eines Fensters. Rueckgabe (Loesung gefunden, Knotenlimit erreicht)."""
         target = search.target
-        lay = Layout(model, search.counter)
-        nodes = [0]
-        search.last_budget_hit = False
-        n = len(pts)
+        layout = Layout(search.model, search.counter)
+        n = len(points)
+        nodes = 0
+        budget_hit = False
 
-        def rec(start: int) -> bool:
-            if len(lay) == target:
-                search.consider(lay.placements())
+        def place_from(start: int) -> bool:
+            nonlocal nodes, budget_hit
+            if len(layout) == target:
+                search.consider(layout.placements())
                 return True
-            if n - start < target - len(lay):
-                return False
             for i in range(start, n):
-                if n - i < target - len(lay):
-                    return False
-                x, y = pts[i]
+                if n - i < target - len(layout):
+                    return False  # es bleiben zu wenige Punkte
+                x, y = points[i]
                 for plane in search.usable:
-                    for a, cd in search.options_for(plane):
-                        nodes[0] += 1
-                        if nodes[0] > node_limit:
-                            search.last_budget_hit = True
-                            raise _Budget
+                    for angle, cd in search.options_for(plane):
+                        nodes += 1
+                        if nodes > NODE_LIMIT:
+                            budget_hit = True
+                            raise _Abort
                         if search.halted():
-                            raise _Budget
-                        from ..layout import Placement
-
-                        pl = Placement(x, y, plane, a, cd)
-                        if lay.check(pl).ok:
-                            uid = lay.add(pl)
-                            if rec(i + 1):
+                            raise _Abort
+                        placement = Placement(x, y, plane, angle, cd)
+                        if layout.check(placement).ok:
+                            uid = layout.add(placement)
+                            if place_from(i + 1):
                                 return True
-                            lay.remove(uid)
+                            layout.remove(uid)
             return False
 
         try:
-            return rec(0)
-        except _Budget:
-            return False
+            return place_from(0), budget_hit
+        except _Abort:
+            return False, budget_hit

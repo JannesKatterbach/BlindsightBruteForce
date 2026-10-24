@@ -249,3 +249,110 @@ def test_constraint_registry_matches_spec_and_schema():
     for name, ctype in S.CONSTRAINT_TYPES.items():
         assert ctype.index_fields, name
         assert ctype.value in (None, "len", "deg")
+
+
+# ---------------------------------------------------------------------------
+# Bewertung und Optimierer
+# ---------------------------------------------------------------------------
+import dataclasses  # noqa: E402
+import random  # noqa: E402
+import time  # noqa: E402
+
+from blindsight.config import META_BY_PATH, WeightsSpec  # noqa: E402
+from blindsight.layout import Counter  # noqa: E402
+from blindsight.optimizers import OPTIMIZERS  # noqa: E402
+from blindsight.optimizers.base import OptimizationResult, Solution, StopToken, describe_result  # noqa: E402
+from blindsight.optimizers.common import SearchBase  # noqa: E402
+from blindsight.optimizers.exhaustive_small import windows_by_size  # noqa: E402
+from blindsight.optimizers.parallel import _combined_status, _jobs  # noqa: E402
+from blindsight.optimizers.pattern_greedy import MAX_PATTERN_POINTS, PatternSearch  # noqa: E402
+from blindsight.scoring import OBJECTIVES, evaluate, upper_bound_count  # noqa: E402
+
+
+def test_upper_bound_is_at_least_one_when_a_single_rod_fits():
+    # Frueher ergab die Flaechenschranke fuer kleine Bereiche 0, obwohl eine Stange passt
+    p = Project()
+    p.bounds.xmax = p.bounds.xmin + p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
+    p.bounds.ymax = p.bounds.ymin + p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
+    assert upper_bound_count(Model(p)) >= 1
+
+
+def test_upper_bound_counts_rods_on_a_line():
+    p = Project()
+    d = p.rod.diameter + p.required_gap
+    p.bounds.xmax = p.bounds.xmin + p.rod.diameter + 2 * p.bounds.edge_margin + 4 * d  # 5 Stangen in einer Reihe
+    p.bounds.ymax = p.bounds.ymin + p.rod.diameter + 2 * p.bounds.edge_margin
+    assert upper_bound_count(Model(p)) >= 5
+
+
+def test_regularity_has_no_jump_between_one_and_few_units():
+    # Frueher 1.0 fuer eine Einheit und 0 fuer zwei bis vier Einheiten
+    model = Model(Project())
+    weights = WeightsSpec()
+    one = evaluate(model, [Placement(60, 60, 1, 0.0)], weights, 4)
+    few = evaluate(model, [Placement(30 + 30 * i, 60, 1, 0.0) for i in range(3)], weights, 4)
+    assert one.terms["regularity"] == few.terms["regularity"] == 0.0
+
+
+def test_result_note_uses_the_largest_count_found():
+    model = Model(Project())
+    weights = WeightsSpec()
+    four = [Placement(30 + 20 * i, 60, 1, 0.0) for i in range(4)]
+    six = [Placement(20 + 15 * i, 60, 1, 0.0) for i in range(6)]
+    res = OptimizationResult(target=6, upper_bound=50)
+    res.solutions = [Solution(four, evaluate(model, four, weights, 6)), Solution(six, evaluate(model, six, weights, 6))]
+    describe_result(res)
+    assert not any("Nur" in m for m in res.messages)
+    assert "Zielanzahl 6 erreicht" in res.optimality_note
+    assert any("bestbewertete Anordnung hat 4" in m for m in res.messages)
+
+
+def test_stagnation_waits_for_the_best_rated_solution_to_reach_the_target():
+    model = Model(Project())
+    model.project.search.stagnation_s = 0.0
+    counter = Counter()
+    search = SearchBase(model, counter, StopToken(60, 10**9, counter), random.Random(1))
+    search.max_count, search.best_count = search.target, search.target - 1
+    assert not search.stagnated()
+    search.best_count = search.target
+    assert search.stagnated()
+
+
+def test_pattern_points_are_limited_before_generation():
+    p = Project()
+    p.bounds.xmax = p.bounds.ymax = 100_000.0
+    p.search.layout_goal = "spread"
+    model = Model(p)
+    counter = Counter()
+    search = PatternSearch(model, counter, StopToken(60, 10**9, counter), random.Random(1))
+    t0 = time.monotonic()
+    points = search._points("square", 5.0)
+    assert 0 < len(points) <= MAX_PATTERN_POINTS
+    assert time.monotonic() - t0 < 10.0
+
+
+def test_window_generator_matches_sorted_list_and_is_lazy():
+    nx, ny, target = 6, 4, 5
+    expected = sorted((w * h, w, h) for w in range(1, nx + 1) for h in range(1, ny + 1) if w * h >= target)
+    assert list(windows_by_size(nx, ny, target)) == expected
+    t0 = time.monotonic()
+    assert next(windows_by_size(10**6, 10**6, 7)) == (7, 1, 7)
+    assert time.monotonic() - t0 < 1.0
+
+
+def test_parallel_seeds_stay_valid_and_status_survives():
+    p = Project()
+    p.search.seed = 2**31 - 1
+    p.search.workers = 3
+    seeds = [job["search"]["seed"] for job in _jobs(p)]
+    assert seeds == [2**31 - 1, 0, 1]
+    counter = Counter()
+    assert _combined_status(StopToken(60, 10**9, counter), ["completed", "stagnation"]) == "stagnation"
+    assert _combined_status(StopToken(60, 10**9, counter), ["completed"]) == "completed"
+
+
+def test_registries_match_configuration_options():
+    optimizer_options = {value for value, _ in META_BY_PATH["search.optimizer"].options}
+    assert set(OPTIMIZERS) == optimizer_options
+    assert set(OBJECTIVES) == {f.name for f in dataclasses.fields(WeightsSpec)}
+    assert not OPTIMIZERS["exhaustive_small"].supports_parallel

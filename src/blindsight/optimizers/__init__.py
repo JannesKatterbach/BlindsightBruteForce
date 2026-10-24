@@ -1,38 +1,37 @@
-"""Registry der Optimierungsstrategien. Neue Strategien hier eintragen."""
+"""Optimierungsstrategien.
+
+Die Strategien registrieren sich beim Import ihres Moduls (``registry.register``). Eine neue
+Strategie braucht ein eigenes Modul mit ``@register`` Klasse, einen Import hier und einen
+Eintrag in den Optionen von ``search.optimizer`` (config.FIELD_META).
+"""
 
 from __future__ import annotations
 
-from .base import OptimizationResult, Optimizer, ProgressInfo, Solution, StopToken
+from typing import Optional
+
+from ..layout import Counter
+from . import anneal_free, exhaustive_small, pattern_greedy  # noqa: F401  (registrieren sich)
 from .anneal_free import AnnealFreeOptimizer
+from .base import OptimizationResult, Optimizer, ProgressCallback, ProgressInfo, Solution, StopToken
 from .exhaustive_small import ExhaustiveSmallOptimizer
+from .parallel import run_parallel
 from .pattern_greedy import PatternGreedyOptimizer
-
-OPTIMIZERS: dict[str, type[Optimizer]] = {
-    c.name: c for c in (PatternGreedyOptimizer, AnnealFreeOptimizer, ExhaustiveSmallOptimizer)
-}
-
-
-def get_optimizer(name: str = "pattern_greedy") -> Optimizer:
-    try:
-        return OPTIMIZERS[name]()
-    except KeyError:
-        raise ValueError(f"Unbekannter Optimierer '{name}'. Verfuegbar. {sorted(OPTIMIZERS)}") from None
-
+from .registry import OPTIMIZERS, get_optimizer, register
 
 __all__ = [
-    "OPTIMIZERS", "get_optimizer", "Optimizer", "OptimizationResult", "ProgressInfo", "Solution", "StopToken",
-    "PatternGreedyOptimizer", "AnnealFreeOptimizer", "ExhaustiveSmallOptimizer", "run_optimizer",
+    "OPTIMIZERS", "get_optimizer", "register", "Optimizer", "OptimizationResult", "ProgressInfo", "Solution",
+    "StopToken", "PatternGreedyOptimizer", "AnnealFreeOptimizer", "ExhaustiveSmallOptimizer", "run_optimizer",
 ]
 
 
-def run_optimizer(model, progress=None, stop=None, counter=None) -> OptimizationResult:
-    """Fuehrt den in der Konfiguration gewaehlten Optimierer aus (optional mit mehreren Prozessen)."""
-    from ..layout import Counter
-    from .parallel import run_parallel
-
-    se = model.project.search
+def run_optimizer(model, progress: Optional[ProgressCallback] = None, stop: Optional[StopToken] = None,
+                  counter: Optional[Counter] = None) -> OptimizationResult:
+    """Fuehrt den in der Konfiguration gewaehlten Optimierer aus (mit mehreren Prozessen, wenn
+    search.workers > 1 und die Strategie das unterstuetzt)."""
+    search = model.project.search
     counter = counter or Counter()
-    stop = stop or StopToken(se.time_limit_s, se.max_candidates, counter)
-    if se.workers > 1 and se.optimizer != "exhaustive_small":
+    stop = stop or StopToken(search.time_limit_s, search.max_candidates, counter)
+    optimizer = get_optimizer(search.optimizer)
+    if search.workers > 1 and optimizer.supports_parallel:
         return run_parallel(model, progress, stop, counter)
-    return get_optimizer(se.optimizer).run(model, progress, stop, counter)
+    return optimizer.run(model, progress, stop, counter)

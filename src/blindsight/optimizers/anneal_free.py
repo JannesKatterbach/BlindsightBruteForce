@@ -12,43 +12,44 @@ from typing import Optional
 
 from ..layout import Counter, Layout
 from ..model import Model
-from .base import Optimizer, OptimizationResult, ProgressCallback, StopToken, begin, finish
+from .base import OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import SearchBase
+from .registry import register
+
+RESTARTS = 4
+MIN_SLICE_S = 0.3
+START_TRIES = 4000  # Zufallsversuche fuer das Startlayout in der Mitte
+FALLBACK_TRIES = 20000  # Zufallsversuche im ganzen Bereich, wenn die Mitte nichts ergibt
+MIN_START_SPAN = 10.0  # mm, halbe Kantenlaenge des Startbereichs um die Mitte
 
 
+@register
 class AnnealFreeOptimizer(Optimizer):
     name = "anneal_free"
 
-    def run(
-        self,
-        model: Model,
-        progress: Optional[ProgressCallback] = None,
-        stop: Optional[StopToken] = None,
-        counter: Optional[Counter] = None,
-    ) -> OptimizationResult:
+    def search(self, model: Model, res: OptimizationResult, progress: Optional[ProgressCallback], stop: StopToken,
+               counter: Counter) -> OptimizationResult:
         se = model.project.search
-        counter = counter or Counter()
-        stop = stop or StopToken(se.time_limit_s, se.max_candidates, counter)
-        res, infeasible = begin(model, stop, counter, self.name)
-        if infeasible:
-            return res
         search = SearchBase(model, counter, stop, random.Random(se.seed), progress)
         search.phase = "Freie Verteilung"
-        restarts = 4
         spread = se.layout_goal == "spread"
-        for i in range(restarts):
+        for i in range(RESTARTS):
             if search.halted():
                 break
-            end = stop.elapsed + max(0.3, (se.time_limit_s - stop.elapsed) / (restarts - i))
-            lay = Layout(model, counter)
-            # Start in der Mitte einer kleinen Region, damit der Block kompakt beginnt
-            cx, cy = search.center
-            span = max(model.unit_radius * 2, 10.0)
-            region = (cx - span, cy - span, cx + span, cy + span) if not spread else None
-            search.grow_random(lay, 4000, search.halted, region)
-            if len(lay) == 0:
-                search.grow_random(lay, 20000, search.halted)
-            search.consider(lay.placements())
-            search.report(f"Start {i + 1} von {restarts}, {len(lay)} Einheiten")
-            search.local_search(lay.placements(), lambda e=end: search.halted() or stop.elapsed > e, spread=spread)
+            duration = max(MIN_SLICE_S, (se.time_limit_s - stop.elapsed) / (RESTARTS - i))
+            end = stop.elapsed + duration
+            layout = Layout(model, counter)
+            # compact beginnt in einer kleinen Region um die Mitte, damit der Block kompakt startet
+            region = None
+            if not spread:
+                cx, cy = search.center
+                span = max(model.unit_radius * 2, MIN_START_SPAN)
+                region = (cx - span, cy - span, cx + span, cy + span)
+            search.grow_random(layout, START_TRIES, search.halted, region)
+            if len(layout) == 0:
+                search.grow_random(layout, FALLBACK_TRIES, search.halted)
+            search.consider(layout.placements())
+            search.report(f"Start {i + 1} von {RESTARTS}, {len(layout)} Einheiten")
+            search.local_search(layout.placements(), lambda e=end: search.halted() or stop.elapsed > e,
+                                spread=spread, duration=duration)
         return finish(res, search, stop, counter)
