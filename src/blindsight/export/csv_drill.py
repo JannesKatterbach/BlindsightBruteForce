@@ -9,7 +9,9 @@ from .base import holes_by_plane
 
 
 class DrillCsvExporter:
+    name = "csv"  # key in EXPORTERS and in the API
     extension = "csv"
+    filename = "blindsight.csv"
     mime = "text/csv"
     label = "Bohrliste CSV"
 

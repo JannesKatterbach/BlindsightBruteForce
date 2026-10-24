@@ -48,7 +48,9 @@ def _nearest_neighbor_pairs(units: list[dict]) -> list[tuple[dict, dict]]:
 
 
 class SvgExporter:
+    name = "svg"  # key in EXPORTERS and in the API
     extension = "svg"
+    filename = "blindsight.svg"
     mime = "image/svg+xml"
     label = "SVG"
 

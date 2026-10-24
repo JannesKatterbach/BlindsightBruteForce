@@ -13,9 +13,11 @@ from ..model import Model
 
 
 class Exporter(Protocol):
-    extension: str  # Dateiendung und Name in der API (/api/export/<job>.<extension>)
+    name: str  # key in EXPORTERS and in the API (/api/export/<job>.<name>)
+    extension: str  # file extension
+    filename: str  # suggested file name for downloads
     mime: str
-    label: str  # Bezeichnung in der UI
+    label: str  # label in the UI
 
 
     def export(self, geometry: dict) -> str: ...
@@ -74,6 +76,35 @@ def build_geometry(model: Model, placements: list[Placement]) -> dict:
         "collisions": [c.as_dict() for c in lay.all_collisions()],
         "closest_pairs": lay.closest_pairs(12),
     }
+
+
+PRESENCE_ALWAYS = "always"  # the rod reaches into the layer in every position of its stroke
+PRESENCE_RETRACTED = "retracted"  # only when retracted (layers below the rod's lower end when extended)
+PRESENCE_EXTENDED = "extended"  # only when extended (layers above the retracted tip)
+PRESENCE_TRAVEL = "travel"  # only in between, the rod is shorter than the layer distance it travels
+
+
+def _overlaps(bottom: float, top: float, plane: dict) -> bool:
+    return bottom <= plane["z_top"] and top >= plane["z_bottom"]
+
+
+def rod_presence(rod: dict, plane: dict) -> str | None:
+    """When the rod of a unit reaches into a layer, one of the PRESENCE_* values, or None if never.
+
+    The rod is a segment that moves from the retracted position (bottom_retracted to tip_retracted) to
+    the extended position (bottom_extended to tip_extended). The positions in which it overlaps a layer
+    form one interval, so overlapping in both end positions means overlapping in every position."""
+    retracted = _overlaps(rod["bottom_retracted"], rod["tip_retracted"], plane)
+    extended = _overlaps(rod["bottom_extended"], rod["tip_extended"], plane)
+    if retracted and extended:
+        return PRESENCE_ALWAYS
+    if retracted:
+        return PRESENCE_RETRACTED
+    if extended:
+        return PRESENCE_EXTENDED
+    if _overlaps(rod["bottom_retracted"], rod["tip_extended"], plane):
+        return PRESENCE_TRAVEL
+    return None
 
 
 def rod_passes(geometry: dict, unit: dict, plane_index: int) -> bool:

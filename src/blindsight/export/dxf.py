@@ -15,7 +15,9 @@ from .base import holes_by_plane
 
 
 class DxfExporter:
+    name = "dxf"  # key in EXPORTERS and in the API
     extension = "dxf"
+    filename = "blindsight.dxf"
     mime = "application/dxf"
     label = "DXF"
 

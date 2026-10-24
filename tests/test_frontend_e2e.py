@@ -103,7 +103,7 @@ def test_tooltip_returns_after_dropping_the_sketch(page):
 
 def test_export_formats_come_from_the_schema(page):
     values = page.eval_on_selector_all("#expFmt option", "opts => opts.map(o => o.value)")
-    assert sorted(values) == ["csv", "dxf", "json", "svg"]
+    assert sorted(values) == ["csv", "dxf", "json", "rods", "svg"]
 
 
 def test_loaded_result_click_reset_and_export(page):
@@ -167,3 +167,14 @@ def test_repeating_tile_run_shows_tile_outlines(page):
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
     assert "Kachel 2 Schrauben" in page.inner_text("#statusBox")
     assert page.locator("#view rect.tile").count() >= 1
+
+
+def test_rod_positions_download(page):
+    page.set_input_files("#fileResult", result_file(GOOD))
+    page.wait_for_selector("#resultBox:not([hidden])")
+    page.select_option("#expFmt", "rods")
+    with page.expect_download() as download:
+        page.click("#btnExport")
+    assert download.value.suggested_filename == "blindsight-rods.json"
+    data = json.loads(open(download.value.path(), encoding="utf-8").read())
+    assert data["layers"][0]["name"] == "G0" and len(data["layers"][0]["always_present"]) == 2

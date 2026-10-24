@@ -6,7 +6,9 @@ import json
 
 
 class JsonExporter:
+    name = "json"  # key in EXPORTERS and in the API
     extension = "json"
+    filename = "blindsight.json"
     mime = "application/json"
     label = "JSON"
 

@@ -15,7 +15,8 @@ async function doExport() {
   const response = await fetch("/api/export-layout", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
   if (!response.ok) { alert("Export fehlgeschlagen. " + (await response.text())); return; }
   // Typ der Datei kommt vom Server (frueher immer text/plain)
-  download("blindsight." + format, await response.blob());
+  const exporter = (schema.exporters || []).find((e) => e.name === format);
+  download(exporter ? exporter.filename : "blindsight." + format, await response.blob());
 }
 
 function saveResult() {

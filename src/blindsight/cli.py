@@ -16,7 +16,7 @@ import argparse
 import sys
 
 from .config import ConfigError, Project
-from .export import JsonExporter, SvgExporter, build_geometry
+from .export import JsonExporter, RodPositionsExporter, SvgExporter, build_geometry
 from .layout import Counter
 from .model import Model
 from .optimizers import run_optimizer
@@ -31,6 +31,7 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("config", help="Pfad zur JSON Konfiguration")
     ap.add_argument("--svg", help="SVG Ausgabedatei")
     ap.add_argument("--json", help="JSON Ausgabedatei der Geometrie")
+    ap.add_argument("--rods", help="JSON Ausgabedatei der Schraubenpositionen je Ebene")
     ap.add_argument("--time", type=float, help="Zeitlimit in Sekunden (überschreibt die Konfiguration)")
     ap.add_argument("--seed", type=int, help="Zufalls Seed (überschreibt die Konfiguration)")
     ap.add_argument("--quiet", action="store_true")
@@ -88,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
             _write(args.svg, SvgExporter().export(geometry), "SVG")
         if args.json:
             _write(args.json, JsonExporter().export(geometry), "JSON")
+        if args.rods:
+            _write(args.rods, RodPositionsExporter().export(geometry), "Schraubenpositionen")
     except OSError as exc:
         print(f"Ausgabedatei nicht schreibbar. {exc}", file=sys.stderr)
         return EXIT_OUTPUT

@@ -304,13 +304,14 @@ class App:
 
     @route("GET", "/api/export/", prefix=True)
     def export_result(self, req: Request) -> Response:
-        job_id, _, ext = req.tail.partition(".")
+        job_id, _, name = req.tail.partition(".")
         job = self.jobs.get(job_id)
-        if job.result is None or not job.result.solutions or ext not in EXPORTERS:
+        if job.result is None or not job.result.solutions or name not in EXPORTERS:
             return error_response(404, "Export nicht möglich")
         idx = self._solution_index(req, len(job.result.solutions))
-        response = self._export(EXPORTERS[ext](), build_geometry(job.model, job.result.solutions[idx].placements))
-        response.headers["Content-Disposition"] = f'attachment; filename="blindsight.{ext}"'
+        exporter = EXPORTERS[name]()
+        response = self._export(exporter, build_geometry(job.model, job.result.solutions[idx].placements))
+        response.headers["Content-Disposition"] = f'attachment; filename="{exporter.filename}"'
         return response
 
     @staticmethod
