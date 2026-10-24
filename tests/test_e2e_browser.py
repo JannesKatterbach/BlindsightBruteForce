@@ -56,7 +56,8 @@ def test_full_flow(browser, base_url):
     pg.select_option("#unitSel", "mm")
     # Optimierung
     pg.click("[data-tab=optim]")
-    pg.fill("#in-search-time_limit_s", "3")
+    # Zeitpuffer fuer volle Testlaeufe. Nach erreichter Zielanzahl beendet die Stagnation den Lauf frueh
+    pg.fill("#in-search-time_limit_s", "10")
     pg.dispatch_event("#in-search-time_limit_s", "change")
     pg.click("#btnStart")
     pg.wait_for_selector("#resultBox:not([hidden])", timeout=40000)

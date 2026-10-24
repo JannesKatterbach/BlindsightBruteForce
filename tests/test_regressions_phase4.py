@@ -461,7 +461,7 @@ def test_placement_limit_is_checked_before_parsing():
 
 
 def test_static_javascript_has_fixed_type():
-    code, ctype, _ = App().handle("GET", "/static/app.js", {}, b"")
+    code, ctype, _ = App().handle("GET", "/static/js/core/util.js", {}, b"")
     assert code == 200 and ctype == "text/javascript; charset=utf-8"
 
 

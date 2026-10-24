@@ -1,0 +1,96 @@
+"use strict";
+// Start der Oberflaeche, Reiter, Laden von Konfigurationen und Verdrahtung der Bedienelemente.
+
+function switchTab(name) {
+  if (name === "sketch" && window.skReload) setTimeout(skReload, 0);
+  $$("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
+}
+
+/** Rekursives Zusammenfuehren. Objekte werden gemischt, Listen und Werte ersetzt. */
+function mergeConfig(base, update) {
+  const isObject = (v) => v && typeof v === "object" && !Array.isArray(v);
+  for (const key of Object.keys(update)) {
+    if (isObject(update[key]) && isObject(base[key])) mergeConfig(base[key], update[key]);
+    else base[key] = update[key];
+  }
+  return base;
+}
+
+/** Konfiguration laden (fehlende Werte aus den Standardwerten). */
+async function loadCfg(obj) {
+  cfg = mergeConfig(clone(defaults), obj || {});
+  writeInputs();
+  await refresh();
+  if (window.skReload) skReload();
+}
+
+/** Liest eine Datei aus einem Dateifeld und setzt das Feld zurueck (dieselbe Datei geht dann erneut). */
+function onFile(selector, handler) {
+  $(selector).addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    resetFileInput(e.target);
+    if (file) await handler(file);
+  });
+}
+
+function bindHeader() {
+  $$("#tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
+  $("#unitSel").addEventListener("change", () => {
+    unit = $("#unitSel").value;
+    writeInputs();
+    refresh();
+    if (selUnit != null) renderEditPanel();
+    if (window.skRender) skRender();
+  });
+  $("#btnSave").addEventListener("click", () => download("blindsight-config.json", JSON.stringify(cfg, null, 2), "application/json"));
+  $("#btnReset").addEventListener("click", () => loadCfg({}));
+  onFile("#fileLoad", async (file) => {
+    let obj;
+    try { obj = JSON.parse(await file.text()); } catch (err) { alert("Keine gültige Konfigurationsdatei."); return; }
+    await loadCfg(obj);
+  });
+}
+
+function bindTabs() {
+  $("#btnStart").addEventListener("click", startJob);
+  $("#btnCancel").addEventListener("click", cancelJob);
+  ["viewSel", "planeSel", "optDist"].forEach((id) => $("#" + id).addEventListener("change", drawView));
+  $("#optEdit").addEventListener("change", () => { editMode = $("#optEdit").checked; renderEditPanel(); drawView(); });
+  $("#solSel").addEventListener("change", () => loadResult(+$("#solSel").value));
+  $("#btnExport").addEventListener("click", doExport);
+  $("#btnSaveResult").addEventListener("click", saveResult);
+  onFile("#fileResult", loadResultFile);
+  $$("[data-preset]").forEach((b) => b.addEventListener("click", () => applyWeightPreset(b.dataset.preset)));
+  $("#obsAdd").addEventListener("click", addObstacle);
+  $("#zoneAdd").addEventListener("click", addZone);
+}
+
+async function loadExamples() {
+  const names = (await api("/api/examples")).data;
+  names.forEach((name) => $("#exampleSel").add(new Option(name, name)));
+  $("#exampleSel").addEventListener("change", async (e) => {
+    if (!e.target.value) return;
+    const { status, data } = await api("/api/example/" + e.target.value);
+    if (status === 200) await loadCfg(data);
+    else alert(errorsOf(data).join("\n"));
+  });
+}
+
+async function init() {
+  schema = (await api("/api/schema")).data;
+  defaults = (await api("/api/default")).data;
+  buildForms();
+  buildExportFormats();
+  initMotorPreview();
+  initLibrary();
+  if (window.initSketch) initSketch();
+  initIsoDrag();
+  initEdit();
+  bindHeader();
+  bindTabs();
+  await loadExamples();
+  await loadCfg({});
+}
+
+window.addEventListener("load", init);
