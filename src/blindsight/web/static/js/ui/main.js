@@ -85,6 +85,7 @@ function buildLanguageSelect() {
  * results come again from the server in the new language, the inputs keep their values.
  */
 async function changeLanguage(language) {
+  closeHelp();
   setLanguage(language);
   $("#langSel").value = currentLanguage;
   schema = (await api("/api/schema")).data;
@@ -101,6 +102,7 @@ async function changeLanguage(language) {
 }
 
 async function init() {
+  initHelp();
   applyStaticTexts();
   schema = (await api("/api/schema")).data;
   defaults = (await api("/api/default")).data;

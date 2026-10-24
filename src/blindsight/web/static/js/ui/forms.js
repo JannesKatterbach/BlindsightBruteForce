@@ -50,7 +50,7 @@ function buildForms() {
     if (!(field.group in GROUP_TARGET) || TABLE_FIELDS.has(field.path)) continue;
     const box = $("#" + GROUP_TARGET[field.group]);
     const label = document.createElement("label");
-    label.textContent = lenLabel(field.label, field.kind);
+    setFieldLabel(label, field, lenLabel(field.label, field.kind));
     label.title = field.tip;
     label.dataset.labelFor = field.path;
     box.appendChild(label);
@@ -109,7 +109,7 @@ function writeInputs() {
   }
   for (const label of $$("[data-label-for]")) {
     const field = fieldByPath(label.dataset.labelFor);
-    label.textContent = lenLabel(field.label, field.kind);
+    setFieldLabel(label, field, lenLabel(field.label, field.kind));
   }
   writeWeights();
   updateFieldVisibility();

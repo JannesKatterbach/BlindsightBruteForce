@@ -435,6 +435,7 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 ## Oberfläche
 
 - Kopfzeile. Sprachwahl Deutsch, Englisch, Französisch (gemerkt im Browser, Start in der Browsersprache)
+- Hilfe. Komplexere Felder und Bereiche haben einen i Knopf mit einer Erklärung (Texte in den Katalogen, Felder unter `field.<pfad>.help`, Bereiche unter `ui.help.*` mit `data-help` in `index.html`)
 - Reiter Geometrie. Formulare mit Tooltips, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
   SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
 - Reiter Motor Skizze. Kontur zeichnen und bemaßen (siehe oben), Zahnradachse ziehen

@@ -39,6 +39,7 @@ function applyStaticTexts(root = document) {
   for (const node of root.querySelectorAll("[data-i18n-title]")) node.title = t(node.dataset.i18nTitle);
   for (const node of root.querySelectorAll("[data-i18n-placeholder]")) node.placeholder = t(node.dataset.i18nPlaceholder);
   document.documentElement.lang = currentLanguage;
+  if (typeof attachStaticHelp === "function") attachStaticHelp(root);  // text changes removed the help buttons
 }
 
 /** Switch the language of the static texts and remember it. Dynamic parts are rebuilt by the caller. */

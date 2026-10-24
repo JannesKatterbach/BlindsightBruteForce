@@ -54,6 +54,11 @@ def negotiate(accept_language: Optional[str]) -> str:
     return DEFAULT_LANGUAGE
 
 
+def has_text(key: str) -> bool:
+    """True if the key exists in the catalogs (all languages have the same keys)."""
+    return key in catalog(DEFAULT_LANGUAGE)
+
+
 def current_language() -> str:
     return _language.get()
 
@@ -123,6 +128,6 @@ def localize(obj: Any, language: str) -> Any:
 
 
 __all__ = [
-    "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_NAMES", "LocalText", "catalog", "current_language", "localize",
+    "DEFAULT_LANGUAGE", "LANGUAGES", "LANGUAGE_NAMES", "LocalText", "catalog", "current_language", "has_text", "localize",
     "negotiate", "normalize_language", "render", "set_language", "tr", "use_language",
 ]

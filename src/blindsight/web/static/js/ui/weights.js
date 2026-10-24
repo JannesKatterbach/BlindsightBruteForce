@@ -18,7 +18,7 @@ function buildWeights() {
   for (const field of weightFields()) {
     const key = weightKey(field);
     const label = document.createElement("label");
-    label.textContent = field.label;
+    setFieldLabel(label, field, field.label);
     label.title = field.tip;
     const range = document.createElement("input");
     range.type = "range";

@@ -29,7 +29,7 @@ from typing import Any, Optional
 
 from .errors import ConfigError
 from .geometry import is_convex_ccw, signed_area
-from .i18n import LocalText, tr
+from .i18n import LocalText, has_text, tr
 from .patterns import PATTERNS
 from .sketch import check_sketch_motor
 from .units import EPS, EPS_AREA, FAR_AWAY, is_finite_number, normalize_angle_deg
@@ -573,6 +573,12 @@ class Meta:
     def tip(self) -> LocalText:
         return tr(f"field.{self.path}.tip")
 
+    @property
+    def help(self) -> Optional[LocalText]:
+        """Longer explanation behind the help button of the UI, None for simple fields."""
+        key = f"field.{self.path}.help"
+        return tr(key) if has_text(key) else None
+
     def option_label(self, value: str) -> LocalText:
         return tr(f"option.{self.path}.{value}")
 
@@ -784,7 +790,7 @@ def schema() -> dict[str, Any]:
     return {
         "fields": [
             {
-                "path": m.path, "label": m.label, "tip": m.tip, "kind": m.kind, "lo": m.lo, "hi": m.hi,
+                "path": m.path, "label": m.label, "tip": m.tip, "help": m.help, "kind": m.kind, "lo": m.lo, "hi": m.hi,
                 "strict_lo": m.strict_lo, "options": [[o, m.option_label(o)] for o in m.options] if m.options else None,
                 "group": m.group, "optional": m.optional,
             }

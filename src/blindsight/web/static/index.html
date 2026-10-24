@@ -35,17 +35,17 @@
         <h2 data-i18n="ui.geometry.rod">Gewindestange</h2><div class="form" id="f-rod"></div></div>
       <div><h2 data-i18n="ui.geometry.motor">Motor und Zahnrad</h2><div class="form" id="f-motor"></div></div>
       <div>
-        <h2 data-i18n="ui.geometry.preview">Motor Vorschau, Draufsicht</h2>
+        <h2 data-i18n="ui.geometry.preview" data-help="ui.help.preview">Motor Vorschau, Draufsicht</h2>
         <svg id="motorPreview" viewBox="0 0 100 100"></svg>
         <p class="hint" data-i18n="ui.geometry.preview_hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehäuse.</p>
         <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Kontur kommt aus der Motor Skizze. Breite, Tiefe, Achsversatz und Zahnradabstand werden ignoriert.</span>
           <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button></div>
         <div class="toolbar"><button id="btnOpenSketch" class="primary" data-i18n="ui.geometry.open_sketch">Kontur in der Motor Skizze bearbeiten</button></div>
-        <details><summary data-i18n="ui.geometry.svg_import">SVG Import</summary>
+        <details><summary data-i18n="ui.geometry.svg_import" data-help="ui.help.svg_import">SVG Import</summary>
           <p class="hint" data-i18n="ui.geometry.svg_hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Maßstab nicht eindeutig, wird er abgefragt. Das Ergebnis ist eine Skizze.</p>
           <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
         </details>
-        <details><summary data-i18n="ui.library.title">Motor Bibliothek (lokal im Browser)</summary>
+        <details><summary data-i18n="ui.library.title" data-help="ui.help.library">Motor Bibliothek (lokal im Browser)</summary>
           <div class="toolbar"><input id="libName" data-i18n-placeholder="ui.library.name" placeholder="Name" size="14"><button id="libSave" data-i18n="ui.library.save">Speichern</button></div>
           <div class="toolbar"><select id="libSel"></select><button id="libLoad" data-i18n="ui.library.load">Laden</button><button id="libDel" data-i18n="ui.library.delete">Löschen</button></div>
           <div class="toolbar"><button id="libExport" data-i18n="ui.library.export">Motor als JSON</button><label class="btn"><span data-i18n="ui.library.import">Motor JSON laden</span><input type="file" id="libImport" accept=".json" hidden></label></div>
@@ -56,7 +56,7 @@
   <section id="tab-sketch" class="tab">
     <div id="skRoot">
       <aside id="skLeft">
-        <h2 data-i18n="ui.sketch.tools">Werkzeuge</h2>
+        <h2 data-i18n="ui.sketch.tools" data-help="ui.help.sketch_tools">Werkzeuge</h2>
         <div class="toolbar">
           <button id="skDraw" data-i18n="ui.sketch.draw" data-i18n-title="ui.sketch.draw_tip">Polygon zeichnen</button>
           <button id="skFromMotor" data-i18n="ui.sketch.from_rect" data-i18n-title="ui.sketch.from_rect_tip">Aus Rechteck</button>
@@ -66,7 +66,7 @@
           <button id="skUndo" data-i18n="ui.sketch.undo" data-i18n-title="ui.sketch.undo_tip">Rückgängig</button><button id="skRedo" data-i18n="ui.sketch.redo" data-i18n-title="ui.sketch.redo_tip">Wiederholen</button>
           <button id="skFit" data-i18n="ui.sketch.fit">Einpassen</button>
         </div>
-        <h2 data-i18n="ui.sketch.relations">Beziehungen und Maße</h2>
+        <h2 data-i18n="ui.sketch.relations" data-help="ui.help.sketch_relations">Beziehungen und Maße</h2>
         <p class="hint" data-i18n="ui.sketch.relations_hint">Punkte oder Seiten anklicken (Umschalt für mehrere), dann ein Werkzeug wählen.</p>
         <div class="toolbar skCons" id="skConsBar">
           <button data-sk-add="length" data-i18n="ui.sketch.tool.length">Länge</button><button data-sk-add="angle" data-i18n="ui.sketch.tool.angle">Winkel</button>
@@ -90,8 +90,8 @@
         <div id="skStatus" class="statusBox"></div>
       </div>
       <aside id="skRight">
-        <h2 data-i18n="ui.sketch.constraints">Constraints</h2><div id="skCons"></div>
-        <h2 data-i18n="ui.sketch.center_distance">Achsabstand</h2>
+        <h2 data-i18n="ui.sketch.constraints" data-help="ui.help.sketch_constraints">Constraints</h2><div id="skCons"></div>
+        <h2 data-i18n="ui.sketch.center_distance" data-help="ui.help.sketch_cd">Achsabstand</h2>
         <div class="form" id="skCd"></div>
         <p class="hint" data-i18n="ui.sketch.cd_hint">Das Zahnrad liegt bei (-Achsabstand, 0), die Welle zeigt in y Richtung. Das Gehäuse sitzt dahinter. Der ganze Motor dreht um die Stange im Ursprung.</p>
         <button id="skDrop" data-i18n="ui.sketch.drop">Skizze verwerfen (zurück zum Rechteck)</button>
@@ -101,9 +101,9 @@
   <section id="tab-levels" class="tab">
     <div class="cols">
       <div><h2 data-i18n="ui.levels.layers">Ebenen</h2><div class="form" id="f-stack"></div>
-        <h2 data-i18n="ui.levels.per_layer">Einstellungen je Motorebene</h2><div id="planeTable"></div>
+        <h2 data-i18n="ui.levels.per_layer" data-help="ui.help.plane_table">Einstellungen je Motorebene</h2><div id="planeTable"></div>
         <p class="hint" data-i18n="ui.levels.hint">Leer lassen heißt Standard. Winkel als Liste mit Komma. Maximale Motoranzahl, erlaubte Ebene und eigene Dicke sind optional.</p></div>
-      <div><h2 data-i18n="ui.levels.computed">Berechnete Ebenen und Stangenlängen</h2><div id="levelInfo"></div>
+      <div><h2 data-i18n="ui.levels.computed" data-help="ui.help.levels">Berechnete Ebenen und Stangenlängen</h2><div id="levelInfo"></div>
         <svg id="sectionPreview" viewBox="0 0 300 200"></svg></div>
     </div>
   </section>
@@ -112,17 +112,17 @@
       <div><h2 data-i18n="ui.bounds.title">Bauraum (Draufsicht)</h2><div class="form" id="f-bounds"></div>
         <svg id="boundsPreview" viewBox="0 0 100 100"></svg>
         <p class="hint" data-i18n="ui.bounds.origin">Ursprung (0, 0) unten links, alle Längen in mm.</p></div>
-      <div><h2 data-i18n="ui.bounds.obstacles">Feste Hindernisse und Sperrzonen</h2><div id="obsTable"></div>
+      <div><h2 data-i18n="ui.bounds.obstacles" data-help="ui.help.obstacles">Feste Hindernisse und Sperrzonen</h2><div id="obsTable"></div>
         <button id="obsAdd" data-i18n="ui.bounds.add_obstacle">Hindernis hinzufügen</button>
         <p class="hint" data-i18n="ui.bounds.obstacle_hint">Ohne Ebene gilt das Hindernis über alle Ebenen. Mit Ebene ist es eine Sperrzone nur für diese Motorebene.</p>
-        <h2 data-i18n="ui.bounds.zones">Montagebereiche je Ebene</h2><div id="zoneTable"></div>
+        <h2 data-i18n="ui.bounds.zones" data-help="ui.help.zones">Montagebereiche je Ebene</h2><div id="zoneTable"></div>
         <button id="zoneAdd" data-i18n="ui.bounds.add_zone">Bereich hinzufügen</button>
         <p class="hint" data-i18n="ui.bounds.zone_hint">Gehäuse müssen vollständig in einem der Bereiche der Ebene liegen. Ohne Eintrag gilt der ganze Bauraum.</p></div>
     </div>
   </section>
   <section id="tab-holes" class="tab">
     <div class="cols">
-      <div><h2 data-i18n="ui.holes.title">Lochbild Generator</h2>
+      <div><h2 data-i18n="ui.holes.title" data-help="ui.help.holes">Lochbild Generator</h2>
         <p class="hint" data-i18n="ui.holes.intro">Löcher von G0 in mm eingeben, Ursprung (0, 0) unten links. Das Ergebnis ist eine JSON Datei für feste Löcher oder eine eigene, sich wiederholende Kachel.</p>
         <div class="toolbar">
           <label><input type="radio" name="holeMode" value="fixed" checked> <span data-i18n="ui.holes.mode_fixed">Festes Lochbild (G0)</span></label>
@@ -133,7 +133,7 @@
           <label for="holeTileH" data-i18n="ui.holes.tile_height">Kachelhöhe [mm]</label><input id="holeTileH" type="number" step="any" min="0" value="30">
           <label for="holeTileScalable" data-i18n="ui.holes.scalable" data-i18n-title="ui.holes.scalable_tip">Skalierbar</label><input id="holeTileScalable" type="checkbox">
         </div>
-        <h2 data-i18n="ui.holes.holes">Löcher</h2>
+        <h2 data-i18n="ui.holes.holes" data-help="ui.help.hole_table">Löcher</h2>
         <div id="holeTable"></div>
         <div class="toolbar"><button id="holeAdd" data-i18n="ui.holes.add">Loch hinzufügen</button><button id="holeClear" data-i18n="ui.holes.clear">Alle löschen</button></div>
         <details><summary data-i18n="ui.holes.paste">Aus Text einfügen</summary>
@@ -141,7 +141,7 @@
           <textarea id="holePaste" rows="6" style="width:100%"></textarea>
           <div class="toolbar"><button id="holePasteAdd" data-i18n="ui.holes.paste_add">Anhängen</button><button id="holePasteReplace" data-i18n="ui.holes.paste_replace">Ersetzen</button></div>
         </details>
-        <details><summary data-i18n="ui.holes.fill">Mit Muster füllen</summary>
+        <details><summary data-i18n="ui.holes.fill" data-help="ui.help.hole_fill">Mit Muster füllen</summary>
           <div class="form">
             <label for="holeFillPattern" data-i18n="ui.holes.fill_pattern">Muster</label><select id="holeFillPattern"></select>
             <label for="holeFillPitch" data-i18n="ui.holes.fill_pitch">Lochabstand [mm]</label><input id="holeFillPitch" type="number" step="any" min="0" value="20">
@@ -149,7 +149,7 @@
           </div>
           <div class="toolbar"><button id="holeFillBtn" data-i18n="ui.holes.fill_run">Füllen</button></div>
         </details></div>
-      <div><h2 data-i18n="ui.holes.preview">Vorschau</h2>
+      <div><h2 data-i18n="ui.holes.preview" data-help="ui.help.hole_preview">Vorschau</h2>
         <svg id="holePreview" viewBox="0 0 100 100"></svg>
         <p class="hint" data-i18n="ui.holes.preview_hint">Klicken setzt ein Loch, Ziehen verschiebt es, Rechtsklick löscht es.</p>
         <div id="holeStatus" class="statusBox"></div>
@@ -163,7 +163,7 @@
   </section>
   <section id="tab-optim" class="tab">
     <div class="cols">
-      <div><h2 data-i18n="ui.optim.priorities">Prioritäten der Ziele</h2><div id="weights"></div>
+      <div><h2 data-i18n="ui.optim.priorities" data-help="ui.help.weights">Prioritäten der Ziele</h2><div id="weights"></div>
         <div class="toolbar"><span data-i18n="ui.optim.preset">Voreinstellung</span>
           <button data-preset="count" data-i18n="ui.optim.preset_count">Viele Stangen</button>
           <button data-preset="area" data-i18n="ui.optim.preset_area">Kleine Fläche</button>
@@ -172,7 +172,7 @@
         <p class="hint" data-i18n="ui.optim.weights_hint">Relative Gewichte, werden normiert.</p>
         <h2 data-i18n="ui.optim.search">Suche</h2><div class="form" id="f-search"></div>
         <p id="holesInfo" class="hint" hidden></p></div>
-      <div><h2 data-i18n="ui.optim.computation">Berechnung</h2>
+      <div><h2 data-i18n="ui.optim.computation" data-help="ui.help.computation">Berechnung</h2>
         <button id="btnStart" class="primary" data-i18n="ui.optim.start">Optimierung starten</button>
         <button id="btnCancel" disabled data-i18n="ui.optim.cancel">Abbrechen</button>
         <div class="progress"><div id="bar"></div></div>
@@ -187,7 +187,7 @@
       <div id="statusBox" class="statusBox"></div>
       <div class="toolbar">
         <label><span data-i18n="ui.results.solution">Lösung</span> <select id="solSel"></select></label>
-        <label><span data-i18n="ui.results.view">Ansicht</span> <select id="viewSel">
+        <label><span data-i18n="ui.results.view" data-help="ui.help.view">Ansicht</span> <select id="viewSel">
           <option value="top" data-i18n="ui.results.view_top">Draufsicht (alle Ebenen)</option>
           <option value="plane" data-i18n="ui.results.view_plane">Einzelne Ebene</option>
           <option value="section" data-i18n="ui.results.view_section">Seitenschnitt</option>
@@ -195,19 +195,19 @@
         </select></label>
         <label id="planeLabel"><span data-i18n="ui.results.layer">Ebene</span> <select id="planeSel"></select></label>
         <label><input type="checkbox" id="optDist" checked> <span data-i18n="ui.results.distances">Abstände</span></label>
-        <label><input type="checkbox" id="optEdit"> <span data-i18n="ui.results.edit">Bearbeiten</span></label>
+        <label><input type="checkbox" id="optEdit"> <span data-i18n="ui.results.edit" data-help="ui.help.edit">Bearbeiten</span></label>
         <select id="expFmt" data-i18n-title="ui.results.export_format"></select>
-        <button id="btnExport" data-i18n="ui.results.export">Exportieren</button>
+        <button id="btnExport" data-i18n="ui.results.export">Exportieren</button><span data-help="ui.help.export" data-help-title="ui.results.export"></span>
         <button id="btnSaveResult" data-i18n="ui.results.save">Ergebnis speichern</button>
         <label class="btn"><span data-i18n="ui.results.load">Ergebnis laden</span><input type="file" id="fileResult" accept=".json" hidden></label>
       </div>
       <div id="editPanel" class="statusBox" hidden></div>
       <div class="cols resultCols">
         <div class="viewWrap"><svg id="view"></svg><div class="legend" id="legend"></div></div>
-        <div><h2 data-i18n="ui.results.metrics">Kennzahlen</h2><table class="kv" id="metrics"></table>
-          <h2 data-i18n="ui.results.objective">Zielfunktion</h2><table class="kv" id="terms"></table>
+        <div><h2 data-i18n="ui.results.metrics" data-help="ui.help.metrics">Kennzahlen</h2><table class="kv" id="metrics"></table>
+          <h2 data-i18n="ui.results.objective" data-help="ui.help.objective">Zielfunktion</h2><table class="kv" id="terms"></table>
           <h2 data-i18n="ui.results.compare">Vergleich der Lösungen</h2><table class="kv" id="compare"></table>
-          <h2 data-i18n="ui.results.closest">Engste Stellen</h2><table class="kv" id="pairs"></table>
+          <h2 data-i18n="ui.results.closest" data-help="ui.help.closest">Engste Stellen</h2><table class="kv" id="pairs"></table>
           <h2 data-i18n="ui.results.messages">Hinweise</h2><ul id="messages"></ul>
           <h2 data-i18n="ui.results.collisions">Kollisionen</h2><ul id="collisions"></ul></div>
       </div>
@@ -220,6 +220,7 @@
 <script src="/static/js/i18n/en.js"></script>
 <script src="/static/js/i18n/fr.js"></script>
 <script src="/static/js/core/util.js"></script>
+<script src="/static/js/core/help.js"></script>
 <script src="/static/js/core/state.js"></script>
 <script src="/static/js/ui/forms.js"></script>
 <script src="/static/js/ui/weights.js"></script>

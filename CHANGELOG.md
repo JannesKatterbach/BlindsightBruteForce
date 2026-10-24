@@ -13,6 +13,7 @@ Neue Funktionen
   `/api/holes/check`
 - Export der Schraubenpositionen je Ebene als JSON (G0 bis Gn, immer da, nur eingefahren da, nur ausgefahren da) mit
   Motorlage je Stange. CLI `--rods`
+- i Knöpfe mit Erklärungen an allen komplexeren Feldern und Bereichen der Oberfläche, in allen drei Sprachen
 - Sprachen Deutsch, Englisch, Französisch für Oberfläche und alle Meldungen des Kerns. Sprachwahl im Kopf, Server antwortet
   je Anfrage in der gewählten Sprache (auch für frühere Ergebnisse), CLI `--lang`
 

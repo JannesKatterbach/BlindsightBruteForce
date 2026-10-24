@@ -261,3 +261,29 @@ def test_hole_generator_tile_mode_sets_an_own_pattern(page):
 
 def cfg_value(page, path):
     return page.evaluate(f"getPath(cfg, '{path}')")
+
+
+def test_help_buttons_explain_fields_and_sections(page):
+    page.click("[data-tab=geometry]")
+    page.click("label[data-label-for='rod.stroke'] .helpBtn")
+    pop = page.locator("#helpPop")
+    assert pop.is_visible() and "G0" in pop.inner_text() and "Hub" in pop.inner_text()
+    assert "[mm]" in page.inner_text("label[data-label-for='rod.stroke']")  # the button adds no text to the label
+    page.keyboard.press("Escape")
+    assert pop.is_hidden()
+    # Simple fields get no help button, complex ones do
+    assert page.locator("label[data-label-for='rod.diameter'] .helpBtn").count() == 0
+    page.click("[data-tab=bounds]")
+    page.click("#tab-bounds h2[data-help='ui.help.obstacles'] .helpBtn")
+    assert "Sperrzone" in pop.inner_text()
+    page.mouse.click(5, 5)  # a click elsewhere closes it
+    assert pop.is_hidden()
+    # Help follows a language switch
+    page.select_option("#langSel", "en")
+    page.wait_for_function("document.querySelector('[data-tab=results]').textContent === 'Results'")
+    page.click("[data-tab=optim]")
+    page.wait_for_selector("label[data-label-for='search.optimizer'] .helpBtn")
+    page.click("label[data-label-for='search.optimizer'] .helpBtn")
+    assert "Repeating pattern" in pop.inner_text()
+    page.click("#tab-optim h2[data-help='ui.help.weights'] .helpBtn")
+    assert "Only the ratio" in pop.inner_text()

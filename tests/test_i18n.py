@@ -44,6 +44,13 @@ def test_every_key_used_in_the_code_exists():
     assert used and not used - set(catalog("de"))
 
 
+def test_complex_fields_have_help():
+    keys = set(catalog("de"))
+    for path in ("clearance", "rod.stroke", "motor.center_distance", "stack.mode", "search.optimizer", "search.pattern",
+                 "search.pattern_pitch", "search.max_block_holes", "search.weights.area"):
+        assert f"field.{path}.help" in keys, path
+
+
 def test_dynamic_keys_exist():
     keys = set(catalog("de"))
     for meta in FIELD_META:
@@ -172,7 +179,7 @@ def test_every_ui_key_exists():
         text = path.read_text(encoding="utf-8")
         used.update(re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', text))
         used.update(re.findall(r'data-i18n="([a-z0-9_.]+)"', text))
-    used.update(re.findall(r'data-i18n(?:-title|-placeholder)?="([a-z0-9_.]+)"', (STATIC / "index.html").read_text(encoding="utf-8")))
+    used.update(re.findall(r'data-(?:i18n(?:-title|-placeholder)?|help(?:-title)?)="([a-z0-9_.]+)"', (STATIC / "index.html").read_text(encoding="utf-8")))
     assert not {key for key in used if not key.endswith(".")} - keys
     dynamic = {
         "ui.job.": ("queued", "running", "finished", "failed", "cancelled"),
