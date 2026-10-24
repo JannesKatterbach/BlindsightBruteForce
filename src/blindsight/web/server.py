@@ -292,7 +292,10 @@ class App:
         if job.result is None:
             return error_response(409, "Noch kein Ergebnis")
         out = {"result": job.result.as_dict(), "geometry": None}
-        out["result"]["solutions"] = [{"score": s.score.as_dict(), "count": len(s.placements)} for s in job.result.solutions]
+        out["result"]["solutions"] = [
+            {"score": s.score.as_dict(), "count": len(s.placements), **({"tile": s.tile} if s.tile else {})}
+            for s in job.result.solutions
+        ]
         if job.result.solutions:
             idx = self._solution_index(req, len(job.result.solutions))
             out["geometry"] = build_geometry(job.model, job.result.solutions[idx].placements)

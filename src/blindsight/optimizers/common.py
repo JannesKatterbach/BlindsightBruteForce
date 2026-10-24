@@ -73,15 +73,15 @@ class SearchBase:
         return self.stop.should_stop() or self.stagnated()
 
     # -- Verwaltung der besten Loesungen ----------------------------------------
-    def consider(self, placements: list[Placement]) -> Optional[Score]:
-        """Bewertet ein Layout und merkt es sich, wenn es zu den besten gehoert."""
+    def consider(self, placements: list[Placement], tile: Optional[dict] = None) -> Optional[Score]:
+        """Score a layout and keep it if it is among the best. tile describes a repeating pattern, if any."""
         if not placements:
             return None
         key = layout_signature(placements)
         if key in self.solutions:
             return self.solutions[key].score
         score = evaluate(self.model, placements, self.se.weights, self.target)
-        self.solutions[key] = Solution(list(placements), score)
+        self.solutions[key] = Solution(list(placements), score, tile)
         if len(self.solutions) > max(self.se.top_k * KEEP_FACTOR, KEEP_MIN):
             worst = min(self.solutions.items(), key=lambda kv: kv[1].score.total)[0]
             del self.solutions[worst]

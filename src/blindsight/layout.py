@@ -184,6 +184,11 @@ class Layout:
         self._reach = 2.0 * model.unit_radius + model.gap + REACH_SLACK
         self._cell = self._reach
 
+    @property
+    def reach(self) -> float:
+        """Largest rod to rod distance at which two units can still collide (mm)."""
+        return self._reach
+
     # -- Verwaltung ---------------------------------------------------------
     def __len__(self) -> int:
         return len(self.units)

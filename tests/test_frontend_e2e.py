@@ -156,3 +156,14 @@ def test_sketch_drag_with_slow_server_answers(page):
     page.wait_for_function("__sk.busy === 0", timeout=15000)
     page.unroute("**/api/sketch/solve")
     assert page.evaluate("__sk.hist.length") >= 1
+
+
+def test_repeating_tile_run_shows_tile_outlines(page):
+    page.select_option("#exampleSel", "repeating_tile")
+    page.wait_for_function("cfg.search.optimizer === 'periodic_tile'")
+    page.click("[data-tab=optim]")
+    change(page, "#in-search-time_limit_s", "4")
+    page.click("#btnStart")
+    page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
+    assert "Kachel 2 Schrauben" in page.inner_text("#statusBox")
+    assert page.locator("#view rect.tile").count() >= 1

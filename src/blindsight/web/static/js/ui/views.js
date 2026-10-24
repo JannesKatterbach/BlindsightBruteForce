@@ -38,6 +38,7 @@ function drawPlan(svg, g, plane, live) {
   drawPlanRods(ctx, plane, live);
   if (!live && $("#optDist").checked && plane == null) drawPlanDistances(ctx);
   if (!live) drawPlanTightSpots(ctx);
+  if (!live) drawTileGrid(ctx);
   g.collisions.forEach((c) => el("circle", { cx: c.x, cy: -c.y, r: ctx.fs * 1.4, fill: "none", stroke: COLORS.bad, "stroke-width": w / 400, "pointer-events": "none" }, svg));
 }
 
@@ -80,6 +81,15 @@ function drawPlanTightSpots({ svg, g, w, fs }) {
     if (p.gap >= g.required_gap * TIGHT_FACTOR) continue;
     const stroke = p.gap < g.required_gap - GAP_EPS ? COLORS.bad : COLORS.tight;
     el("circle", { cx: p.x, cy: -p.y, r: fs, fill: "none", stroke, "stroke-width": w / 600, "pointer-events": "none" }, svg);
+  }
+}
+
+/** Outlines of the placed tiles of a repeating pattern. */
+function drawTileGrid({ svg, w }) {
+  const tile = currentTile();
+  if (!tile) return;
+  for (const [x, y] of tile.origins) {
+    el("rect", { x, y: -(y + tile.height), width: tile.width, height: tile.height, fill: "none", stroke: "#8a6", "stroke-width": w / 900, "stroke-dasharray": `${w / 300} ${w / 300}`, "pointer-events": "none", class: "tile" }, svg);
   }
 }
 

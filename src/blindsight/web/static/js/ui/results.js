@@ -78,6 +78,14 @@ function renderStatusBox() {
   box.className = "statusBox" + (warn ? " warn" : "");
   box.innerHTML = `<b>${esc(RESULT_STATUS_LABELS[r.status] || r.status)}.</b> ${n} von ${r.target} Stangen platziert (${esc(r.optimizer)}). ` +
     (edited ? "<b>Manuell bearbeitet. Die Bewertung der Suche gilt nicht mehr.</b>" : `<b>${optimality}</b><br>${esc(r.optimality_note)}`);
+  const tile = currentTile();
+  if (tile) box.innerHTML += `<br>Kachel ${tile.rods} Schrauben (${tile.rows} x ${tile.cols}), ${round(tile.width, 2)} x ${round(tile.height, 2)} mm, ${tile.origins.length} Kacheln.`;
+}
+
+/** Repeating tile of the shown solution (periodic_tile only, not after manual edits). */
+function currentTile() {
+  const solution = lastResult && lastResult.solutions[solIndex];
+  return !edited && solution && solution.tile ? solution.tile : null;
 }
 
 function renderSolutionList() {

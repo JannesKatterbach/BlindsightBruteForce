@@ -271,6 +271,11 @@ class SearchSpec:
     refine_fraction: float = 0.35
     stagnation_s: Optional[float] = 6.0
     workers: int = 1
+    # Repeating pattern (optimizer periodic_tile). A tile holds tile_rods rods and repeats over the build area.
+    tile_rods: int = 2
+    tile_width: Optional[float] = None  # mm, None = search the smallest width
+    tile_height: Optional[float] = None  # mm, None = search the smallest height
+    tile_step: float = 0.5  # mm, raster of tile sizes and rod spacings
 
 
 # ---------------------------------------------------------------------------
@@ -572,7 +577,8 @@ FIELD_META: list[Meta] = [
     Meta("bounds.parts_in_bounds", "Im Bauraum müssen liegen", "Alle Bauteile oder nur die Stangen", "enum", group="bounds",
          options=(("all", "alle Bauteile"), ("rods", "nur Stangen"))),
     Meta("search.optimizer", "Optimierer", "Suchstrategie", "enum", group="search",
-         options=(("pattern_greedy", "Muster und lokale Suche"), ("anneal_free", "Freie Verteilung (Annealing)"), ("exhaustive_small", "Exakt auf Raster (kleine Aufgaben)"))),
+         options=(("pattern_greedy", "Muster und lokale Suche"), ("anneal_free", "Freie Verteilung (Annealing)"), ("exhaustive_small", "Exakt auf Raster (kleine Aufgaben)"),
+                  ("periodic_tile", "Wiederholendes Muster (Kachel)"))),
     Meta("search.layout_goal", "Anordnungsziel", "compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum", "enum", group="search",
          options=(("compact", "Kompakt (kleine Grundfläche)"), ("spread", "Verteilt über den Bauraum"))),
     Meta("search.patterns", "Muster (square, hex_x, hex_y)", "Verteilungsstruktur der Kandidaten", "liststr", group="search"),
@@ -587,6 +593,10 @@ FIELD_META: list[Meta] = [
     Meta("search.top_k", "Anzahl Lösungen", "Wie viele beste Lösungen behalten werden", "int", 1, 50, group="search"),
     Meta("search.refine_fraction", "Anteil lokale Suche", "Zeitanteil der Verfeinerung (0 bis 0.9)", "num", 0, 0.9, group="search"),
     Meta("search.stagnation_s", "Stagnation (s, optional)", "Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert", "num", 0, 86400, True, group="search", optional=True),
+    Meta("search.tile_rods", "Schrauben je Kachel", "Kachelmuster. So viele Schrauben enthält eine Kachel, die sich über den Bauraum wiederholt (Ebene und Motorwinkel wiederholen sich mit)", "int", 1, 8, group="search"),
+    Meta("search.tile_width", "Kachelbreite (optional)", "Kachelmuster. Breite der Kachel in x, leer heißt kleinste passende Breite suchen", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.tile_height", "Kachelhöhe (optional)", "Kachelmuster. Höhe der Kachel in y, leer heißt kleinste passende Höhe suchen", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.tile_step", "Kachelraster", "Kachelmuster. Raster der Kachelgrößen und Schraubenabstände", "len", 0, 100, True, group="search"),
     Meta("search.workers", "Parallele Läufe", "Anzahl Prozesse für unabhängige Seeds (1 = ohne Parallelisierung)", "int", 1, 64, group="search"),
     Meta("search.weights.count", "Anzahl Stangen", "Gewicht des Ziels Anzahl", "num", 0, 1000, group="weights"),
     Meta("search.weights.area", "Kleine Grundfläche", "Gewicht des Ziels Grundfläche", "num", 0, 1000, group="weights"),

@@ -30,9 +30,13 @@ STATUS_INFEASIBLE = "infeasible"
 class Solution:
     placements: list[Placement]
     score: Score
+    tile: Optional[dict] = None  # repeating tile the layout is built from (periodic_tile only)
 
     def as_dict(self) -> dict:
-        return {"placements": [p.as_dict() for p in self.placements], "score": self.score.as_dict()}
+        out = {"placements": [p.as_dict() for p in self.placements], "score": self.score.as_dict()}
+        if self.tile is not None:
+            out["tile"] = self.tile
+        return out
 
 
 @dataclass

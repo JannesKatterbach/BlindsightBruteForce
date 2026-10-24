@@ -10,17 +10,18 @@ from __future__ import annotations
 from typing import Optional
 
 from ..layout import Counter
-from . import anneal_free, exhaustive_small, pattern_greedy  # noqa: F401  (registrieren sich)
+from . import anneal_free, exhaustive_small, pattern_greedy, periodic_tile  # noqa: F401  (register themselves)
 from .anneal_free import AnnealFreeOptimizer
 from .base import OptimizationResult, Optimizer, ProgressCallback, ProgressInfo, Solution, StopToken
 from .exhaustive_small import ExhaustiveSmallOptimizer
 from .parallel import run_parallel
 from .pattern_greedy import PatternGreedyOptimizer
+from .periodic_tile import PeriodicTileOptimizer
 from .registry import OPTIMIZERS, get_optimizer, register
 
 __all__ = [
     "OPTIMIZERS", "get_optimizer", "register", "Optimizer", "OptimizationResult", "ProgressInfo", "Solution",
-    "StopToken", "PatternGreedyOptimizer", "AnnealFreeOptimizer", "ExhaustiveSmallOptimizer", "run_optimizer",
+    "StopToken", "PatternGreedyOptimizer", "AnnealFreeOptimizer", "ExhaustiveSmallOptimizer", "PeriodicTileOptimizer", "run_optimizer",
 ]
 
 
