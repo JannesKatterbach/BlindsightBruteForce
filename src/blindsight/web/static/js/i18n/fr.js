@@ -134,7 +134,7 @@ I18N_CATALOGS.fr = {
   "ui.result.placed": "{n} tiges sur {target} placées ({optimizer}).",
   "ui.result.proven": "Optimalité prouvée.",
   "ui.result.solution_option": "{i}. Score {score} ({count} tiges)",
-  "ui.result.tile": "Tuile {rods} tiges ({rows} x {cols}), {width} x {height} mm, {count} tuiles.",
+  "ui.result.tile": "Motif {pattern}, distance entre trous {pitch} mm. La disposition des moteurs se répète toutes les {cols} x {rows} cellules ({rods} trous, bloc {width} x {height} mm).",
   "ui.results.closest": "Points les plus serrés",
   "ui.results.collisions": "Collisions",
   "ui.results.compare": "Comparaison des solutions",

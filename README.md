@@ -303,15 +303,19 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `search.angle_max` | Winkel bis (Grad, exklusiv). 360 = voller Kreis |  | >= -3600, <= 3600 |
 | `search.allowed_angles` | Nur diese Winkel (Liste, leer = Raster) (optional). Explizite Liste erlaubter Motorwinkel |  |  |
 | `search.time_limit_s` | Zeitlimit (s). Maximale Rechenzeit |  | > 0, <= 86400 |
-| `search.max_candidates` | Max. Kandidaten. Maximale Anzahl geprüften Platzierungen |  | >= 1 |
+| `search.max_candidates` | Max. Kandidaten. Maximale Anzahl geprüfter Platzierungen |  | >= 1 |
 | `search.seed` | Seed. Zufallsstartwert für reproduzierbare Läufe |  | >= 0 |
 | `search.top_k` | Anzahl Lösungen. Wie viele beste Lösungen behalten werden |  | >= 1, <= 50 |
 | `search.refine_fraction` | Anteil lokale Suche. Zeitanteil der Verfeinerung (0 bis 0.9) |  | >= 0, <= 0.9 |
 | `search.stagnation_s` | Stagnation (s, optional). Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert |  | > 0, <= 86400 |
-| `search.tile_rods` | Schrauben je Kachel. Kachelmuster. So viele Schrauben enthält eine Kachel, die sich über den Bauraum wiederholt (Ebene und Motorwinkel wiederholen sich mit) |  | >= 1, <= 8 |
-| `search.tile_width` | Kachelbreite (optional). Kachelmuster. Breite der Kachel in x, leer heißt kleinste passende Breite suchen | mm | > 0, <= 100000 |
-| `search.tile_height` | Kachelhöhe (optional). Kachelmuster. Höhe der Kachel in y, leer heißt kleinste passende Höhe suchen | mm | > 0, <= 100000 |
-| `search.tile_step` | Kachelraster. Kachelmuster. Raster der Kachelgrößen und Schraubenabstände | mm | > 0, <= 100 |
+| `search.pattern` | Muster. Wiederholendes Muster. Form des Lochbilds. Die Motoranordnung je Loch sucht das Programm und wiederholt sie |  | `square` / `centered_square` / `hex` / `hex_rotated` / `staggered` / `rectangle` / `free` / `custom` |
+| `search.pattern_pitch` | Lochabstand (optional). Wiederholendes Muster. Abstand zum nächsten Loch. Leer heißt automatisch (kompakt kleinster, verteilt größter passender Abstand). Bei eigener Kachel die Kachelbreite | mm | > 0, <= 100000 |
+| `search.pattern_pitch_y` | Zweiter Abstand (optional). Rechteck. Abstand in y. Versetzte Reihen. Reihenabstand. Leer heißt gleich dem Lochabstand (Rechteck) bzw. dicht wie Kreise (versetzte Reihen) | mm | > 0, <= 100000 |
+| `search.max_block_holes` | Größter Wiederholblock. Wiederholendes Muster. Höchstens so viele Löcher umfasst der Block, nach dem sich die Motoranordnung wiederholt |  | >= 1, <= 36 |
+| `search.tile_rods` | Schrauben je Kachel. Nur Muster frei. So viele Schrauben enthält eine Kachel, die sich über den Bauraum wiederholt (Ebene und Motorwinkel wiederholen sich mit) |  | >= 1, <= 8 |
+| `search.tile_width` | Kachelbreite (optional). Nur Muster frei. Breite der Kachel in x, leer heißt kleinste passende Breite suchen | mm | > 0, <= 100000 |
+| `search.tile_height` | Kachelhöhe (optional). Nur Muster frei. Höhe der Kachel in y, leer heißt kleinste passende Höhe suchen | mm | > 0, <= 100000 |
+| `search.tile_step` | Musterraster. Wiederholendes Muster. Raster, auf dem Lochabstände und Kachelgrößen gesucht werden | mm | > 0, <= 100 |
 | `search.workers` | Parallele Läufe. Anzahl Prozesse für unabhängige Seeds (1 = ohne Parallelisierung) |  | >= 1, <= 64 |
 | `search.weights.count` | Anzahl Stangen. Gewicht des Ziels Anzahl |  | >= 0, <= 1000 |
 | `search.weights.area` | Kleine Grundfläche. Gewicht des Ziels Grundfläche |  | >= 0, <= 1000 |

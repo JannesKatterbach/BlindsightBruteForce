@@ -6,6 +6,40 @@ const GROUP_TARGET = { general: "f-general", rod: "f-rod", motor: "f-motor", sta
 const TABLE_FIELDS = new Set(["stack.allowed_planes", "stack.thicknesses"]);
 
 const fieldByPath = (path) => schema.fields.find((f) => f.path === path);
+/** Label of an option of an enum field in the current language (the value itself if unknown). */
+function optionLabel(path, value) {
+  const field = fieldByPath(path);
+  const option = field && field.options && field.options.find(([v]) => v === value);
+  return option ? option[1] : value;
+}
+
+// Fields that only matter for some settings. They are hidden otherwise (the values stay in cfg)
+const usesPattern = (c) => c.search.optimizer === "periodic_tile";
+const FIELD_VISIBLE = {
+  "search.pattern": usesPattern,
+  "search.pattern_pitch": (c) => usesPattern(c) && c.search.pattern !== "free",
+  "search.pattern_pitch_y": (c) => usesPattern(c) && ["rectangle", "staggered"].includes(c.search.pattern),
+  "search.max_block_holes": (c) => usesPattern(c) && c.search.pattern !== "free",
+  "search.tile_rods": (c) => usesPattern(c) && c.search.pattern === "free",
+  "search.tile_width": (c) => usesPattern(c) && c.search.pattern === "free",
+  "search.tile_height": (c) => usesPattern(c) && c.search.pattern === "free",
+  "search.tile_step": usesPattern,
+  "search.patterns": (c) => c.search.optimizer === "pattern_greedy",
+  "search.fixed_pitch": (c) => ["pattern_greedy", "exhaustive_small"].includes(c.search.optimizer),
+};
+
+/** Show only the fields that matter for the current settings. */
+function updateFieldVisibility() {
+  for (const [path, visible] of Object.entries(FIELD_VISIBLE)) {
+    const input = document.querySelector(`[data-path="${path}"]`);
+    const label = document.querySelector(`[data-label-for="${path}"]`);
+    if (!input || !label) continue;
+    const show = !!visible(cfg);
+    for (const node of [input, label]) node.hidden = !show;
+    const next = input.nextElementSibling;
+    if (next && next.classList.contains("errmsg")) next.hidden = !show;
+  }
+}
 const inputId = (path) => "in-" + path.replace(/\./g, "-");
 
 function buildForms() {
@@ -45,6 +79,7 @@ function createInput(field) {
     const before = JSON.stringify(getPath(cfg, field.path));
     if (!readInput(input) || JSON.stringify(getPath(cfg, field.path)) === before) return;
     if (field.path.startsWith("stack.")) renderPlaneTable();  // layer count or thickness changed
+    updateFieldVisibility();
     refresh();
   });
   return input;
@@ -75,6 +110,7 @@ function writeInputs() {
     label.textContent = lenLabel(field.label, field.kind);
   }
   writeWeights();
+  updateFieldVisibility();
   renderPlaneTable();
   renderObstacles();
   renderZones();

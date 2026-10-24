@@ -65,9 +65,9 @@
     "top_k": 5,
     "refine_fraction": 0.35,
     "optimizer": "periodic_tile",
-    "tile_rods": 2,
-    "tile_width": null,
-    "tile_height": null,
-    "tile_step": 0.5
+    "tile_step": 0.5,
+    "pattern": "centered_square",
+    "pattern_pitch": null,
+    "max_block_holes": 12
   }
 }

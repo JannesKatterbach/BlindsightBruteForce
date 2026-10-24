@@ -39,6 +39,8 @@ MAX_ANGLE_COUNT = 100_000  # protection against tiny angle steps
 STACK_MODES = ("uniform", "gaps", "distances")
 MOUNT_MODES = ("top", "bottom")
 OBSTACLE_SHAPES = ("rect", "circle")
+# Hole patterns of the optimizer periodic_tile (see optimizers/periodic_tile.py)
+PATTERN_KINDS = ("square", "centered_square", "hex", "hex_rotated", "staggered", "rectangle", "free", "custom")
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +252,17 @@ class WeightsSpec:
 
 
 @dataclass
+class CustomTileSpec:
+    """Own repeating tile from the hole pattern generator. Holes in mm relative to the bottom left corner of the
+    tile (0 <= x < width, 0 <= y < height). scalable allows the program to scale the whole tile evenly."""
+
+    width: float = 20.0
+    height: float = 20.0
+    holes: list[list[float]] = field(default_factory=lambda: [[0.0, 0.0]])
+    scalable: bool = False
+
+
+@dataclass
 class SearchSpec:
     """Control of the search."""
 
@@ -269,7 +282,14 @@ class SearchSpec:
     refine_fraction: float = 0.35
     stagnation_s: Optional[float] = 6.0
     workers: int = 1
-    # Repeating pattern (optimizer periodic_tile). A tile holds tile_rods rods and repeats over the build area.
+    # Repeating pattern (optimizer periodic_tile). pattern chooses the hole lattice, pattern_pitch the distance to
+    # the nearest hole (None = search it). The motor arrangement repeats in blocks of at most max_block_holes holes.
+    pattern: str = "square"
+    pattern_pitch: Optional[float] = None  # mm
+    pattern_pitch_y: Optional[float] = None  # mm, second distance of rectangle and staggered rows
+    max_block_holes: int = 12
+    custom_tile: Optional[CustomTileSpec] = None  # pattern "custom"
+    # Pattern "free". A tile holds tile_rods rods and repeats over the build area.
     tile_rods: int = 2
     tile_width: Optional[float] = None  # mm, None = search the smallest width
     tile_height: Optional[float] = None  # mm, None = search the smallest height
@@ -481,10 +501,26 @@ def _check_search(proj: Project, errs: list[str]) -> None:
         errs.append(tr("config.angle_range"))
     if sum(search.weights.as_dict().values()) <= 0:
         errs.append(tr("config.weights_zero"))
+    _check_custom_tile(search, errs)
     try:
         proj.allowed_angle_list()
     except ConfigError as exc:
         errs.extend(exc.errors)
+
+
+def _check_custom_tile(search: SearchSpec, errs: list[str]) -> None:
+    tile = search.custom_tile
+    if tile is None:
+        if search.pattern == "custom":
+            errs.append(tr("config.custom_tile_missing"))
+        return
+    if not (is_finite_number(tile.width) and is_finite_number(tile.height) and tile.width > 0 and tile.height > 0):
+        errs.append(tr("config.custom_tile_size"))
+        return
+    inside = all(len(h) == 2 and all(is_finite_number(c) for c in h) and 0 <= h[0] < tile.width and 0 <= h[1] < tile.height
+                 for h in tile.holes)
+    if not tile.holes or not inside:
+        errs.append(tr("config.custom_tile_holes"))
 
 
 def _check_plane_key(label: str, key: str, n: int, errs: list[str]) -> None:
@@ -588,6 +624,10 @@ FIELD_META: list[Meta] = [
     Meta("search.top_k", "int", 1, 50, group="search"),
     Meta("search.refine_fraction", "num", 0, 0.9, group="search"),
     Meta("search.stagnation_s", "num", 0, 86400, True, group="search", optional=True),
+    Meta("search.pattern", "enum", options=PATTERN_KINDS, group="search"),
+    Meta("search.pattern_pitch", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.pattern_pitch_y", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.max_block_holes", "int", 1, 36, group="search"),
     Meta("search.tile_rods", "int", 1, 8, group="search"),
     Meta("search.tile_width", "len", 0, 1e5, True, group="search", optional=True),
     Meta("search.tile_height", "len", 0, 1e5, True, group="search", optional=True),

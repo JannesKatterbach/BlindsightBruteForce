@@ -134,7 +134,7 @@ I18N_CATALOGS.de = {
   "ui.result.placed": "{n} von {target} Stangen platziert ({optimizer}).",
   "ui.result.proven": "Optimalität bewiesen.",
   "ui.result.solution_option": "{i}. Score {score} ({count} Stangen)",
-  "ui.result.tile": "Kachel {rods} Schrauben ({rows} x {cols}), {width} x {height} mm, {count} Kacheln.",
+  "ui.result.tile": "Muster {pattern}, Lochabstand {pitch} mm. Die Motoranordnung wiederholt sich alle {cols} x {rows} Zellen ({rods} Löcher, Block {width} x {height} mm).",
   "ui.results.closest": "Engste Stellen",
   "ui.results.collisions": "Kollisionen",
   "ui.results.compare": "Vergleich der Lösungen",

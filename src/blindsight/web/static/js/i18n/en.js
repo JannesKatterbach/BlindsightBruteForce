@@ -134,7 +134,7 @@ I18N_CATALOGS.en = {
   "ui.result.placed": "{n} of {target} rods placed ({optimizer}).",
   "ui.result.proven": "Optimality proven.",
   "ui.result.solution_option": "{i}. Score {score} ({count} rods)",
-  "ui.result.tile": "Tile {rods} rods ({rows} x {cols}), {width} x {height} mm, {count} tiles.",
+  "ui.result.tile": "Pattern {pattern}, hole distance {pitch} mm. The motor arrangement repeats every {cols} x {rows} cells ({rods} holes, block {width} x {height} mm).",
   "ui.results.closest": "Closest spots",
   "ui.results.collisions": "Collisions",
   "ui.results.compare": "Comparison of the solutions",

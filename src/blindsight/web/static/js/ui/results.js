@@ -77,7 +77,10 @@ function renderStatusBox() {
     (edited ? `<b>${esc(t("ui.result.edited"))}</b>` : `<b>${esc(optimality)}</b><br>${esc(r.optimality_note)}`);
   const tile = currentTile();
   if (tile) {
-    box.innerHTML += "<br>" + esc(t("ui.result.tile", { rods: tile.rods, rows: tile.rows, cols: tile.cols, width: round(tile.width, 2), height: round(tile.height, 2), count: tile.origins.length }));
+    box.innerHTML += "<br>" + esc(t("ui.result.tile", {
+      pattern: optionLabel("search.pattern", tile.pattern), pitch: round(tile.pitch, 2), rods: tile.rods, rows: tile.rows, cols: tile.cols,
+      width: round(tile.width, 2), height: round(tile.height, 2),
+    }));
   }
 }
 

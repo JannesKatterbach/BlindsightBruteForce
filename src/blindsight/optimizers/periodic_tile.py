@@ -1,20 +1,33 @@
-"""Optimizer with a repeating pattern (tile).
+"""Optimizer with a repeating hole pattern (UI name "Repeating pattern").
 
-A tile is a rectangle of width x height mm holding ``search.tile_rods`` rods. The rods sit on a regular
-sub grid inside the tile (rows x columns, optionally every second row shifted by half a spacing), so the
-rods are distributed evenly. Plane, motor angle and centre distance of every rod are searched by brute
-force (backtracking) and repeat with the tile. Copies of the tile are placed edge to edge.
+The holes of G0 lie on a regular lattice that is easy to drill. A lattice is a rectangular cell with one
+or more holes that repeats edge to edge (``search.pattern``)
+  square           cell a x a, 1 hole
+  centered_square  "dice five", square with a centre hole, cell a·√2, 2 holes (all neighbours at a)
+  hex              cell a x a·√3, 2 holes (six neighbours at a), hex_rotated is the same turned by 90 degrees
+  staggered        rows with distance a, every second row shifted by a/2, row distance b (default dense
+                   like circles, b = a·√3/2)
+  rectangle        cell a x b, 1 hole
+  custom           own tile from the hole pattern generator (search.custom_tile), fixed or scalable
+  free             tile_rods rods on a sub grid inside a tile (rows x columns, optionally offset rows), the
+                   spacings in x and y are searched independently (earlier behaviour)
+a is ``search.pattern_pitch`` (distance to the nearest hole), b is ``search.pattern_pitch_y``. A missing
+distance is searched on the ``search.tile_step`` raster.
+
+Plane, motor angle and centre distance of every hole are searched by brute force (backtracking) for a
+block of m x n cells and repeat with the block. Blocks are tried by ascending number of holes up to
+``search.max_block_holes``, so the motor arrangement repeats as early as possible.
 
 Search
-  1. Validity. The units of one tile are checked against all copies of the tile within reach, in an
-     unbounded helper model without obstacles. If one tile is valid, the whole infinite lattice is valid.
-  2. Tile size. A missing width or height is searched on the ``search.tile_step`` raster. For every sub
-     grid shape (and aspect ratio, when both are missing) a binary search finds the smallest spacing with
-     a valid assignment. The result is the smallest tile found, it is not proven to be the smallest.
-  3. Placement. Only whole tiles are placed. Every unit of a tile must satisfy all rules of the real
-     build area (edge, obstacles, mounting zones, capacity), otherwise the whole tile is skipped.
-     compact takes the tiles closest to the centre, spread distributes tiles evenly over the area.
-     The number of rods is the target count rounded down to whole tiles.
+  1. Validity. The units of one block are checked against all copies of the block within reach, in an
+     unbounded helper model without obstacles. If one block is valid, the whole infinite lattice is valid,
+     and so is every subset of it (removing units never creates a collision).
+  2. Distance. For every block a binary search finds the smallest distance with a valid assignment. The
+     result is the smallest distance found on the raster, it is not proven to be the smallest.
+  3. Placement. Holes of the lattice are placed one by one, each must satisfy all rules of the real build
+     area (edge, obstacles, mounting zones, capacity). compact takes the holes closest to the centre,
+     spread takes the largest distance at which the target count fits and centres the lattice. The number
+     of holes is exactly the target count (or fewer, then the result says so).
 """
 
 from __future__ import annotations
@@ -22,29 +35,53 @@ from __future__ import annotations
 import copy
 import math
 import random
-from dataclasses import dataclass, field
-from typing import Iterator, Optional
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 from ..i18n import tr
 from ..layout import Counter, Layout, Placement
 from ..model import Model
 from ..patterns import ORDERS, order_points
-from .base import STATUS_INFEASIBLE, OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
+from .base import OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import Halt, SearchBase
 from .registry import register
 
 HELPER_AREA = 1e5  # mm, build area of the unbounded helper model
-ASPECTS = (1.0, 0.8, 1.25, 0.65, 1.55, 0.5, 2.0)  # spacing_y / spacing_x tried when both sizes are free
-NODE_LIMIT = 2500  # assignment nodes per evaluated tile size
-SEARCH_SHARE = 0.7  # share of the time limit for the tile search, the rest places tiles
-PHASES = 3  # lattice shifts per direction tried when placing tiles
-TILES_TO_PLACE = 3  # best tiles that are placed into the build area
+ASPECTS = (1.0, 0.8, 1.25, 0.65, 1.55, 0.5, 2.0)  # spacing_y / spacing_x tried for the pattern free
+NODE_LIMIT = 2500  # assignment nodes per evaluated block and distance, per hole of the block
+SEARCH_SHARE = 0.7  # share of the time limit for the lattice search, the rest places holes
+PHASES = 3  # lattice shifts per direction tried when placing compact
+TILES_TO_PLACE = 3  # best blocks that are placed into the build area
+SPREAD_TRIES = 8  # larger distances tried for the goal spread
 SIZE_DIGITS = 6
+SQRT2, SQRT3 = math.sqrt(2.0), math.sqrt(3.0)
+Point = tuple[float, float]
+
+
+@dataclass(frozen=True)
+class Cell:
+    """Rectangular lattice cell with its holes (mm, origin at the bottom left corner of the cell)."""
+
+    width: float
+    height: float
+    holes: tuple[Point, ...]
+
+    def nearest_distance(self) -> float:
+        """Smallest distance between two holes of the infinite lattice."""
+        best = math.inf
+        for i, (x1, y1) in enumerate(self.holes):
+            for j, (x2, y2) in enumerate(self.holes):
+                for di in (-1, 0, 1):
+                    for dj in (-1, 0, 1):
+                        if i == j and not di and not dj:
+                            continue
+                        best = min(best, math.hypot(x2 + di * self.width - x1, y2 + dj * self.height - y1))
+        return best
 
 
 @dataclass(frozen=True)
 class TileShape:
-    """Arrangement of the rods inside a tile."""
+    """Pattern free. Arrangement of the rods inside a tile."""
 
     rows: int
     cols: int
@@ -54,54 +91,13 @@ class TileShape:
     def rods(self) -> int:
         return self.rows * self.cols
 
-    def positions(self, spacing_x: float, spacing_y: float) -> list[tuple[float, float]]:
+    def positions(self, spacing_x: float, spacing_y: float) -> list[Point]:
         """Rod positions inside the tile (origin at the bottom left corner of the tile)."""
         out = []
         for row in range(self.rows):
             shift = spacing_x / 2.0 if self.offset and row % 2 else 0.0
             out.extend((col * spacing_x + shift, row * spacing_y) for col in range(self.cols))
         return out
-
-
-@dataclass(frozen=True)
-class TileUnit:
-    u: float  # position inside the tile (mm)
-    v: float
-    plane: int
-    angle: float
-    cd: Optional[float] = None
-
-
-@dataclass
-class Tile:
-    shape: TileShape
-    width: float
-    height: float
-    units: list[TileUnit]
-    min_gap: float = math.inf
-
-    @property
-    def area_per_rod(self) -> float:
-        return self.width * self.height / len(self.units)
-
-    def placements(self, x: float, y: float) -> list[Placement]:
-        """Units of the tile with its bottom left corner at (x, y)."""
-        return [Placement(x + t.u, y + t.v, t.plane, t.angle, t.cd) for t in self.units]
-
-    def resized(self, width: float, height: float, stretch: bool) -> "Tile":
-        """Same assignment in a larger period. stretch scales the rod positions, otherwise they keep their place."""
-        fx, fy = (width / self.width, height / self.height) if stretch else (1.0, 1.0)
-        units = [TileUnit(t.u * fx, t.v * fy, t.plane, t.angle, t.cd) for t in self.units]
-        return Tile(self.shape, width, height, units, self.min_gap)
-
-    def as_dict(self, origins: list[tuple[float, float]]) -> dict:
-        return {
-            "width": self.width, "height": self.height, "rods": len(self.units),
-            "rows": self.shape.rows, "cols": self.shape.cols, "offset": self.shape.offset,
-            "units": [{"x": t.u, "y": t.v, "plane": t.plane, "angle": t.angle, **({"cd": t.cd} if t.cd is not None else {})}
-                      for t in self.units],
-            "origins": [[x, y] for x, y in origins],
-        }
 
 
 def tile_shapes(rods: int) -> list[TileShape]:
@@ -117,8 +113,104 @@ def tile_shapes(rods: int) -> list[TileShape]:
     return sorted(shapes, key=lambda s: (abs(s.rows - s.cols), s.offset))
 
 
+@dataclass(frozen=True)
+class Family:
+    """A lattice whose size depends on one parameter (searched on the raster unless fixed)."""
+
+    key: tuple
+    make: Callable[[float], Cell]
+    fixed: Optional[float] = None
+    blocks: Optional[tuple[tuple[int, int], ...]] = None  # None = all blocks up to max_block_holes
+
+
+def pattern_cell(pattern: str, a: float, b: Optional[float], custom=None) -> Cell:
+    """Cell of a named pattern for the distance a (and the second distance b)."""
+    if pattern == "square":
+        return Cell(a, a, ((0.0, 0.0),))
+    if pattern == "centered_square":
+        s = a * SQRT2
+        return Cell(s, s, ((0.0, 0.0), (s / 2.0, s / 2.0)))
+    if pattern == "hex":
+        return Cell(a, a * SQRT3, ((0.0, 0.0), (a / 2.0, a * SQRT3 / 2.0)))
+    if pattern == "hex_rotated":
+        return Cell(a * SQRT3, a, ((0.0, 0.0), (a * SQRT3 / 2.0, a / 2.0)))
+    if pattern == "staggered":
+        row = b if b is not None else a * SQRT3 / 2.0
+        return Cell(a, 2.0 * row, ((0.0, 0.0), (a / 2.0, row)))
+    if pattern == "rectangle":
+        return Cell(a, b if b is not None else a, ((0.0, 0.0),))
+    if pattern == "custom":
+        f = a / custom.width  # a is the tile width
+        return Cell(custom.width * f, custom.height * f, tuple((x * f, y * f) for x, y in custom.holes))
+    raise ValueError(pattern)
+
+
+@dataclass(frozen=True)
+class TileUnit:
+    u: float  # position inside the block (mm)
+    v: float
+    plane: int
+    angle: float
+    cd: Optional[float] = None
+
+
+@dataclass
+class Tile:
+    """A block of cells with a valid motor assignment, it repeats over the build area."""
+
+    family: Family
+    param: float  # lattice parameter (distance a, tile width or spacing)
+    cell: Cell
+    cols: int  # block size in cells
+    rows: int
+    units: list[TileUnit]
+    min_gap: float = math.inf
+
+    @property
+    def width(self) -> float:
+        return self.cols * self.cell.width
+
+    @property
+    def height(self) -> float:
+        return self.rows * self.cell.height
+
+    @property
+    def area_per_rod(self) -> float:
+        return self.width * self.height / len(self.units)
+
+    def placements(self, x: float, y: float) -> list[Placement]:
+        """Units of the block with its bottom left corner at (x, y)."""
+        return [Placement(x + t.u, y + t.v, t.plane, t.angle, t.cd) for t in self.units]
+
+    def scaled(self, param: float) -> "Tile":
+        """Same assignment on the lattice of another parameter."""
+        cell = self.family.make(param)
+        positions = block_positions(cell, self.cols, self.rows)
+        units = [TileUnit(u, v, t.plane, t.angle, t.cd) for (u, v), t in zip(positions, self.units)]
+        return Tile(self.family, param, cell, self.cols, self.rows, units, self.min_gap)
+
+    def as_dict(self, origins: list[Point], pattern: str) -> dict:
+        return {
+            "pattern": pattern, "pitch": self.cell.nearest_distance(), "cell": [self.cell.width, self.cell.height],
+            "width": self.width, "height": self.height, "rods": len(self.units), "rows": self.rows, "cols": self.cols,
+            "units": [{"x": t.u, "y": t.v, "plane": t.plane, "angle": t.angle, **({"cd": t.cd} if t.cd is not None else {})}
+                      for t in self.units],
+            "origins": [[x, y] for x, y in origins],
+        }
+
+
+def block_positions(cell: Cell, cols: int, rows: int) -> list[Point]:
+    return [(i * cell.width + u, j * cell.height + v) for j in range(rows) for i in range(cols) for u, v in cell.holes]
+
+
+def blocks_up_to(holes_per_cell: int, max_holes: int) -> list[tuple[int, int]]:
+    """Blocks (cols, rows) with at most max_holes holes, by ascending hole count, nearly square first."""
+    out = [(m, n) for m in range(1, max_holes + 1) for n in range(1, max_holes + 1) if m * n * holes_per_cell <= max_holes]
+    return sorted(out or [(1, 1)], key=lambda b: (b[0] * b[1], abs(b[0] - b[1]), -b[0]))
+
+
 class PeriodicChecker:
-    """Checks tiles against their own copies in an unbounded model (no edge, obstacles or zones)."""
+    """Checks blocks against their own copies in an unbounded model (no edge, obstacles or zones)."""
 
     def __init__(self, model: Model, counter: Counter):
         project = copy.deepcopy(model.project)
@@ -197,8 +289,8 @@ class PeriodicChecker:
         found = place(0)
         return (list(chosen) if found else None), (min(gaps) if gaps else math.inf), state["complete"]
 
-    def verify(self, tile: Tile, halt: Halt) -> bool:
-        """True, if the fixed assignment of the tile is valid with the tile's period."""
+    def verify(self, tile: "Tile", halt: Halt) -> bool:
+        """True, if the fixed assignment of the block is valid with the block's period."""
         positions = [(t.u, t.v) for t in tile.units]
         options = [[(t.plane, t.angle, t.cd)] for t in tile.units]
         units, _, _ = self.assign(positions, tile.width, tile.height, options, halt)
@@ -213,14 +305,6 @@ class PeriodicTileOptimizer(Optimizer):
     def search(self, model: Model, res: OptimizationResult, progress: Optional[ProgressCallback], stop: StopToken,
                counter: Counter) -> OptimizationResult:
         se = model.project.search
-        rods = se.tile_rods
-        target = model.project.target_count
-        if target < rods:
-            res.status = STATUS_INFEASIBLE
-            res.messages.append(tr("tile.target_too_small", target=target, rods=rods))
-            res.optimality_note = tr("exhaustive.not_run")
-            res.elapsed = stop.elapsed
-            return res
         search = TileSearch(model, counter, stop, random.Random(se.seed), progress)
         tiles = search.find_tiles(lambda: search.halted() or stop.elapsed > se.time_limit_s * SEARCH_SHARE)
         for tile in tiles[:TILES_TO_PLACE]:
@@ -237,195 +321,236 @@ class TileSearch(SearchBase):
         super().__init__(*args, **kwargs)
         self.checker = PeriodicChecker(self.model, self.counter)
         self.step = self.se.tile_step
-        self.rods = self.se.tile_rods
+        self.pattern = self.se.pattern
         self._cache: dict[tuple, Optional[Tile]] = {}
         self.incomplete = False
 
-    # -- Tile search ----------------------------------------------------------------
+    # -- Lattice families ----------------------------------------------------------------
+    def families(self) -> list[Family]:
+        se = self.se
+        if self.pattern == "free":
+            return self._free_families()
+        b = se.pattern_pitch_y
+        if self.pattern == "custom":
+            tile = se.custom_tile
+            fixed = se.pattern_pitch if se.pattern_pitch is not None else (None if tile.scalable else tile.width)
+            return [Family(("custom",), lambda a: pattern_cell("custom", a, None, tile), fixed)]
+        return [Family((self.pattern, b), lambda a: pattern_cell(self.pattern, a, b), se.pattern_pitch)]
+
+    def _free_families(self) -> list[Family]:
+        """Pattern free. One family per sub grid shape (and aspect when both tile sizes are searched)."""
+        se = self.se
+        width, height = se.tile_width, se.tile_height
+        out = []
+        for shape in tile_shapes(se.tile_rods):
+            def cell(sx: float, sy: float, shape=shape) -> Cell:
+                return Cell(shape.cols * sx, shape.rows * sy, tuple(shape.positions(sx, sy)))
+            one = ((1, 1),)
+            if width is not None and height is not None:
+                out.append(Family((shape, "fixed"), lambda _, c=cell, s=shape: c(width / s.cols, height / s.rows), 0.0, one))
+            elif width is not None:
+                out.append(Family((shape, "w"), lambda sy, c=cell, s=shape: c(width / s.cols, sy), None, one))
+            elif height is not None:
+                out.append(Family((shape, "h"), lambda sx, c=cell, s=shape: c(sx, height / s.rows), None, one))
+            else:
+                for aspect in ASPECTS:
+                    out.append(Family((shape, aspect), lambda sx, c=cell, k=aspect: c(sx, self._snap(sx * k)), None, one))
+        return out
+
+    # -- Evaluation ----------------------------------------------------------------------
     def _options(self, index: int) -> list[tuple[int, float, Optional[float]]]:
-        """Plane, angle and centre distance options of rod index (planes start rotated for balance)."""
+        """Plane, angle and centre distance options of hole index (planes start rotated for balance)."""
         start = index % len(self.usable)
         planes = self.usable[start:] + self.usable[:start]
         return [(plane, angle, cd) for plane in planes for angle, cd in self.options_for(plane)]
 
-    def evaluate(self, shape: TileShape, spacing_x: float, spacing_y: float, halt: Halt) -> Optional[Tile]:
-        """Valid tile with this sub grid and spacing, or None."""
-        key = (shape, round(spacing_x, SIZE_DIGITS), round(spacing_y, SIZE_DIGITS))
+    def evaluate(self, family: Family, block: tuple[int, int], param: float, halt: Halt) -> Optional[Tile]:
+        """Block with a valid assignment for this lattice parameter, or None."""
+        key = (family.key, block, round(param, SIZE_DIGITS))
         if key in self._cache:
             return self._cache[key]
-        width, height = shape.cols * spacing_x, shape.rows * spacing_y
-        positions = shape.positions(spacing_x, spacing_y)
+        cell = family.make(param)
+        cols, rows = block
+        positions = block_positions(cell, cols, rows)
         options = [self._options(i) for i in range(len(positions))]
-        units, gap, complete = self.checker.assign(positions, width, height, options, halt)
+        units, gap, complete = self.checker.assign(positions, cols * cell.width, rows * cell.height, options, halt,
+                                                   NODE_LIMIT * len(positions))
         self.incomplete = self.incomplete or not complete
-        tile = Tile(shape, width, height, units, gap) if units else None
+        tile = Tile(family, param, cell, cols, rows, units, gap) if units else None
         if complete or tile:
             self._cache[key] = tile
-        self.report(tr("progress.tile_valid" if tile else "progress.tile_invalid", rows=shape.rows, cols=shape.cols,
-                       width=width, height=height))
+        self.report(tr("progress.block_valid" if tile else "progress.block_invalid", cols=cols, rows=rows,
+                       pitch=cell.nearest_distance()))
         return tile
 
     def _snap(self, value: float) -> float:
         return round(max(self.step, math.ceil(value / self.step - 1e-9) * self.step), SIZE_DIGITS)
 
-    def _smallest(self, feasible, lo: float, hi: float, halt: Halt) -> Optional[tuple[float, Tile]]:
+    def _bounds(self, family: Family) -> tuple[float, float]:
+        """Parameter range. Below lo the rods touch, from hi on no two units can collide."""
+        def first_with(distance: float) -> float:
+            lo, hi = 1e-6, self.step
+            while family.make(hi).nearest_distance() < distance and hi < HELPER_AREA:
+                lo, hi = hi, hi * 2.0
+            for _ in range(60):
+                mid = (lo + hi) / 2.0
+                lo, hi = (mid, hi) if family.make(mid).nearest_distance() < distance else (lo, mid)
+            return hi
+        return first_with(self.checker.rod_pitch), first_with(self.checker.reach) + self.step
+
+    def _smallest(self, feasible, lo: float, hi: float, halt: Halt) -> Optional[Tile]:
         """Binary search for the smallest raster value in [lo, hi] for which feasible(value) returns a tile."""
         lo, hi = self._snap(lo), self._snap(hi)
+        if hi < lo:
+            return None
         best_tile = feasible(hi)
         if best_tile is None:
             return None
-        best = hi
         lo_i, hi_i = round(lo / self.step), round(hi / self.step)
         while lo_i < hi_i and not halt():
             mid_i = (lo_i + hi_i) // 2
             tile = feasible(round(mid_i * self.step, SIZE_DIGITS))
             if tile is not None:
-                hi_i, best, best_tile = mid_i, round(mid_i * self.step, SIZE_DIGITS), tile
+                hi_i, best_tile = mid_i, tile
             else:
                 lo_i = mid_i + 1
-        return best, best_tile
+        return best_tile
 
-    def _upper_spacing(self) -> float:
-        """At this spacing units can no longer collide, so any valid single unit assignment works."""
-        return self.checker.reach + self.step
-
-    def smallest_tile(self, shape: TileShape, halt: Halt) -> Optional[Tile]:
-        width, height = self.se.tile_width, self.se.tile_height
-        if width is not None and height is not None:
-            return self.evaluate(shape, width / shape.cols, height / shape.rows, halt)
-        lo, hi = self.checker.rod_pitch / 2.0, self._upper_spacing()
-        if width is not None:
-            sx = width / shape.cols
-            found = self._smallest(lambda sy: self.evaluate(shape, sx, sy, halt), lo, hi, halt)
-            return found[1] if found else None
-        if height is not None:
-            sy = height / shape.rows
-            found = self._smallest(lambda sx: self.evaluate(shape, sx, sy, halt), lo, hi, halt)
-            return found[1] if found else None
+    def best_of_family(self, family: Family, halt: Halt) -> Optional[Tile]:
+        """Smallest lattice parameter with a valid block. Larger blocks only need to beat smaller parameters."""
+        holes = len(family.make(1.0).holes)
+        blocks = family.blocks or tuple(blocks_up_to(holes, self.se.max_block_holes))
+        if family.fixed is not None:
+            for block in blocks:
+                if halt():
+                    break
+                tile = self.evaluate(family, block, family.fixed, halt)
+                if tile is not None:
+                    return tile
+            return None
+        lo, hi = self._bounds(family)
         best: Optional[Tile] = None
-        for aspect in ASPECTS:
+        for block in blocks:
             if halt():
                 break
-            found = self._smallest(lambda sx: self.evaluate(shape, sx, self._snap(sx * aspect), halt), lo, hi, halt)
-            if found and (best is None or found[1].area_per_rod < best.area_per_rod - 1e-9):
-                best = found[1]
+            upper = best.param - self.step if best else hi
+            tile = self._smallest(lambda p, b=block: self.evaluate(family, b, p, halt), lo, upper, halt)
+            if tile is not None:
+                best = tile
         return best
 
     def find_tiles(self, halt: Halt) -> list[Tile]:
-        """Smallest tile per sub grid shape, sorted by area per rod (then largest gap)."""
-        self.phase = tr("phase.tile_search")
+        """Best block per lattice family, sorted by area per hole (then largest gap)."""
+        self.phase = tr("phase.pattern_search")
         tiles = []
-        for shape in tile_shapes(self.rods):
+        for family in self.families():
             if halt():
                 break
-            tile = self.smallest_tile(shape, halt)
+            tile = self.best_of_family(family, halt)
             if tile is not None:
                 tiles.append(tile)
         return sorted(tiles, key=lambda t: (round(t.area_per_rod, 3), -t.min_gap))
 
-    # -- Placement --------------------------------------------------------------------
-    def _try_tile(self, layout: Layout, tile: Tile, x: float, y: float) -> bool:
-        """Adds all units of the tile at (x, y) or none of them."""
-        added = []
-        for placement in tile.placements(x, y):
-            if not layout.check(placement).ok:
-                for uid in added:
-                    layout.remove(uid)
-                return False
-            added.append(layout.add(placement))
-        return True
-
-    def _origins(self, tile: Tile, phase_x: float, phase_y: float) -> list[tuple[float, float]]:
-        """Tile corners of the lattice whose rods can lie in the allowed region."""
+    # -- Placement ------------------------------------------------------------------------
+    def _lattice(self, tile: Tile, shift_x: float, shift_y: float) -> dict[Point, tuple[Placement, Point]]:
+        """All holes of the lattice whose rods can lie in the allowed region -> (placement, block origin)."""
         x0, y0, x1, y1 = self.region
-        start_x = x0 + phase_x - tile.width
-        start_y = y0 + phase_y - tile.height
+        start_x = x0 + (shift_x % tile.width) - tile.width
+        start_y = y0 + (shift_y % tile.height) - tile.height
         nx = int((x1 - start_x) / tile.width) + 1
         ny = int((y1 - start_y) / tile.height) + 1
-        return [(start_x + i * tile.width, start_y + j * tile.height) for j in range(ny + 1) for i in range(nx + 1)]
+        out = {}
+        for j in range(ny + 1):
+            for i in range(nx + 1):
+                ox, oy = start_x + i * tile.width, start_y + j * tile.height
+                for pl in tile.placements(ox, oy):
+                    if x0 - 1e-9 <= pl.x <= x1 + 1e-9 and y0 - 1e-9 <= pl.y <= y1 + 1e-9:
+                        out[(pl.x, pl.y)] = (pl, (ox, oy))
+        return out
 
-    def _build(self, tile: Tile, origins: list[tuple[float, float]], tiles_needed: int) -> tuple[list[Placement], list]:
+    def _build(self, tile: Tile, lattice: dict, ordered: list[Point]) -> int:
+        """Add holes in the given order until the target count is reached and keep the layout. Returns the count."""
         layout = Layout(self.model, self.counter)
-        used = []
-        for x, y in origins:
-            if len(used) >= tiles_needed or self.halted():
+        origins: dict[Point, None] = {}
+        for point in ordered:
+            if len(layout) >= self.target or self.halted():
                 break
-            if self._try_tile(layout, tile, x, y):
-                used.append((x, y))
-        return layout.placements(), used
+            placement, origin = lattice[point]
+            if layout.check(placement).ok:
+                layout.add(placement)
+                origins[origin] = None
+        self.consider(layout.placements(), tile.as_dict(list(origins), self.pattern))
+        return len(layout)
 
     def place(self, tile: Tile) -> None:
-        """Puts whole tiles into the build area and keeps the resulting layouts."""
-        self.phase = tr("phase.tile_place")
-        tiles_needed = self.target // self.rods
-        if self.se.layout_goal == "spread":
-            self._place_spread(tile, tiles_needed)
+        self.phase = tr("phase.pattern_place")
+        if self.se.layout_goal == "spread" and tile.family.fixed is None and self._place_spread(tile):
             return
+        self._place_compact(tile)
+
+    def _place_compact(self, tile: Tile) -> None:
+        """Holes closest to the centre, with several lattice shifts and orders."""
         cx, cy = self.center
         for i in range(PHASES):
             for j in range(PHASES):
-                origins = self._origins(tile, tile.width * i / PHASES, tile.height * j / PHASES)
-                centers = {(x + tile.width / 2.0, y + tile.height / 2.0): (x, y) for x, y in origins}
+                if self.halted():
+                    return
+                lattice = self._lattice(tile, cx + tile.width * i / PHASES, cy + tile.height * j / PHASES)
                 for order in ORDERS:
                     if self.halted():
                         return
-                    ordered = [centers[c] for c in order_points(list(centers), (cx, cy), order)]
-                    placements, used = self._build(tile, ordered, tiles_needed)
-                    self.consider(placements, tile.as_dict(used))
-            self.report(tr("progress.tiles_placed", i=i + 1, n=PHASES))
+                    self._build(tile, lattice, order_points(list(lattice), (cx, cy), order))
+            self.report(tr("progress.holes_placed", i=i + 1, n=PHASES))
 
-    def _grid_counts(self, tiles_needed: int, width: float, height: float) -> tuple[int, int]:
-        """Columns and rows of tiles for an even spread (as close to the area's aspect as possible)."""
-        best = None
-        for cols in range(1, tiles_needed + 1):
-            rows = math.ceil(tiles_needed / cols)
-            waste = cols * rows - tiles_needed
-            skew = abs(math.log((width / cols) / (height / rows))) if width > 0 and height > 0 else 0.0
-            key = (waste > 0, skew + 0.5 * waste)
-            if best is None or key < best[0]:
-                best = (key, cols, rows)
-        return best[1], best[2]
-
-    def _place_spread(self, tile: Tile, tiles_needed: int) -> None:
+    def _count_centered(self, tile: Tile) -> tuple[int, dict]:
+        """Holes of the lattice in the region when the lattice is centred in it."""
         x0, y0, x1, y1 = self.region
-        cols, rows = self._grid_counts(tiles_needed, x1 - x0, y1 - y0)
-        pitch_x = max(tile.width, (x1 - x0) / cols)
-        pitch_y = max(tile.height, (y1 - y0) / rows)
-        for stretch in (True, False):
-            candidate = tile.resized(pitch_x, pitch_y, stretch)
-            if not self.checker.verify(candidate, self.halted):
+        lattice = self._lattice(tile, 0.0, 0.0)
+        if not lattice:
+            return 0, lattice
+        xs, ys = [p[0] for p in lattice], [p[1] for p in lattice]
+        shift_x = (x0 + x1) / 2.0 - (min(xs) + max(xs)) / 2.0
+        shift_y = (y0 + y1) / 2.0 - (min(ys) + max(ys)) / 2.0
+        lattice = self._lattice(tile, shift_x, shift_y)
+        return len(lattice), lattice
+
+    def _place_spread(self, tile: Tile) -> bool:
+        """Largest lattice distance at which the target count still fits, lattice centred in the region.
+        Returns False if the target count could not be placed (compact placement follows then)."""
+        x0, y0, x1, y1 = self.region
+        lo_i = round(tile.param / self.step)
+        hi_i = max(lo_i, round(max(x1 - x0, y1 - y0, self.step) * 2.0 / self.step))
+        while lo_i < hi_i:  # largest parameter whose lattice still holds the target count
+            mid_i = (lo_i + hi_i + 1) // 2
+            if self._count_centered(tile.scaled(mid_i * self.step))[0] >= self.target:
+                lo_i = mid_i
+            else:
+                hi_i = mid_i - 1
+        base_i = round(tile.param / self.step)
+        candidates = sorted({round(base_i + (lo_i - base_i) * k / SPREAD_TRIES) for k in range(SPREAD_TRIES, -1, -1)}, reverse=True)
+        for param_i in candidates:
+            if self.halted():
+                return False
+            candidate = tile.scaled(round(param_i * self.step, SIZE_DIGITS))
+            if param_i != base_i and not self.checker.verify(candidate, self.halted):
                 continue
-            # Centre the tile grid in the region (rods of a tile sit in its lower left part when not stretched)
-            used_w = (cols - 1) * pitch_x + max(t.u for t in candidate.units)
-            used_h = (rows - 1) * pitch_y + max(t.v for t in candidate.units)
-            sx, sy = x0 + max(0.0, (x1 - x0 - used_w) / 2.0), y0 + max(0.0, (y1 - y0 - used_h) / 2.0)
-            origins = [(sx + i * pitch_x, sy + j * pitch_y) for j in range(rows) for i in range(cols)]
-            placements, used = self._build(candidate, origins, tiles_needed)
-            self.consider(placements, candidate.as_dict(used))
-        self.place_compact_fallback(tile, tiles_needed)
+            _, lattice = self._count_centered(candidate)
+            cx, cy = self.center
+            if self._build(candidate, lattice, order_points(list(lattice), (cx, cy), "euclid")) >= self.target:
+                return True
+        return False
 
-    def place_compact_fallback(self, tile: Tile, tiles_needed: int) -> None:
-        """Smallest tile edge to edge from the centre (always available as a comparison)."""
-        origins = self._origins(tile, 0.0, 0.0)
-        cx, cy = self.center
-        centers = {(x + tile.width / 2.0, y + tile.height / 2.0): (x, y) for x, y in origins}
-        ordered = [centers[c] for c in order_points(list(centers), (cx, cy), "euclid")]
-        placements, used = self._build(tile, ordered, tiles_needed)
-        self.consider(placements, tile.as_dict(used))
-
-    # -- Notes --------------------------------------------------------------------------
+    # -- Notes ----------------------------------------------------------------------------
     def notes(self, tiles: list[Tile]) -> list[str]:
-        out = []
+        pattern_label = tr(f"option.search.pattern.{self.pattern}")
         if not tiles:
-            out.append(tr("tile.none_found"))
-            return out
+            fixed = [f.fixed for f in self.families() if f.fixed]
+            if fixed and self.pattern != "free":
+                return [tr("pattern.fixed_failed", pitch=self.families()[0].make(fixed[0]).nearest_distance())]
+            return [tr("pattern.none_found", pattern=pattern_label)]
         best = tiles[0]
-        out.append(tr("tile.summary_offset" if best.shape.offset else "tile.summary", rods=len(best.units),
-                      rows=best.shape.rows, cols=best.shape.cols, width=best.width, height=best.height))
-        if self.se.tile_width is None or self.se.tile_height is None:
-            out.append(tr("tile.not_proven"))
-        remainder = self.target % self.rods
-        if remainder:
-            lower = self.target - remainder
-            out.append(tr("tile.not_multiple", target=self.target, rods=self.rods, lower=lower, next=lower + self.rods))
+        out = [tr("pattern.summary", pattern=pattern_label, pitch=best.cell.nearest_distance(), cols=best.cols, rows=best.rows,
+                  holes=len(best.units), width=best.width, height=best.height)]
+        if best.family.fixed is None:
+            out.append(tr("pattern.not_proven"))
         return out
