@@ -139,3 +139,52 @@ def test_cli_prints_in_the_chosen_language(tmp_path, capsys):
     assert "Best solution. 2 of 2 rods" in out and "Target number 2 reached" in out
     assert cli_main([str(cfg), "--quiet", "--lang", "fr"]) == 0
     assert "Meilleure solution" in capsys.readouterr().out
+
+
+# --- UI catalogs (web/static/js/i18n/*.js) ------------------------------------------------------------
+STATIC = SRC / "web" / "static"
+
+
+def ui_catalog(language):
+    text = (STATIC / "js" / "i18n" / f"{language}.js").read_text(encoding="utf-8")
+    return json.loads(text.split("= ", 1)[1].rstrip().rstrip(";"))
+
+
+def ui_placeholders(template):
+    return set(re.findall(r"\{(\w+)\}", template))
+
+
+def test_ui_catalogs_have_the_same_keys_and_placeholders():
+    base = ui_catalog("de")
+    for language in LANGUAGES:
+        texts = ui_catalog(language)
+        assert set(texts) == set(base), language
+        for key, template in texts.items():
+            assert ui_placeholders(template) == ui_placeholders(base[key]), (language, key)
+
+
+def test_every_ui_key_exists():
+    keys = set(ui_catalog("de"))
+    used = set()
+    for path in (STATIC / "js").rglob("*.js"):
+        if "i18n" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        used.update(re.findall(r'\bt\(\s*"([a-z0-9_.]+)"', text))
+        used.update(re.findall(r'data-i18n="([a-z0-9_.]+)"', text))
+    used.update(re.findall(r'data-i18n(?:-title|-placeholder)?="([a-z0-9_.]+)"', (STATIC / "index.html").read_text(encoding="utf-8")))
+    assert not {key for key in used if not key.endswith(".")} - keys
+    dynamic = {
+        "ui.job.": ("queued", "running", "finished", "failed", "cancelled"),
+        "ui.status.": ("completed", "time_limit", "candidate_limit", "cancelled", "infeasible", "stagnation", "manual"),
+        "ui.kind.": (KIND_HOUSING, KIND_GEAR, KIND_ROD, KIND_OBSTACLE),
+        "ui.term.": ("count", "area", "uniformity", "regularity"),
+        "ui.sk.state.": ("under", "full", "over", "conflict", "invalid"),
+        "ui.sk.status.": ("ok", "conflict", "redundant", "disabled"),
+        "ui.sk.ref.": tuple(REFS),
+        "ui.progress.": ("status", "phase", "candidates", "elapsed", "best_count", "best_score", "info"),
+        "ui.levels.head.": ("layer", "z_top", "rod_total", "below_mount", "thread"),
+        "ui.obstacle.": ("shape", "x", "y", "w", "h", "r", "angle", "plane", "name", "rect", "circle"),
+    }
+    for prefix, names in dynamic.items():
+        assert {prefix + name for name in names} <= keys, prefix

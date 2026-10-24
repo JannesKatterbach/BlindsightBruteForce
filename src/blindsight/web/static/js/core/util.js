@@ -1,17 +1,18 @@
 "use strict";
-// Allgemeine Hilfen ohne Fachbezug. Klassische Skripte ohne Build Schritt, Reihenfolge siehe index.html.
+// General helpers without domain logic. Classic scripts without a build step, order see index.html.
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const SVG_NS = "http://www.w3.org/2000/svg";
 
-// Farben der Motorebenen (gleiche Tabelle wie im SVG Export)
+// Colours of the motor layers (same table as in the SVG export)
 const PLANE_COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f"];
 const col = (plane) => PLANE_COLORS[(plane - 1) % PLANE_COLORS.length];
 const COLORS = { bad: "#e00", tight: "#e08a00", rod: "#222", obstacle: "#bbb", obstacleStroke: "#555", g0: "#a1887f", gear: "#f28e2b" };
-const KIND_LABELS = { housing: "Motor", gear: "Zahnrad", rod: "Stange", obstacle: "Hindernis" };
+/** Label of a part kind (housing, gear, rod, obstacle). */
+const kindLabel = (kind) => t("ui.kind." + kind);
 
-/** SVG Element mit Attributen anlegen und optional anhaengen. */
+/** Create an SVG element with attributes and optionally append it. */
 function el(name, attrs = {}, parent) {
   const node = document.createElementNS(SVG_NS, name);
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
@@ -19,17 +20,17 @@ function el(name, attrs = {}, parent) {
   return node;
 }
 
-/** SVG Text mit Inhalt. */
+/** SVG text with content. */
 function svgText(parent, attrs, content) {
   const node = el("text", attrs, parent);
   node.textContent = content;
   return node;
 }
 
-/** Text fuer HTML maskieren (auch Zahlen und null sind erlaubt). */
+/** Escape text for HTML (numbers and null are allowed too). */
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/** Zahl runden. Alles, was keine endliche Zahl ist, kommt unveraendert zurueck. */
+/** Round a number. Anything that is not a finite number comes back unchanged. */
 function round(value, digits = 4) {
   if (typeof value !== "number" || !Number.isFinite(value)) return value;
   const f = 10 ** digits;
@@ -44,10 +45,10 @@ function setPath(obj, path, value) {
   keys.reduce((acc, key) => acc[key], obj)[last] = value;
 }
 
-/** Liste aus Text (Trenner Komma, Semikolon oder Leerzeichen). */
+/** List from text (separated by comma, semicolon or space). */
 const splitList = (text) => String(text).split(/[,; ]+/).filter(Boolean);
 
-/** Datei zum Herunterladen anbieten. */
+/** Offer a file for download. */
 function download(name, content, type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }));
@@ -56,27 +57,29 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-/** Dateiauswahl zuruecksetzen, damit dieselbe Datei erneut ein change Ereignis ausloest. */
+/** Reset a file input so that the same file triggers a change event again. */
 function resetFileInput(input) { input.value = ""; }
 
 // --- Server ----------------------------------------------------------------------------------------
-const JSON_HEADERS = { "Content-Type": "application/json" };  // der Server weist andere Typen bei POST ab
+const JSON_HEADERS = { "Content-Type": "application/json" };  // the server rejects other types for POST
+/** Headers of every request. The server answers in the language of the UI. */
+const requestHeaders = (extra = {}) => ({ "X-Language": currentLanguage, ...extra });
 
-/** GET (ohne body) oder POST mit JSON. Rueckgabe {status, data}. */
+/** GET (without body) or POST with JSON. Returns {status, data}. */
 async function api(path, body) {
-  const options = body === undefined ? {} : { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) };
+  const options = body === undefined ? { headers: requestHeaders() } : { method: "POST", headers: requestHeaders(JSON_HEADERS), body: JSON.stringify(body) };
   const response = await fetch(path, options);
   const type = response.headers.get("Content-Type") || "";
   const data = type.includes("json") ? await response.json() : await response.text();
   return { status: response.status, data };
 }
 
-/** Fehlermeldungen einer Antwort als Liste (Server liefert {error, errors}). */
+/** Error messages of a response as a list (the server sends {error, errors}). */
 const errorsOf = (data) => (data && (data.errors || (data.error ? [data.error] : []))) || [];
 
 /**
- * Nur die Antwort des neuesten Aufrufs zaehlt. Liefert eine Funktion, die wie fn aufgerufen wird
- * und fuer veraltete Aufrufe undefined zurueckgibt (spaete Antworten ueberschreiben keine neueren).
+ * Only the answer of the newest call counts. Returns a function that is called like fn and returns
+ * undefined for outdated calls (late answers do not overwrite newer ones).
  */
 function latestOnly(fn) {
   let seq = 0;
@@ -87,7 +90,7 @@ function latestOnly(fn) {
   };
 }
 
-/** Fuehrt asynchrone Aufgaben nacheinander aus (keine Ueberholungen). */
+/** Run asynchronous tasks one after another (no overtaking). */
 function serialQueue() {
   let tail = Promise.resolve();
   return (task) => {

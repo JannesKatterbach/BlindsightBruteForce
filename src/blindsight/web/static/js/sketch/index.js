@@ -1,10 +1,10 @@
 "use strict";
-// Motor Skizze. Verdrahtung der Bedienelemente und Schnittstelle zur restlichen Oberflaeche.
+// Motor sketch. Wiring of the controls and interface to the rest of the UI.
 
 (() => {
   function initSketch() {
     Sketch.initCanvas();
-    // Waehrend Tabellen neu gebaut werden, feuert der Browser change fuer entfernte Felder
+    // While tables are rebuilt, the browser fires change for removed fields
     for (const id of ["#skSides", "#skPoints", "#skCons"]) {
       $(id).addEventListener("change", (e) => { if (SK.rendering) e.stopImmediatePropagation(); }, true);
     }
@@ -27,7 +27,8 @@
   }
 
   function initCenterDistance() {
-    $("#skCd").innerHTML = '<label>Achsabstand Zahnrad zu Stange</label><input id="skCdIn" type="number" step="any" min="0">';
+    $("#skCd").innerHTML = '<label data-i18n="ui.sk.cd_label"></label><input id="skCdIn" type="number" step="any" min="0">';
+    applyStaticTexts($("#skCd"));
     $("#skCdIn").addEventListener("change", () => {
       const v = parseFloat($("#skCdIn").value);
       if (!(v >= 0)) return;
@@ -37,9 +38,11 @@
     });
   }
 
-  // Schnittstelle fuer main.js, motor.js und Tests
+  // Interface for main.js, motor.js and tests
   window.initSketch = initSketch;
   window.skReload = () => Sketch.reload();
+  // After a language switch. Solve again so that the messages of the solver come in the new language
+  window.skRelocalize = async () => { if (skCount() >= 3) await Sketch.resolve(); else Sketch.renderAll(); };
   window.skRender = () => Sketch.renderAll();
   window.skSelect = (points, sides) => { SK.sel = { p: new Set(points), s: new Set(sides) }; Sketch.renderAll(); };
   window.skAdd = (tool) => Sketch.addConstraint(tool);

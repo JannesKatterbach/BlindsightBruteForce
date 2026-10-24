@@ -1,9 +1,9 @@
 "use strict";
-// Tabellen. Einstellungen je Motorebene, feste Hindernisse, Montagebereiche.
+// Tables. Settings per motor layer, fixed obstacles, mounting areas.
 
 const MAX_TABLE_PLANES = 200;
 
-// --- Einstellungen je Motorebene -------------------------------------------------------------------
+// --- Settings per motor layer -------------------------------------------------------------------
 function renderPlaneTable() {
   const stack = cfg.stack;
   const n = stack.n_motor_planes;
@@ -11,7 +11,8 @@ function renderPlaneTable() {
   if (!(Number.isInteger(n) && n >= 1 && n <= MAX_TABLE_PLANES)) { box.innerHTML = ""; return; }
   const caps = stack.max_per_plane || {};
   const angles = stack.plane_angles || {};
-  let html = `<table class="grid"><tr><th>Ebene</th><th>erlaubt</th><th>max. Motoren</th><th>Winkel (Grad)</th><th>Dicke [mm]</th></tr>`;
+  const head = ["ui.table.layer", "ui.table.allowed", "ui.table.max_motors", "ui.table.angles", "ui.table.thickness"].map((k) => `<th>${esc(t(k))}</th>`).join("");
+  let html = `<table class="grid"><tr>${head}</tr>`;
   for (let i = 1; i <= n; i++) {
     const allowed = stack.allowed_planes == null || stack.allowed_planes.includes(i);
     const thickness = stack.thicknesses && stack.thicknesses[i - 1] != null ? round(stack.thicknesses[i - 1]) : "";
@@ -31,7 +32,7 @@ function readPlaneTable() {
   let anyThickness = false;
   for (const row of $$("#planeTable tr")) {
     const cell = (name) => row.querySelector(`[data-pt="${name}"]`);
-    if (!cell("allowed")) continue;  // Kopfzeile
+    if (!cell("allowed")) continue;  // header row
     const i = +cell("allowed").dataset.i;
     if (cell("allowed").checked) allowed.push(i);
     if (cell("cap").value !== "") caps[i] = parseInt(cell("cap").value, 10);
@@ -47,15 +48,15 @@ function readPlaneTable() {
   stack.thicknesses = anyThickness ? thicknesses : null;
 }
 
-// --- Hindernisse ---------------------------------------------------------------------------------------
-// [Feld, Spaltentitel, Art] mit Art sel (Auswahl), len (Laenge), num, int oder text
-const OBSTACLE_COLUMNS = [["shape", "Form", "sel"], ["x", "x", "len"], ["y", "y", "len"], ["w", "Breite", "len"], ["h", "Höhe", "len"],
-  ["r", "Radius", "len"], ["angle", "Winkel", "num"], ["plane", "Ebene", "int"], ["name", "Name", "text"]];
-const OBSTACLE_SHAPES = [["rect", "Rechteck"], ["circle", "Kreis"]];
+// --- Obstacles ---------------------------------------------------------------------------------------
+// [field, kind] with kind sel (selection), len (length), num, int or text. Column titles are ui.obstacle.<field>
+const OBSTACLE_COLUMNS = [["shape", "sel"], ["x", "len"], ["y", "len"], ["w", "len"], ["h", "len"], ["r", "len"], ["angle", "num"],
+  ["plane", "int"], ["name", "text"]];
+const OBSTACLE_SHAPES = ["rect", "circle"];
 
-function obstacleCell(obstacle, i, [field, , kind]) {
+function obstacleCell(obstacle, i, [field, kind]) {
   if (kind === "sel") {
-    const options = OBSTACLE_SHAPES.map(([v, t]) => `<option value="${v}" ${obstacle.shape === v ? "selected" : ""}>${t}</option>`).join("");
+    const options = OBSTACLE_SHAPES.map((v) => `<option value="${v}" ${obstacle.shape === v ? "selected" : ""}>${esc(t("ui.obstacle." + v))}</option>`).join("");
     return `<td><select data-ob="${i}" data-f="${field}">${options}</select></td>`;
   }
   const value = obstacle[field];
@@ -65,10 +66,10 @@ function obstacleCell(obstacle, i, [field, , kind]) {
 }
 
 function renderObstacles() {
-  const head = OBSTACLE_COLUMNS.map(([, title, kind]) => `<th>${title}${kind === "len" ? ` [mm]` : ""}</th>`).join("");
+  const head = OBSTACLE_COLUMNS.map(([field, kind]) => `<th>${esc(t("ui.obstacle." + field))}${kind === "len" ? " [mm]" : ""}</th>`).join("");
   let html = `<table class="grid"><tr>${head}<th></th></tr>`;
   cfg.obstacles.forEach((obstacle, i) => {
-    html += "<tr>" + OBSTACLE_COLUMNS.map((c) => obstacleCell(obstacle, i, c)).join("") + `<td><button data-obdel="${i}">x</button></td></tr>`;
+    html += "<tr>" + OBSTACLE_COLUMNS.map((c) => obstacleCell(obstacle, i, c)).join("") + `<td><button data-obdel="${i}" title="${esc(t("ui.table.delete"))}">x</button></td></tr>`;
   });
   const box = $("#obsTable");
   box.innerHTML = html + "</table>";
@@ -83,7 +84,7 @@ function renderObstacles() {
 function readObstacleCell(input) {
   const obstacle = cfg.obstacles[+input.dataset.ob];
   const field = input.dataset.f;
-  const kind = OBSTACLE_COLUMNS.find((c) => c[0] === field)[2];
+  const kind = OBSTACLE_COLUMNS.find((c) => c[0] === field)[1];
   if (kind === "sel" || kind === "text") obstacle[field] = input.value;
   else if (input.value === "") obstacle[field] = field === "plane" ? null : 0;
   else if (kind === "len") obstacle[field] = parseFloat(input.value);
@@ -97,18 +98,18 @@ function addObstacle() {
   refresh();
 }
 
-// --- Montagebereiche -------------------------------------------------------------------------------------
-const ZONE_TITLES = ["x min", "y min", "x max", "y max"];
+// --- Mounting areas -------------------------------------------------------------------------------------
+const ZONE_TITLES = ["ui.zone.xmin", "ui.zone.ymin", "ui.zone.xmax", "ui.zone.ymax"];
 
 function renderZones() {
   const rows = [];
   for (const [plane, zones] of Object.entries(cfg.stack.mount_zones || {})) zones.forEach((zone, j) => rows.push([plane, j, zone]));
-  let html = `<table class="grid"><tr><th>Ebene</th>${ZONE_TITLES.map((t) => `<th>${t} [mm]</th>`).join("")}<th></th></tr>`;
+  let html = `<table class="grid"><tr><th>${esc(t("ui.table.layer"))}</th>${ZONE_TITLES.map((k) => `<th>${esc(t(k))} [mm]</th>`).join("")}<th></th></tr>`;
   for (const [plane, j, zone] of rows) {
     const key = `${esc(plane)}:${j}`;
     html += `<tr><td><input type="number" min="1" step="1" data-z="${key}" data-f="plane" value="${esc(plane)}"></td>` +
       zone.map((v, q) => `<td><input type="number" step="any" data-z="${key}" data-f="${q}" value="${esc(round(v))}"></td>`).join("") +
-      `<td><button data-zdel="${key}">x</button></td></tr>`;
+      `<td><button data-zdel="${key}" title="${esc(t("ui.table.delete"))}">x</button></td></tr>`;
   }
   const box = $("#zoneTable");
   box.innerHTML = html + "</table>";
@@ -128,7 +129,7 @@ function readZones() {
   const out = {};
   for (const [key, row] of Object.entries(rows)) {
     const plane = parseInt(row.plane, 10);
-    // Leere oder ungueltige Ebene. Die Zeile behaelt ihre bisherige Ebene (frueher entstand der Schluessel "NaN")
+    // Empty or invalid layer. The row keeps its previous layer (the key "NaN" used to appear)
     const planeKey = Number.isInteger(plane) && plane >= 1 ? String(plane) : key.split(":")[0];
     (out[planeKey] ||= []).push([0, 1, 2, 3].map((q) => parseFloat(row[q])));
   }

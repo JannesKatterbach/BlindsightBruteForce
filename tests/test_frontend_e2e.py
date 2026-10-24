@@ -178,3 +178,28 @@ def test_rod_positions_download(page):
     assert download.value.suggested_filename == "blindsight-rods.json"
     data = json.loads(open(download.value.path(), encoding="utf-8").read())
     assert data["layers"][0]["name"] == "G0" and len(data["layers"][0]["always_present"]) == 2
+
+
+def test_language_switch_translates_the_whole_ui(page):
+    page.set_input_files("#fileResult", result_file(GOOD))
+    page.wait_for_selector("#resultBox:not([hidden])")
+    label = "label[data-label-for='rod.diameter']"
+    german = page.inner_text(label)
+    page.select_option("#langSel", "en")
+    page.wait_for_function("document.querySelector('#collisions').innerText.includes('No collisions')")
+    assert page.inner_text("[data-tab=results]") == "Results"
+    assert page.inner_text(label) != german and "[mm]" in page.inner_text(label)
+    assert "2 of" in page.inner_text("#statusBox") and "No collisions" in page.inner_text("#collisions")
+    assert page.evaluate("document.documentElement.lang") == "en"
+    page.select_option("#langSel", "fr")
+    page.wait_for_function("document.querySelector('#collisions').innerText.includes('Aucune collision')")
+    assert page.inner_text("[data-tab=results]") == "Résultats"
+    # Errors of the core come in the chosen language too
+    page.click("[data-tab=geometry]")
+    change(page, "#in-rod-diameter", "-1")
+    page.wait_for_function("document.querySelector('#banner').innerText.includes('Doit être supérieur')")
+    page.reload()
+    page.wait_for_selector("#in-motor-width")
+    assert page.inner_text("[data-tab=results]") == "Résultats"  # the choice is remembered
+    page.select_option("#langSel", "de")
+    page.wait_for_function("document.querySelector('[data-tab=results]').textContent === 'Ergebnisse'")

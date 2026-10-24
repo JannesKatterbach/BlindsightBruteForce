@@ -1,10 +1,10 @@
 "use strict";
-// Ergebnisansichten. Draufsicht, einzelne Ebene, Seitenschnitt, raeumliche Ansicht (mit Maus drehbar).
+// Result views. Top view, single layer, side section, 3D view (rotatable with the mouse).
 
-const isoRotation = { angle: 35, tilt: 0.55 };  // Drehung in Grad, Neigung 0.1 (flach) bis 0.95 (steil)
+const isoRotation = { angle: 35, tilt: 0.55 };  // rotation in degrees, tilt 0.1 (flat) to 0.95 (steep)
 const ISO_TILT_MIN = 0.1, ISO_TILT_MAX = 0.95;
 
-// Ansicht -> Zeichenfunktion. Eine neue Ansicht ist ein Eintrag hier und eine Option in #viewSel
+// View -> drawing function. A new view is an entry here and an option in #viewSel
 const VIEWS = {
   top: (svg, g) => drawPlan(svg, g, null, false),
   plane: (svg, g) => drawPlan(svg, g, parseInt($("#planeSel").value, 10), false),
@@ -20,13 +20,13 @@ function drawView() {
   (VIEWS[mode] || VIEWS.top)(svg, lastGeo);
 }
 
-/** Durchquert die Stange der Einheit die Ebene (dann braucht die Ebene ein Loch)? */
+/** Does the rod of the unit pass through the layer (then the layer needs a hole)? */
 function rodPasses(g, unitData, planeIndex) {
   const plane = g.planes[planeIndex];
   return unitData.rod.bottom_retracted <= plane.z_top && unitData.rod.tip_extended >= plane.z_bottom;
 }
 
-/** Draufsicht. plane null zeigt alle Ebenen, live ist die vereinfachte Vorschau waehrend der Suche. */
+/** Top view. plane null shows all layers, live is the simplified preview during the search. */
 function drawPlan(svg, g, plane, live) {
   svg.innerHTML = "";
   const b = g.bounds, w = b.xmax - b.xmin, h = b.ymax - b.ymin, m = Math.max(w, h) * 0.04;
@@ -62,7 +62,7 @@ function drawPlanRods({ svg, g, w, fs }, plane, live) {
   }
 }
 
-/** Linie von jeder Stange zur naechsten, Abstand einmal je Paar beschriftet. */
+/** Line from every rod to its nearest one, distance labelled once per pair. */
 function drawPlanDistances({ svg, g, w, fs }) {
   if (g.units.length < 2) return;
   for (const u of g.units) {

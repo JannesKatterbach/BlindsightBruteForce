@@ -1,10 +1,10 @@
 "use strict";
-// Motor Skizze. Zeichenflaeche (Raster, Zahnrad, Gehaeuse, Stange, Masse, Constraint Symbole, Punkte).
-// Gezeichnet wird in mm im Stangenrahmen (y nach oben). Groessen in Bildschirmpixeln rechnet px() um.
+// Motor sketch. Canvas (grid, gear, housing, rod, dimensions, constraint symbols, points).
+// Drawing happens in mm in the rod frame (y up). px() converts sizes in screen pixels.
 
 (() => {
-  const MIN_GRID_PX = 22;  // kleinster Abstand der Rasterlinien auf dem Bildschirm
-  // Symbole fuer Beziehungen an einer Seite
+  const MIN_GRID_PX = 22;  // smallest distance of the grid lines on the screen
+  // Symbols of relations at a side
   const SIDE_GLYPHS = [["parallel", "∥"], ["perpendicular", "⊥"], ["equal", "="], ["horizontal", "H"], ["vertical", "V"], ["angle_sides", "∠"], ["dist_side", "⇥"]];
 
   function canvasSize() {
@@ -12,7 +12,7 @@
     return [Math.max(200, canvas.clientWidth), Math.max(200, canvas.clientHeight)];
   }
 
-  /** Ansicht so einstellen, dass Kontur, Zahnrad und Stange sichtbar sind. */
+  /** Set the view so that outline, gear and rod are visible. */
   function fit() {
     const d = cfg.rod.diameter;
     const points = SK.sk.points.concat(Sketch.gearBox(), [[d, d], [-d, -d]]);
@@ -25,7 +25,7 @@
     SK.fitted = true;
   }
 
-  /** Zoom um den Bildschirmpunkt (px, py), ohne Angabe um die Mitte. */
+  /** Zoom about the screen point (px, py), by default about the centre. */
   function zoom(factor, px, py) {
     const [W, H] = canvasSize(), v = SK.view;
     px = px ?? W / 2;
@@ -37,7 +37,7 @@
     render();
   }
 
-  /** Zeichenkontext mit Hilfen fuer Text und Linien in Bildschirmgroessen. */
+  /** Drawing context with helpers for text and lines in screen sizes. */
   function context(svg) {
     const [W, H] = canvasSize(), v = SK.view, k = v.k;
     svg.setAttribute("viewBox", `${v.cx - (W * k) / 2} ${-(v.cy + (H * k) / 2)} ${W * k} ${H * k}`);
@@ -46,7 +46,7 @@
     const text = (x, y, content, o = {}) => {
       let rot = o.rot || 0;
       if (rot > 90) rot -= 180;
-      if (rot < -90) rot += 180;  // Text nie auf dem Kopf
+      if (rot < -90) rot += 180;  // text never upside down
       return svgText(root, {
         transform: `translate(${x} ${y}) rotate(${rot}) scale(1 -1)`, "font-size": px(o.size || 12), fill: o.fill || "currentColor",
         "text-anchor": o.anchor || "middle", "dominant-baseline": "middle", "pointer-events": o.dim ? "all" : "none", ...(o.attrs || {}),
@@ -94,7 +94,7 @@
 
   const pointsAttr = (points) => points.map((p) => p.join(",")).join(" ");
 
-  /** Huellkurve (Kreis um die Stange) und gedrehte Vorschau des Motors. */
+  /** Sweep envelope (circle around the rod) and rotated preview of the motor. */
   function drawRotationPreview({ root, px, text }) {
     const poly = SK.sk.points, gear = Sketch.gearBox();
     const R = Math.max(...poly.map((p) => Math.hypot(p[0], p[1])), ...gear.map((p) => Math.hypot(p[0], p[1])));
@@ -113,11 +113,11 @@
     el("polygon", { id: "skGear", points: pointsAttr(Sketch.gearBox()), fill: SK_COLORS.gear, "fill-opacity": 0.8, stroke: "#333", "stroke-width": px(1), "pointer-events": "none" }, root);
     line([-cd, -m.gear_width / 2 - px(14)], [-cd, m.gear_width / 2 + px(14)], { stroke: SK_COLORS.gearDark, w: 1, dash: 4 });
     const handle = el("circle", { id: "skGearHandle", cx: -cd, cy: 0, r: px(5), fill: SK_COLORS.gear, stroke: "#fff", "stroke-width": px(1.5), class: "handle", "data-sk-gear": "1" }, root);
-    el("title", {}, handle).textContent = "Zahnradachse. Ziehen ändert den Achsabstand";
-    text(-cd, m.gear_width / 2 + px(22), "Zahnrad", { size: 11, fill: SK_COLORS.gearDark });
+    el("title", {}, handle).textContent = t("ui.sk.gear_handle");
+    text(-cd, m.gear_width / 2 + px(22), t("ui.sk.gear"), { size: 11, fill: SK_COLORS.gearDark });
   }
 
-  /** Kontur und unsichtbar breite Seiten zum Anklicken. */
+  /** Outline and invisibly wide sides for clicking. */
   function drawHousing({ root, px, line, outlineColor }) {
     el("polygon", { id: "skPoly", points: pointsAttr(SK.sk.points), fill: outlineColor, "fill-opacity": 0.16, stroke: outlineColor, "stroke-width": px(2), "pointer-events": "none" }, root);
     for (let i = 0; i < skCount(); i++) {
@@ -136,16 +136,16 @@
     el("circle", { id: "skRod", cx: 0, cy: 0, r: rodR, fill: "#222", "pointer-events": "none", "data-rod": "1" }, root);
     line([-rodR * 2.2, 0], [rodR * 2.2, 0], { stroke: "#fff", w: 1 });
     line([0, -rodR * 2.2], [0, rodR * 2.2], { stroke: "#fff", w: 1 });
-    text(rodR + px(10), -rodR - px(10), `Stange ⌀${fmtLen(cfg.rod.diameter)}`, { size: 12, anchor: "start" });
+    text(rodR + px(10), -rodR - px(10), t("ui.sk.rod", { d: fmtLen(cfg.rod.diameter) }), { size: 12, anchor: "start" });
   }
 
-  /** Laengenmasse (mit Constraint als Bemassung, sonst grau) und Beziehungssymbole je Seite. */
+  /** Length dimensions (as a dimension with a constraint, otherwise grey) and relation symbols per side. */
   function drawSideDimensions(ctx, showMeasures) {
     const { root, px, text, line, dimText } = ctx;
     const constraints = SK.sk.constraints;
     for (let i = 0; i < skCount(); i++) {
       const a = Sketch.point(i), b = Sketch.point(i + 1), d = Sketch.sideVec(i), L = Math.hypot(...d) || 1;
-      const nx = d[1] / L, ny = -d[0] / L;  // Aussennormale (Kontur gegen den Uhrzeigersinn)
+      const nx = d[1] / L, ny = -d[0] / L;  // outer normal (outline counter clockwise)
       const angle = (Math.atan2(d[1], d[0]) * 180) / Math.PI;
       const mid = Sketch.sideMid(i), off = px(18);
       const ci = constraints.findIndex((c) => c.type === "length" && c.a === i);
@@ -174,7 +174,7 @@
     el("polygon", { points: pointsAttr([tip, p1, p2]), fill: color, "pointer-events": "none" }, root);
   }
 
-  /** Innenwinkel als Bogen. Mit Constraint farbig und bemassbar, sonst grau. */
+  /** Interior angle as an arc. Coloured and editable with a constraint, otherwise grey. */
   function drawAngles({ root, px, text, dimText }, showMeasures) {
     for (let i = 0; i < skCount(); i++) {
       const ci = SK.sk.constraints.findIndex((c) => c.type === "angle" && c.a === i);
@@ -183,7 +183,7 @@
       const status = ci >= 0 ? constraintStatus(ci) : "ok";
       const color = ci < 0 ? "#999" : statusColor(status);
       const rr = px(ci >= 0 ? 26 : 20);
-      // Bogen von der Richtung zum naechsten Punkt gegen den Uhrzeigersinn bis zum vorherigen Punkt
+      // Arc from the direction to the next point counter clockwise to the previous point
       const start = Math.atan2(next[1] - q[1], next[0] - q[0]), end = start + (angle * Math.PI) / 180;
       el("path", { d: `M ${q[0] + rr * Math.cos(start)} ${q[1] + rr * Math.sin(start)} A ${rr} ${rr} 0 ${angle > 180 ? 1 : 0} 1 ${q[0] + rr * Math.cos(end)} ${q[1] + rr * Math.sin(end)}`, fill: "none", stroke: color, "stroke-width": px(ci >= 0 ? 1.4 : 0.8), "pointer-events": "none" }, root);
       const mid = start + (angle * Math.PI) / 360;
@@ -193,7 +193,7 @@
     }
   }
 
-  /** Abstandsmasse zur Stange oder zum Zahnrad und Koordinatenmasse. */
+  /** Distance dimensions to the rod or the gear and coordinate dimensions. */
   function drawReferenceDistances({ px, line, dimText }) {
     SK.sk.constraints.forEach((c, ci) => {
       if (!c.enabled) return;
@@ -224,7 +224,7 @@
     }
   }
 
-  /** Schloss Symbol fuer fixierte Punkte. */
+  /** Lock symbol for fixed points. */
   function drawLock(root, px, q) {
     el("rect", { x: q[0] + px(7), y: q[1] + px(5), width: px(8), height: px(6), fill: SK_COLORS.ok, "pointer-events": "none" }, root);
     el("path", { d: `M ${q[0] + px(9)} ${q[1] + px(11)} v ${px(3)} a ${px(2)} ${px(2)} 0 0 1 ${px(4)} 0 v ${-px(3)}`, fill: "none", stroke: SK_COLORS.ok, "stroke-width": px(1.3), "pointer-events": "none" }, root);

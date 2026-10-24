@@ -1,7 +1,7 @@
 "use strict";
-// Gewichte der Ziele. Die Regler entstehen aus den Schemafeldern der Gruppe weights (search.weights.*).
+// Weights of the objectives. The sliders come from the schema fields of the group weights (search.weights.*).
 
-const WEIGHT_SLIDER_MAX = 20;  // groessere Werte bleiben erhalten, der Regler waechst dann mit
+const WEIGHT_SLIDER_MAX = 20;  // larger values are kept, the slider grows with them
 const WEIGHT_PRESETS = {
   count: { count: 20, area: 3, uniformity: 1, regularity: 1 },
   area: { count: 8, area: 20, uniformity: 2, regularity: 1 },
@@ -42,7 +42,7 @@ function writeWeights() {
     const key = weightKey(field);
     const range = document.querySelector(`[data-w="${key}"]`);
     const value = cfg.search.weights[key];
-    range.max = Math.max(WEIGHT_SLIDER_MAX, Math.ceil(value));  // frueher wurden Werte ueber 20 gekappt
+    range.max = Math.max(WEIGHT_SLIDER_MAX, Math.ceil(value));  // values above 20 used to be cut off
     range.value = value;
     $("#wv-" + key).textContent = value;
   }

@@ -1,13 +1,13 @@
 "use strict";
-// Gemeinsamer Zustand der Oberflaeche. cfg ist die Konfiguration im JSON Format des Kerns. Alle Laengen in mm.
+// Shared state of the UI. cfg is the configuration in the JSON format of the core. All lengths in mm.
 
-let cfg = null;  // aktuelle Konfiguration (Tests greifen ueber den globalen Namen zu)
-let schema = null;  // /api/schema (Felder, Constraint Typen, Exportformate)
+let cfg = null;  // current configuration (tests access it through the global name)
+let schema = null;  // /api/schema (fields, constraint types, export formats, languages)
 let defaults = null;  // /api/default
 
 /**
- * Feldarten des Schemas. read wandelt den Eingabetext in den Wert (mm) und liefert undefined bei
- * ungueltiger Eingabe, write wandelt den Wert in den Anzeigetext. length markiert Laengen (Einheit im Label).
+ * Field kinds of the schema. read turns the input text into the value (mm) and returns undefined for
+ * invalid input, write turns the value into the shown text. length marks lengths (unit in the label).
  */
 const parseNumber = (text) => { const v = parseFloat(text); return Number.isFinite(v) ? v : undefined; };
 const parseInteger = (text) => { const v = Number(text); return Number.isInteger(v) ? v : undefined; };

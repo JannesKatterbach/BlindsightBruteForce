@@ -1,14 +1,14 @@
 "use strict";
-// Optimierungslauf. Starten, Fortschritt abfragen, Live Vorschau, Abbrechen.
+// Optimization run. Start, poll progress, live preview, cancel.
 
 const STATUS_POLL_MS = 400;
 const LIVE_POLL_MS = 1200;
-const JOB_STATE_LABELS = { queued: "wartet", running: "läuft", finished: "fertig", failed: "Fehler", cancelled: "abgebrochen" };
 const JOB_DONE_STATES = ["finished", "failed", "cancelled"];
 
-let jobId = null;  // laufender oder zuletzt beendeter Lauf
+let jobId = null;  // running or last finished run
+let lastJobState = null;  // state of that run at the last status poll
 let statusTimer = null, liveTimer = null;
-let statusBusy = false;  // eine Statusabfrage ist unterwegs (Abfragen ueberlappen sich nicht)
+let statusBusy = false;  // a status request is on its way (requests do not overlap)
 const liveLatest = latestOnly((id) => api("/api/live/" + id));
 
 function stopPolling() {
@@ -27,12 +27,13 @@ async function startJob() {
   const { status, data } = await api("/api/start", cfg);
   if (status !== 200) {
     const errors = errorsOf(data);
-    showFieldErrors(errors.length ? errors : ["Fehler"]);
+    showFieldErrors(errors.length ? errors : [t("ui.job.error")]);
     $("#errors").innerHTML = "<ul>" + errors.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>";
     return;
   }
   showFieldErrors([]);
   jobId = data.job_id;
+  lastJobState = "queued";
   setRunning(true);
   stopPolling();
   statusTimer = setInterval(pollStatus, STATUS_POLL_MS);
@@ -57,13 +58,14 @@ async function pollStatus() {
   const id = jobId;
   try {
     const { status, data } = await api("/api/status/" + id);
-    if (id !== jobId) return;  // inzwischen wurde ein neuer Lauf gestartet
-    if (status !== 200) {  // Lauf unbekannt (z.B. Server neu gestartet). Nicht endlos weiterfragen
+    if (id !== jobId) return;  // a new run was started meanwhile
+    if (status !== 200) {  // run unknown (e.g. server restarted). Do not keep asking forever
       stopPolling();
       setRunning(false);
-      $("#errors").textContent = errorsOf(data).join(" ") || "Status nicht abrufbar";
+      $("#errors").textContent = errorsOf(data).join(" ") || t("ui.job.status_unavailable");
       return;
     }
+    lastJobState = data.state;
     renderProgress(data);
     if (JOB_DONE_STATES.includes(data.state)) await finishJob(data);
   } finally {
@@ -75,15 +77,15 @@ function renderProgress(s) {
   const p = s.progress;
   $("#bar").style.width = (p ? Math.round(p.fraction * 100) : 0) + "%";
   const rows = [
-    ["Status", JOB_STATE_LABELS[s.state] || s.state],
-    ["Phase", p ? p.phase : "-"],
-    ["Untersuchte Kandidaten", s.candidates.toLocaleString("de") + " von " + s.max_candidates.toLocaleString("de")],
-    ["Verstrichene Zeit", p ? p.elapsed.toFixed(1) + " s von " + s.time_limit + " s" : "-"],
-    ["Beste Anzahl bisher", p ? p.best_count : "-"],
-    ["Beste Bewertung bisher", p ? p.best_score.toFixed(3) : "-"],
-    ["Info", p ? p.message : ""],
+    ["status", t("ui.job." + s.state)],
+    ["phase", p ? p.phase : "-"],
+    ["candidates", t("ui.progress.candidates_value", { n: fmtCount(s.candidates), max: fmtCount(s.max_candidates) })],
+    ["elapsed", p ? t("ui.progress.elapsed_value", { elapsed: p.elapsed.toFixed(1), limit: s.time_limit }) : "-"],
+    ["best_count", p ? p.best_count : "-"],
+    ["best_score", p ? p.best_score.toFixed(3) : "-"],
+    ["info", p ? p.message : ""],
   ];
-  $("#progTable").innerHTML = rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  $("#progTable").innerHTML = rows.map(([k, v]) => `<tr><td>${esc(t("ui.progress." + k))}</td><td>${esc(v)}</td></tr>`).join("");
 }
 
 async function finishJob(s) {

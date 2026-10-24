@@ -1,5 +1,5 @@
 "use strict";
-// Start der Oberflaeche, Reiter, Laden von Konfigurationen und Verdrahtung der Bedienelemente.
+// Start of the UI, tabs, language switch, loading configurations and wiring of the controls.
 
 function switchTab(name) {
   if (name === "sketch" && window.skReload) setTimeout(skReload, 0);
@@ -7,7 +7,7 @@ function switchTab(name) {
   $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
 }
 
-/** Rekursives Zusammenfuehren. Objekte werden gemischt, Listen und Werte ersetzt. */
+/** Recursive merge. Objects are merged, lists and values replaced. */
 function mergeConfig(base, update) {
   const isObject = (v) => v && typeof v === "object" && !Array.isArray(v);
   for (const key of Object.keys(update)) {
@@ -17,7 +17,7 @@ function mergeConfig(base, update) {
   return base;
 }
 
-/** Konfiguration laden (fehlende Werte aus den Standardwerten). */
+/** Load a configuration (missing values from the defaults). */
 async function loadCfg(obj) {
   cfg = mergeConfig(clone(defaults), obj || {});
   writeInputs();
@@ -25,7 +25,7 @@ async function loadCfg(obj) {
   if (window.skReload) skReload();
 }
 
-/** Liest eine Datei aus einem Dateifeld und setzt das Feld zurueck (dieselbe Datei geht dann erneut). */
+/** Read a file from a file input and reset the input (the same file works again). */
 function onFile(selector, handler) {
   $(selector).addEventListener("change", async (e) => {
     const file = e.target.files[0];
@@ -40,7 +40,7 @@ function bindHeader() {
   $("#btnReset").addEventListener("click", () => loadCfg({}));
   onFile("#fileLoad", async (file) => {
     let obj;
-    try { obj = JSON.parse(await file.text()); } catch (err) { alert("Keine gültige Konfigurationsdatei."); return; }
+    try { obj = JSON.parse(await file.text()); } catch (err) { alert(t("ui.main.bad_config_file")); return; }
     await loadCfg(obj);
   });
 }
@@ -70,9 +70,38 @@ async function loadExamples() {
   });
 }
 
+// --- Language ------------------------------------------------------------------------------------------
+function buildLanguageSelect() {
+  const select = $("#langSel");
+  select.innerHTML = "";
+  for (const { code, name } of schema.languages || []) select.add(new Option(name, code));
+  select.value = currentLanguage;
+  select.addEventListener("change", () => changeLanguage(select.value));
+}
+
+/**
+ * Switch the language of the whole UI. The schema (field labels, tips, options, export formats) and all
+ * results come again from the server in the new language, the inputs keep their values.
+ */
+async function changeLanguage(language) {
+  setLanguage(language);
+  $("#langSel").value = currentLanguage;
+  schema = (await api("/api/schema")).data;
+  buildForms();
+  buildExportFormats();
+  writeInputs();
+  await refresh();
+  if (jobId && !JOB_DONE_STATES.includes(lastJobState)) pollStatus();
+  if (resultSource === "job" && jobId) await loadResult(solIndex);
+  else if (lastGeo) renderResult();
+  if (window.skRelocalize) await skRelocalize();
+}
+
 async function init() {
+  applyStaticTexts();
   schema = (await api("/api/schema")).data;
   defaults = (await api("/api/default")).data;
+  buildLanguageSelect();
   buildForms();
   buildExportFormats();
   initMotorPreview();

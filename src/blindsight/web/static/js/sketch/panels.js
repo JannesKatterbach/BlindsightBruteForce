@@ -1,43 +1,32 @@
 "use strict";
-// Motor Skizze. Constraint Liste, Tabellen der Seiten und Punkte, Statuszeile.
+// Motor sketch. Constraint list, tables of sides and points, status line.
 
 (() => {
   const STATUS_DOTS = { ok: "●", conflict: "✖", redundant: "◐", disabled: "○" };
-  const STATE_TEXT = {
-    under: (r) => `Unterbestimmt, ${r.dof} Freiheitsgrade`, full: () => "Voll bestimmt", over: () => "Überbestimmt (redundante Constraints)",
-    conflict: () => "Widerspruch in den Constraints", invalid: () => "Ungültige Skizze",
-  };
   const STATE_COLORS = { under: SK_COLORS.ok, full: SK_COLORS.full, over: SK_COLORS.redundant, conflict: SK_COLORS.conflict, invalid: SK_COLORS.conflict };
 
-  // Kurzschreibweise je Typ. Fehlt ein Eintrag, entsteht der Text aus dem Schema (Bezeichnung und Bezuege)
+  // Short notation per type (catalog key ui.sk.c.<type>). Without a key the text comes from the schema
   const side = (i) => `S${i + 1}`, pt = (i) => `P${i + 1}`;
-  const refName = (c) => (c.ref === "gear" ? "Zahnrad" : "Stange");
-  const CONSTRAINT_TEXT = {
-    length: (c) => `Länge ${side(c.a)}`, angle: (c) => `Winkel ${pt(c.a)}`, angle_sides: (c) => `Winkel ${side(c.a)} / ${side(c.b)}`,
-    parallel: (c) => `${side(c.a)} ∥ ${side(c.b)}`, perpendicular: (c) => `${side(c.a)} ⊥ ${side(c.b)}`, equal: (c) => `${side(c.a)} = ${side(c.b)}`,
-    horizontal: (c) => `${side(c.a)} horizontal`, vertical: (c) => `${side(c.a)} vertikal`, fix: (c) => `${pt(c.a)} fixiert`,
-    coord_x: (c) => `x von ${pt(c.a)}`, coord_y: (c) => `y von ${pt(c.a)}`,
-    dist_point: (c) => `Abstand ${pt(c.a)} zu ${refName(c)}`, dist_side: (c) => `Abstand ${side(c.a)} zu ${refName(c)}`,
-  };
 
-  /** Beschreibung des Typs aus /api/schema (Felder fuer Seiten und Punkte, Werteart). */
-  const constraintType = (name) => (schema.sketch_constraints || []).find((t) => t.name === name);
+  /** Description of the type from /api/schema (fields of sides and points, value kind, label). */
+  const constraintType = (name) => (schema.sketch_constraints || []).find((type) => type.name === name);
 
   function constraintText(c) {
-    if (CONSTRAINT_TEXT[c.type]) return CONSTRAINT_TEXT[c.type](c);
     const type = constraintType(c.type);
     if (!type) return c.type;
     const refs = type.sides.map((f) => side(c[f])).concat(type.points.map((f) => pt(c[f])));
-    return `${type.label} ${refs.join(" / ")}`;
+    const key = "ui.sk.c." + c.type;
+    if (t(key) === key) return `${type.label} ${refs.join(" / ")}`;
+    return t(key, { a: refs[0], b: refs[1], ref: t("ui.sk.ref." + (c.ref === "gear" ? "gear" : "rod")) });
   }
 
-  /** Werteart des einen bearbeitbaren Zahlenwerts ("len" oder "deg"), null ohne solchen Wert. */
+  /** Value kind of the one editable number ("len" or "deg"), null without such a value. */
   function valueKind(c) {
     const type = constraintType(c.type);
     return type && type.value && !type.value2 ? type.value : null;
   }
 
-  /** Seiten und Punkte, auf die sich ein Constraint bezieht (zum Hervorheben). */
+  /** Sides and points a constraint refers to (for highlighting). */
   function references(c) {
     const type = constraintType(c.type);
     if (!type) return { sides: [], points: [] };
@@ -49,11 +38,10 @@
     Sketch.render();
   }
 
-  // Aenderungen an Werten in der Anzeigeeinheit (Laengen) oder in Grad
-  const toValue = (kind, v) => (kind === "len" ? v : v);
+  // Values are shown in mm (lengths) or degrees
   const showValue = (kind, v) => (kind === "len" ? fmtLen(v) : fmtDeg(v));
 
-  /** Waehrend Tabellen neu gebaut werden, feuert der Browser change fuer entfernte Felder. Das ignorieren. */
+  /** While tables are rebuilt, the browser fires change for removed fields. Ignore that. */
   function rebuild(box, html) {
     SK.rendering = true;
     box.innerHTML = html;
@@ -64,7 +52,7 @@
     const box = $("#skCons");
     rebuild(box, "");
     if (!SK.sk.constraints.length) {
-      box.innerHTML = '<p class="hint">Noch keine Constraints. Seiten oder Punkte wählen und ein Werkzeug anklicken, oder Werte in den Tabellen eingeben.</p>';
+      box.innerHTML = `<p class="hint">${esc(t("ui.sk.no_constraints"))}</p>`;
       return;
     }
     SK.sk.constraints.forEach((c, k) => box.appendChild(constraintRow(c, k)));
@@ -75,7 +63,7 @@
     const row = document.createElement("div");
     row.className = "skcons " + status;
     row.dataset.skCons = k;
-    const message = (SK.res && SK.res.constraints[k] && SK.res.constraints[k].message) || status;
+    const message = (SK.res && SK.res.constraints[k] && SK.res.constraints[k].message) || t("ui.sk.status." + status);
     row.innerHTML = `<span class="dot" title="${esc(message)}">${STATUS_DOTS[status] || STATUS_DOTS.ok}</span><span class="lbl">${esc(c.name || constraintText(c))}</span>`;
     const kind = valueKind(c);
     if (kind) {
@@ -87,18 +75,18 @@
       input.dataset.skConsVal = k;
       input.addEventListener("change", () => {
         const v = parseFloat(input.value);
-        if (Number.isFinite(v)) Sketch.commit((s) => { s.constraints[k].value = toValue(kind, v); });
+        if (Number.isFinite(v)) Sketch.commit((s) => { s.constraints[k].value = v; });
       });
       row.appendChild(input);
     }
     const enabled = document.createElement("input");
     enabled.type = "checkbox";
     enabled.checked = c.enabled;
-    enabled.title = "Aktiv";
+    enabled.title = t("ui.sk.active");
     enabled.addEventListener("change", () => Sketch.commit((s) => { s.constraints[k].enabled = enabled.checked; }));
     const remove = document.createElement("button");
     remove.textContent = "×";
-    remove.title = "Constraint löschen";
+    remove.title = t("ui.sk.delete_constraint");
     remove.dataset.skConsDel = k;
     remove.addEventListener("click", () => Sketch.commit((s) => { s.constraints.splice(k, 1); }));
     row.append(enabled, remove);
@@ -108,7 +96,7 @@
     return row;
   }
 
-  /** Constraint vom Typ type, der match erfuellt, aendern oder neu anlegen. */
+  /** Change the constraint of type type that satisfies match, or create it. */
   function upsert(sketch, type, match, fields) {
     const idx = sketch.constraints.findIndex((c) => c.type === type && match(c));
     if (idx >= 0) Object.assign(sketch.constraints[idx], fields);
@@ -133,7 +121,7 @@
   }
 
   function sidesTable(measures) {
-    let html = `<table class="grid"><tr><th>Seite</th><th>Länge [mm]</th><th>parallel zu</th><th>H</th><th>V</th></tr>`;
+    let html = `<table class="grid"><tr><th>${esc(t("ui.sk.head.side"))}</th><th>${esc(t("ui.sk.head.length"))}</th><th>${esc(t("ui.sk.head.parallel"))}</th><th>H</th><th>V</th></tr>`;
     for (let i = 0; i < skCount(); i++) {
       const parallel = SK.sk.constraints.find((c) => c.type === "parallel" && c.enabled && (c.a === i || c.b === i));
       const partner = parallel ? (parallel.a === i ? parallel.b : parallel.a) : null;
@@ -149,7 +137,7 @@
   }
 
   function pointsTable(measures) {
-    let html = `<table class="grid"><tr><th>Punkt</th><th>x [mm]</th><th>y [mm]</th><th>Winkel °</th><th></th></tr>`;
+    let html = `<table class="grid"><tr><th>${esc(t("ui.sk.head.point"))}</th><th>x [mm]</th><th>y [mm]</th><th>${esc(t("ui.sk.head.angle"))}</th><th></th></tr>`;
     for (let i = 0; i < skCount(); i++) {
       const q = Sketch.point(i), fixed = hasConstraint("fix", i);
       const driven = (type) => (hasConstraint(type, i) || (type !== "angle" && fixed) ? "driven" : "");
@@ -157,12 +145,12 @@
         <td><input type="number" step="any" class="${driven("coord_x")}" data-sk-x="${i}" value="${fmtLen(q[0])}"></td>
         <td><input type="number" step="any" class="${driven("coord_y")}" data-sk-y="${i}" value="${fmtLen(q[1])}"></td>
         <td><input type="number" step="any" class="${driven("angle")}" data-sk-ang="${i}" value="${fmtDeg(measures.angles[i])}"></td>
-        <td><button data-sk-fix="${i}" title="Fixieren">${fixed ? "gelöst" : "fix"}</button><button data-sk-del="${i}" title="Punkt löschen">×</button></td></tr>`;
+        <td><button data-sk-fix="${i}" title="${esc(t("ui.sk.fix_tip"))}">${esc(t(fixed ? "ui.sk.unfix" : "ui.sk.fix"))}</button><button data-sk-del="${i}" title="${esc(t("ui.sk.delete_point"))}">×</button></td></tr>`;
     }
     return html + "</table>";
   }
 
-  /** Feld mit Zahlenwert. onValue erhaelt Index und Zahl, nur fuer endliche Zahlen. */
+  /** Field with a number. onValue gets index and number, only for finite numbers. */
   function onNumber(selector, attr, onValue) {
     $$(selector).forEach((input) => input.addEventListener("change", () => {
       const v = parseFloat(input.value);
@@ -170,7 +158,7 @@
     }));
   }
 
-  /** Klick auf eine Zeile (nicht auf ein Feld) waehlt die Seite oder den Punkt aus. */
+  /** A click on a row (not on a field) selects the side or the point. */
   function onRowClick(selector, attr, kind) {
     $$(selector).forEach((row) => row.addEventListener("click", (ev) => {
       if (ev.target.tagName === "TR" || ev.target.tagName === "TD") Sketch.select(kind, +row.dataset[attr], ev.shiftKey);
@@ -215,15 +203,15 @@
   function renderStatus() {
     const r = SK.res, box = $("#skStatus");
     if (!r) { box.textContent = ""; return; }
-    const stateText = STATE_TEXT[r.state] ? STATE_TEXT[r.state](r) : r.state;
-    const items = [`<b style="color:${STATE_COLORS[r.state]}">${esc(stateText)}</b>`, r.convex ? "Kontur konvex" : '<b style="color:var(--bad)">Kontur nicht konvex</b>'];
+    const stateText = t("ui.sk.state." + r.state, { dof: r.dof });
+    const items = [`<b style="color:${STATE_COLORS[r.state]}">${esc(stateText)}</b>`, r.convex ? esc(t("ui.sk.convex")) : `<b style="color:var(--bad)">${esc(t("ui.sk.not_convex"))}</b>`];
     for (const m of [...(r.errors || []), ...(r.warnings || [])]) items.push(`<span style="color:var(--bad)">${esc(m)}</span>`);
     const clearance = skCount() >= 3 ? Sketch.housingClearance() : 0;
     if (clearance < cfg.motor.own_clearance - SK_EPS) {
-      items.push(`<span style="color:var(--bad)">Gehäuse zu nah an der Stange (${fmtLen(Math.max(0, clearance))} mm, benötigt ${fmtLen(cfg.motor.own_clearance)} mm)</span>`);
+      items.push(`<span style="color:var(--bad)">${esc(t("ui.sk.too_close", { actual: fmtLen(Math.max(0, clearance)), required: fmtLen(cfg.motor.own_clearance) }))}</span>`);
     }
     if (SK.msg) items.push(`<span style="color:var(--bad)">${esc(SK.msg)}</span>`);
-    if (!SK.attached) items.push("Vorschau des aktuellen Motors. Die erste Änderung übernimmt die Skizze in die Konfiguration.");
+    if (!SK.attached) items.push(esc(t("ui.sk.preview")));
     box.innerHTML = items.join(" · ");
     box.className = "statusBox" + (r.state === "conflict" || !r.convex || (r.errors || []).length ? " warn" : "");
     $("#skUndo").disabled = !SK.hist.length;

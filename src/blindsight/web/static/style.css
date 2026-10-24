@@ -1,4 +1,4 @@
-/* Farben als Variablen. Die Zeichnungen nutzen dazu die Tabellen COLORS und SK_COLORS in js/core/util.js und js/sketch/state.js */
+/* Colours as variables. The drawings also use the tables COLORS and SK_COLORS in js/core/util.js and js/sketch/state.js */
 :root{--bg:#f6f7f9;--fg:#1d2330;--mut:#667;--card:#fff;--bd:#d6dae2;--ac:#2f6fed;--bad:#c62828;--ok:#2e7d32;--warn:#e08a00;--sel:#ff9800}
 @media (prefers-color-scheme:dark){:root{--bg:#161a22;--fg:#e6e9f0;--mut:#9aa3b5;--card:#1f2430;--bd:#343b4a;--ac:#6e9bff;--bad:#ff6b6b;--ok:#6fcf7a}}
 *{box-sizing:border-box}
@@ -41,7 +41,7 @@ table.grid input,table.grid select{width:100%;min-width:48px;padding:3px 4px}
 #liveView,#boundsPreview{max-width:520px}
 .handle{cursor:grab}
 [hidden]{display:none!important}
-/* Motor Skizze */
+/* Motor sketch */
 #skRoot{display:grid;grid-template-columns:300px minmax(0,1fr) 290px;gap:14px;align-items:start}
 #skLeft,#skRight{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 12px 12px}
 #skCanvasWrap{position:relative}

@@ -1,15 +1,15 @@
 "use strict";
-// Motor Skizze. Geometrie Hilfen fuer die Anzeige (gerechnet wird im Kern).
+// Motor sketch. Geometry helpers for the display (the core does the computing).
 
 (() => {
-  /** Punkt i (zyklisch). */
+  /** Point i (cyclic). */
   const point = (i) => SK.sk.points[((i % skCount()) + skCount()) % skCount()];
-  /** Richtung der Seite i (von Punkt i nach Punkt i+1). */
+  /** Direction of side i (from point i to point i+1). */
   const sideVec = (i) => { const a = point(i), b = point(i + 1); return [b[0] - a[0], b[1] - a[1]]; };
   const sideLen = (i) => Math.hypot(...sideVec(i));
   const sideMid = (i) => { const a = point(i), b = point(i + 1); return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
 
-  /** Innenwinkel an Punkt i in Grad (0 bis 360). */
+  /** Interior angle at point i in degrees (0 to 360). */
   function interiorAngle(i) {
     const q = point(i), p = point(i - 1), r = point(i + 1);
     const a = [p[0] - q[0], p[1] - q[1]], b = [r[0] - q[0], r[1] - q[1]];
@@ -17,13 +17,13 @@
     return angle >= 0 ? angle : angle + 360;
   }
 
-  /** Winkel zwischen den Richtungen zweier Seiten in Grad (0 bis 180). */
+  /** Angle between the directions of two sides in degrees (0 to 180). */
   function angleBetweenSides(a, b) {
     const da = sideVec(a), db = sideVec(b);
     return Math.abs(Math.atan2(da[0] * db[1] - da[1] * db[0], da[0] * db[0] + da[1] * db[1])) * 180 / Math.PI;
   }
 
-  /** Abstand eines Punktes zu einem konvexen Polygon (0 innerhalb). */
+  /** Distance of a point to a convex polygon (0 inside). */
   function distancePointPolygon(px, py, poly) {
     let inside = true, best = Infinity;
     for (let i = 0; i < poly.length; i++) {
@@ -36,25 +36,25 @@
     return inside ? 0 : best;
   }
 
-  /** Lotabstand einer Referenz zur Geraden durch Seite i. */
+  /** Perpendicular distance of a reference to the line through side i. */
   function distanceSideRef(i, ref) {
     const a = point(i), d = sideVec(i), L = sideLen(i) || 1, r = refPos(ref);
     return Math.abs((d[0] * (r[1] - a[1]) - d[1] * (r[0] - a[0])) / L);
   }
 
-  /** Position einer Referenz (Stange im Ursprung, Zahnrad bei (-Achsabstand, 0)). */
+  /** Position of a reference (rod at the origin, gear at (-centre distance, 0)). */
   const refPos = (ref) => (ref === "gear" ? [-cfg.motor.center_distance, 0] : [0, 0]);
 
-  /** Zahnrad als Rechteck im Stangenrahmen. */
+  /** Gear as a rectangle in the rod frame. */
   function gearBox() {
     const m = cfg.motor, r = m.gear_diameter / 2, h = m.gear_width / 2, cd = m.center_distance;
     return [[-cd - r, -h], [-cd + r, -h], [-cd + r, h], [-cd - r, h]];
   }
 
-  /** Abstand Gehaeuse zur Stangenoberflaeche. */
+  /** Distance of the housing to the rod surface. */
   const housingClearance = () => distancePointPolygon(0, 0, SK.sk.points) - cfg.rod.diameter / 2;
 
-  /** Seite, deren Endpunkte die beiden Punkte sind, sonst null. */
+  /** Side whose end points are the two points, otherwise null. */
   function adjacentSide(points) {
     const [a, b] = [...points].sort((x, y) => x - y);
     if (b === a + 1) return a;
@@ -62,7 +62,7 @@
     return null;
   }
 
-  /** Naechste Seite zum Punkt (mx, my) innerhalb von 9 Bildschirmpixeln, mit Parameter t auf der Seite. */
+  /** Nearest side to the point (mx, my) within 9 screen pixels, with the parameter t on the side. */
   function nearestSide(mx, my) {
     let best = null;
     for (let i = 0; i < skCount(); i++) {

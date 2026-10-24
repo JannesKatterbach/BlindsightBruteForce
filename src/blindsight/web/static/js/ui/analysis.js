@@ -1,15 +1,15 @@
 "use strict";
-// Analyse ohne Optimierung. Ebenen, Stangenlaengen, Probleme, Seitenschnitt und Bauraum Vorschau.
+// Analysis without optimization. Layers, rod lengths, problems, side section and build area preview.
 
 const analyzeLatest = latestOnly((project) => api("/api/analyze", project));
 
-/** Aktualisiert Vorschauen und Analyse nach jeder Aenderung an cfg. Spaete Antworten werden verworfen. */
+/** Update previews and analysis after every change of cfg. Late answers are discarded. */
 async function refresh() {
   drawMotor();
   drawBounds();
   let response;
   try { response = await analyzeLatest(cfg); } catch (e) { return; }
-  if (!response) return;  // inzwischen gibt es eine neuere Anfrage
+  if (!response) return;  // a newer request exists meanwhile
   const errors = errorsOf(response.data);
   if (response.status !== 200 || errors.length) {
     showFieldErrors(errors);
@@ -23,10 +23,11 @@ async function refresh() {
 
 function renderLevelInfo(analysis) {
   const stroke = round(cfg.rod.stroke, 2);
-  let html = `<table class="grid"><tr><th>Ebene</th><th>z oben [mm]</th><th>Stange gesamt</th><th>unter Montage</th><th>Gewinde unten / oben</th></tr>`;
+  const head = ["layer", "z_top", "rod_total", "below_mount", "thread"].map((k) => `<th>${esc(t("ui.levels.head." + k))}</th>`).join("");
+  let html = `<table class="grid"><tr>${head}</tr>`;
   for (const p of analysis.planes) {
     if (p.index === 0) {
-      html += `<tr><td>G0</td><td>${round(p.z_top, 2)}</td><td colspan=3>Referenzebene, Hub ${stroke} mm darüber</td></tr>`;
+      html += `<tr><td>G0</td><td>${round(p.z_top, 2)}</td><td colspan=3>${esc(t("ui.levels.reference", { stroke }))}</td></tr>`;
       continue;
     }
     const rod = p.rod;
@@ -34,11 +35,10 @@ function renderLevelInfo(analysis) {
       `<td>${round(rod.engage_below_actual, 1)} / ${round(rod.engage_above_actual, 1)}</td></tr>`;
     if (p.problems.length) html += `<tr><td colspan=5 class="bad">${p.problems.map(esc).join("<br>")}</td></tr>`;
   }
-  $("#levelInfo").innerHTML = html + `</table><p class="hint">Alle Stangen erreichen ${stroke} mm über G0. Längen in mm. ` +
-    `Wirksamer Mindestabstand ${round(analysis.required_gap, 2)} mm.</p>`;
+  $("#levelInfo").innerHTML = html + `</table><p class="hint">${esc(t("ui.levels.summary", { stroke, gap: round(analysis.required_gap, 2) }))}</p>`;
 }
 
-/** Seitenschnitt der Ebenen mit je einer Stange und einem Motor pro Motorebene. */
+/** Side section of the layers with one rod and one motor per motor layer. */
 function drawSectionPreview(analysis) {
   const svg = $("#sectionPreview");
   svg.innerHTML = "";
@@ -61,7 +61,7 @@ function drawSectionPreview(analysis) {
 function drawBounds() {
   const svg = $("#boundsPreview");
   svg.innerHTML = "";
-  const b = cfg.bounds;  // Ursprung (0, 0) unten links
+  const b = cfg.bounds;  // origin (0, 0) at the bottom left
   const w = b.width, h = b.height;
   if (!(w > 0 && h > 0)) return;
   const m = Math.max(w, h) * 0.04, thin = w / 600;

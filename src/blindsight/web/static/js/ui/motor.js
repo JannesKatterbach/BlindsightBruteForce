@@ -1,14 +1,14 @@
 "use strict";
-// Motor Vorschau im Reiter Geometrie (nur Anzeige, bearbeitet wird im Reiter Motor Skizze),
-// Motor Bibliothek im Browser und SVG Import.
+// Motor preview on the Geometry tab (display only, editing happens on the Motor sketch tab),
+// motor library in the browser and SVG import.
 
-// Felder, die bei vorhandener Skizze keine Wirkung haben und gesperrt werden
+// Fields that have no effect when a sketch exists and are locked
 const SKETCH_OVERRIDDEN = ["motor.width", "motor.depth", "motor.shaft_x", "motor.gear_gap"];
 const LIBRARY_KEY = "blindsight.motors";
 
 const hasSketch = (motor) => !!(motor.sketch && motor.sketch.points && motor.sketch.points.length >= 3);
 
-/** Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse, y nach oben). */
+/** Housing outline in the rod frame (origin = rod axis, y up). */
 function motorPolygonRod(m) {
   if (hasSketch(m)) return m.sketch.points;
   const hasOutline = m.outline && m.outline.length >= 3;
@@ -39,7 +39,7 @@ function drawMotor() {
   el("line", { x1: -cd, y1: 0, x2: 0, y2: 0, stroke: COLORS.bad, "stroke-width": sw, "stroke-dasharray": dash }, svg);
 }
 
-/** Sperrt die von der Skizze bestimmten Felder (mit Hinweis) und gibt sie ohne Skizze wieder frei. */
+/** Lock the fields determined by the sketch (with a hint) and unlock them without a sketch. */
 function updateSketchLock() {
   const locked = hasSketch(cfg.motor);
   $("#sketchNote").hidden = !locked;
@@ -47,11 +47,11 @@ function updateSketchLock() {
     const input = document.querySelector(`[data-path="${path}"]`);
     if (!input) continue;
     input.disabled = locked;
-    input.title = locked ? "Wird von der Motor Skizze bestimmt" : input.dataset.tip;  // frueher ging der Tooltip verloren
+    input.title = locked ? t("ui.motor.locked") : input.dataset.tip;  // the tooltip used to get lost
   }
 }
 
-/** Mauskoordinaten im SVG Koordinatensystem (y nach oben). */
+/** Mouse coordinates in the SVG coordinate system (y up). */
 function svgPoint(svg, ev) {
   const pt = svg.createSVGPoint();
   pt.x = ev.clientX;
@@ -60,7 +60,7 @@ function svgPoint(svg, ev) {
   return [p.x, -p.y];
 }
 
-/** Nach einer Aenderung am Motor alle Ansichten aktualisieren (auch die Skizze). */
+/** Update all views after a change of the motor (the sketch too). */
 function motorChanged() {
   writeInputs();
   drawMotor();
@@ -73,12 +73,12 @@ function initMotorPreview() {
   $("#btnDropSketch").addEventListener("click", () => { cfg.motor.sketch = null; motorChanged(); });
 }
 
-// --- Bibliothek --------------------------------------------------------------------------------------
+// --- Library --------------------------------------------------------------------------------------
 function libLoad() {
   try { return JSON.parse(localStorage.getItem(LIBRARY_KEY) || "{}"); } catch (e) { return {}; }
 }
 function libStore(library) {
-  try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); return true; } catch (e) { alert("Speichern im Browser nicht möglich."); return false; }
+  try { localStorage.setItem(LIBRARY_KEY, JSON.stringify(library)); return true; } catch (e) { alert(t("ui.library.store_failed")); return false; }
 }
 function libRender() {
   $("#libSel").innerHTML = Object.keys(libLoad()).map((name) => `<option>${esc(name)}</option>`).join("");
@@ -109,7 +109,7 @@ function initLibrary() {
     const file = e.target.files[0];
     resetFileInput(e.target);
     if (!file) return;
-    try { cfg.motor = withDefaults(JSON.parse(await file.text())); } catch (err) { alert("Keine gültige Motor Datei."); return; }
+    try { cfg.motor = withDefaults(JSON.parse(await file.text())); } catch (err) { alert(t("ui.library.bad_file")); return; }
     motorChanged();
   });
   $("#svgMotor").addEventListener("change", async (e) => {
@@ -119,7 +119,7 @@ function initLibrary() {
   });
 }
 
-/** SVG Import. Fragt den Massstab nach, wenn er nicht eindeutig ist. */
+/** SVG import. Asks for the scale if it is ambiguous. */
 async function importSvgMotor(svgText) {
   const message = $("#svgMotorMsg");
   const body = { svg: svgText };
@@ -128,15 +128,15 @@ async function importSvgMotor(svgText) {
     const { data } = await api("/api/svg-motor-import", body);
     if (errorsOf(data).length) { message.textContent = errorsOf(data).join(" "); return; }
     if (data.scale_required) {
-      const answer = prompt(data.message + "\nmm pro SVG Einheit (zum Beispiel 1 bei Einheit mm, 0.2646 bei px mit 96 dpi):");
+      const answer = prompt(data.message + "\n" + t("ui.svg.ask_scale"));
       const scale = parseFloat(answer);
-      if (!answer || !(scale > 0)) { message.textContent = "Abgebrochen. Kein gültiger Maßstab."; return; }
+      if (!answer || !(scale > 0)) { message.textContent = t("ui.svg.cancelled"); return; }
       body.mm_per_unit = scale;
       continue;
     }
     Object.assign(cfg.motor, { outline: null, sketch: { points: data.sketch.points, constraints: [] }, width: data.width, depth: data.depth });
     motorChanged();
-    message.textContent = `Übernommen. ${data.width.toFixed(2)} x ${data.depth.toFixed(2)} mm ${data.notes.join(" ")}`;
+    message.textContent = t("ui.svg.imported", { width: data.width.toFixed(2), depth: data.depth.toFixed(2), notes: data.notes.join(" ") });
     return;
   }
 }

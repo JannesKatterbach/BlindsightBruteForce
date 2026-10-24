@@ -1,9 +1,9 @@
 "use strict";
-// Manuelles Bearbeiten einer Anordnung in der Draufsicht. Jede Aenderung prueft der Server (/api/validate).
+// Manual editing of an arrangement in the top view. The server checks every change (/api/validate).
 
 const EDIT_DEBOUNCE_MS = 120;
-const NEW_UNIT_ID = 1e6;  // vorlaeufige Id einer neuen Einheit bis zur Pruefung
-const DRAG_THRESHOLD_PX = 3;  // erst ab dieser Bewegung gilt ein Klick als Ziehen
+const NEW_UNIT_ID = 1e6;  // provisional id of a new unit until the check
+const DRAG_THRESHOLD_PX = 3;  // from this movement on a click counts as dragging
 
 let editMode = false;
 let selUnit = null;
@@ -39,13 +39,13 @@ function initEdit() {
     drawView();
   });
   svg.addEventListener("pointerup", () => {
-    // Nur echtes Ziehen veraendert die Anordnung. Ein Klick waehlt nur aus
+    // Only real dragging changes the arrangement. A click only selects
     if (drag && drag.moved) pushEdit();
     drag = null;
   });
 }
 
-/** Vorschau waehrend des Ziehens. Die Bauteile ersetzt der Server nach der Pruefung. */
+/** Preview while dragging. The server replaces the parts after the check. */
 function moveUnitLocally(u) {
   const dx = u.x - u._x0, dy = u.y - u._y0;
   u.parts.forEach((p) => { p.outline = p.outline.map(([x, y]) => [x + dx, y + dy]); });
@@ -60,13 +60,13 @@ function renderEditPanel() {
   lastGeo.units.forEach((u) => { if (u._x0 === undefined) { u._x0 = u.x; u._y0 = u.y; } });
   const u = selectedUnit();
   const planes = lastGeo.planes.slice(1).map((p) => `<option value="${p.index}" ${u && u.plane === p.index ? "selected" : ""}>${esc(p.name)}</option>`).join("");
-  const unitControls = u ? `Einheit ${u.id}:
-    Ebene <select id="edPlane">${planes}</select> Winkel <input id="edAngle" type="number" step="any" value="${esc(u.angle)}" style="width:80px">
+  const unitControls = u ? `${esc(t("ui.edit.unit", { id: u.id }))}
+    ${esc(t("ui.edit.layer"))} <select id="edPlane">${planes}</select> ${esc(t("ui.edit.angle"))} <input id="edAngle" type="number" step="any" value="${esc(u.angle)}" style="width:80px">
     x [mm] <input id="edX" type="number" step="any" value="${esc(round(round(u.x), 3))}" style="width:80px">
     y [mm] <input id="edY" type="number" step="any" value="${esc(round(round(u.y), 3))}" style="width:80px">
-    <button id="edDel">Entfernen</button>` : "Keine Einheit gewählt.";
-  box.innerHTML = `<b>Bearbeiten.</b> Stange in der Draufsicht ziehen. Jede Änderung wird sofort geprüft. ${unitControls} ` +
-    `<button id="edAdd">Einheit hinzufügen</button> <button id="edReset">Zurücksetzen</button>` +
+    <button id="edDel">${esc(t("ui.edit.remove"))}</button>` : esc(t("ui.edit.none_selected"));
+  box.innerHTML = `<b>${esc(t("ui.edit.title"))}</b> ${esc(t("ui.edit.hint"))} ${unitControls} ` +
+    `<button id="edAdd">${esc(t("ui.edit.add"))}</button> <button id="edReset">${esc(t("ui.edit.reset"))}</button>` +
     (editError ? `<div style="color:var(--bad)">${esc(editError)}</div>` : "");
   if (u) bindUnitControls();
   $("#edAdd").addEventListener("click", addUnit);
@@ -74,7 +74,7 @@ function renderEditPanel() {
 }
 
 function bindUnitControls() {
-  // Aenderung an der gewaehlten Einheit. Ungueltige Zahlen werden ignoriert
+  // Change of the selected unit. Invalid numbers are ignored
   const update = (apply) => () => { const q = selectedUnit(); if (q && apply(q) !== false) pushEdit(); };
   const number = (id) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : undefined; };
   $("#edPlane").addEventListener("change", update((q) => { q.plane = +$("#edPlane").value; }));
@@ -95,7 +95,7 @@ function addUnit() {
   pushEdit();
 }
 
-/** Zurueck zum Stand vor dem Bearbeiten (auch fuer aus einer Datei geladene Ergebnisse). */
+/** Back to the state before editing (also for results loaded from a file). */
 async function resetEdits() {
   editError = "";
   if (resultSource === "job" && jobId) { await loadResult(solIndex); return; }
@@ -108,7 +108,7 @@ async function resetEdits() {
   renderResult();
 }
 
-/** Prueft die bearbeitete Anordnung (gedrosselt, nur die neueste Antwort zaehlt). */
+/** Check the edited arrangement (debounced, only the newest answer counts). */
 function pushEdit() {
   clearTimeout(editTimer);
   editTimer = setTimeout(async () => {

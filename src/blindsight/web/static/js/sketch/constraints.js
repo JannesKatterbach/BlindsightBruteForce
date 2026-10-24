@@ -1,13 +1,13 @@
 "use strict";
-// Motor Skizze. Auswahl, Werkzeuge fuer Constraints und Werteingabe direkt an der Zeichnung.
+// Motor sketch. Selection, constraint tools and value input directly at the drawing.
 
 (() => {
   const counts = () => ({ ps: SK.sel.p.size, ss: SK.sel.s.size });
   const sortedPoints = () => [...SK.sel.p].sort((a, b) => a - b);
   const sortedSides = () => [...SK.sel.s].sort((a, b) => a - b);
 
-  // Werkzeug -> {can: passt die Auswahl?, run: Constraint anlegen}. Ein neues Werkzeug ist ein Eintrag hier
-  // und ein Knopf mit data-sk-add in index.html. Typen und Werte kennt der Kern (CONSTRAINT_TYPES).
+  // Tool -> {can: does the selection fit?, run: create the constraint}. A new tool is an entry here and a
+  // button with data-sk-add (and data-i18n) in index.html. Types and values are known to the core (CONSTRAINT_TYPES).
   const TOOLS = {
     length: { can: ({ ps, ss }) => ss === 1 || (ps === 2 && !ss && Sketch.adjacentSide(sortedPoints()) !== null), run: addLength },
     angle: { can: ({ ps, ss }) => (ps === 1 && !ss) || (ss === 2 && !ps), run: addAngle },
@@ -37,7 +37,7 @@
     if (canAdd(tool)) TOOLS[tool].run();
   }
 
-  /** Eingabefeld an der Stelle at (mm) der Zeichnung. Enter uebernimmt, Esc oder Verlassen bricht ab. */
+  /** Input field at the position at (mm) of the drawing. Enter accepts, Esc or leaving cancels. */
   function askValue(label, initial, at, onValue) {
     const input = $("#skInput"), v = SK.view, [W, H] = Sketch.canvasSize();
     const sx = (at[0] - v.cx) / v.k + W / 2, sy = -(at[1] - v.cy) / v.k + H / 2;
@@ -66,7 +66,7 @@
   function addLength() {
     const sides = sortedSides();
     const i = sides.length ? sides[0] : Sketch.adjacentSide(sortedPoints());
-    askValue(`Länge S${i + 1} [mm]`, fmtLen(Sketch.sideLen(i)), Sketch.sideMid(i), (v) => {
+    askValue(t("ui.sk.ask.length", { a: `S${i + 1}` }), fmtLen(Sketch.sideLen(i)), Sketch.sideMid(i), (v) => {
       if (v > 0) Sketch.commit((s) => Sketch.upsert(s, "length", (c) => c.a === i, { a: i, value: v }));
     });
   }
@@ -75,13 +75,13 @@
     const points = sortedPoints();
     if (points.length === 1) {
       const i = points[0];
-      askValue(`Winkel P${i + 1} [Grad]`, fmtDeg(Sketch.interiorAngle(i)), Sketch.point(i), (v) => {
+      askValue(t("ui.sk.ask.angle", { a: `P${i + 1}` }), fmtDeg(Sketch.interiorAngle(i)), Sketch.point(i), (v) => {
         if (v > 0 && v < 180) Sketch.commit((s) => Sketch.upsert(s, "angle", (c) => c.a === i, { a: i, value: v }));
       });
       return;
     }
     const [a, b] = sortedSides();
-    askValue(`Winkel S${a + 1} / S${b + 1} [Grad]`, fmtDeg(Sketch.angleBetweenSides(a, b)), Sketch.sideMid(a), (v) => {
+    askValue(t("ui.sk.ask.angle_sides", { a: `S${a + 1}`, b: `S${b + 1}` }), fmtDeg(Sketch.angleBetweenSides(a, b)), Sketch.sideMid(a), (v) => {
       if (v >= 0 && v <= 180) Sketch.commit((s) => Sketch.upsert(s, "angle_sides", (c) => c.a === a && c.b === b, { a, b, value: v }));
     });
   }
@@ -89,7 +89,7 @@
   function addPair(type) {
     const [a, b] = sortedSides();
     const exists = SK.sk.constraints.some((c) => c.type === type && ((c.a === a && c.b === b) || (c.a === b && c.b === a)));
-    if (exists) { SK.msg = "Diese Beziehung existiert bereits."; Sketch.renderAll(); return; }
+    if (exists) { SK.msg = t("ui.sk.exists"); Sketch.renderAll(); return; }
     Sketch.commit((s) => s.constraints.push(makeConstraint(type, { a, b })));
   }
 
@@ -108,22 +108,22 @@
   }
 
   function addDistance(ref) {
-    const word = ref === "gear" ? "Zahnrad" : "Stange";
+    const word = t("ui.sk.ref." + ref);
     const points = sortedPoints();
     if (points.length === 1) {
       const i = points[0], q = Sketch.point(i), r = Sketch.refPos(ref);
-      askValue(`Abstand P${i + 1} zu ${word} [mm]`, fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), q, (v) => {
+      askValue(t("ui.sk.ask.distance", { a: `P${i + 1}`, ref: word }), fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), q, (v) => {
         if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_point", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
       });
       return;
     }
     const i = sortedSides()[0];
-    askValue(`Abstand S${i + 1} zu ${word} [mm]`, fmtLen(Sketch.distanceSideRef(i, ref)), Sketch.sideMid(i), (v) => {
+    askValue(t("ui.sk.ask.distance", { a: `S${i + 1}`, ref: word }), fmtLen(Sketch.distanceSideRef(i, ref)), Sketch.sideMid(i), (v) => {
       if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_side", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
     });
   }
 
-  /** Klick auf ein Mass. Laenge und Winkel legen einen Constraint an, vorhandene Werte werden bearbeitet. */
+  /** Click on a dimension. Length and angle create a constraint, existing values are edited. */
   function openDimension(key) {
     const [kind, index] = key.split(":"), i = +index;
     if (kind === "length") { SK.sel = { p: new Set(), s: new Set([i]) }; Sketch.renderAll(); addConstraint("length"); return; }
@@ -132,7 +132,7 @@
     if (kind !== "cons" || !valueKind) return;
     const at = c.type === "dist_point" ? Sketch.point(c.a) : Sketch.sideMid(c.a ?? 0);
     askValue(Sketch.constraintText(c), valueKind === "len" ? fmtLen(c.value) : fmtDeg(c.value), at, (v) => {
-      Sketch.commit((s) => { s.constraints[i].value = valueKind === "len" ? v : v; });
+      Sketch.commit((s) => { s.constraints[i].value = v; });
     });
   }
 

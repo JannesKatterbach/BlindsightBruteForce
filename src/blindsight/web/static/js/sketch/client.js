@@ -1,11 +1,11 @@
 "use strict";
-// Motor Skizze. Aufrufe des Solvers, Uebernahme der Ergebnisse, Verlauf und Abgleich mit der Konfiguration.
+// Motor sketch. Solver calls, taking over results, history and sync with the configuration.
 
 (() => {
   const SYNC_DEBOUNCE_MS = 120;
   const gearArg = () => [cfg.motor.gear_diameter, cfg.motor.gear_width];
   const request = (sketch, extra = {}) => ({ sketch, cd: cfg.motor.center_distance, gear: gearArg(), ...extra });
-  // Aenderungen an der Skizze laufen nacheinander. Sonst koennte eine spaete Antwort eine neuere ueberschreiben
+  // Changes of the sketch run one after another. Otherwise a late answer could overwrite a newer one
   const queue = serialQueue();
 
   async function callSolve(extra = {}) {
@@ -13,7 +13,7 @@
     return data;
   }
 
-  /** Ergebnis des Solvers uebernehmen und die Auswahl auf vorhandene Punkte und Seiten begrenzen. */
+  /** Take over the result of the solver and limit the selection to existing points and sides. */
   function apply(data) {
     if (data.sketch && data.sketch.points && data.sketch.points.length >= 3) {
       SK.sk = { points: data.sketch.points, constraints: data.sketch.constraints };
@@ -25,7 +25,7 @@
 
   const isInvalid = (data) => data.state === "invalid" && errorsOf(data).length > 0;
 
-  /** Aendert eine Kopie der Skizze, laesst sie loesen und uebernimmt sie, wenn sie gueltig ist. */
+  /** Change a copy of the sketch, have it solved and take it over if it is valid. */
   function commit(mutator) {
     return queue(async () => {
       const before = JSON.stringify(SK.sk);
@@ -42,7 +42,7 @@
     });
   }
 
-  /** Strukturaenderung (Punkt einfuegen oder loeschen, konvexe Huelle) ueber den Server. */
+  /** Structural change (insert or delete a point, convex hull) via the server. */
   function structural(op, body) {
     return queue(async () => {
       const before = JSON.stringify(SK.sk);
@@ -61,17 +61,17 @@
     });
   }
 
-  /** Gezeichnetes Polygon als neue Skizze uebernehmen. */
+  /** Take a drawn polygon as the new sketch. */
   function finishDraw() {
     const points = SK.drawPts;
     SK.tool = null;
     SK.drawPts = [];
     SK.cursor = null;
-    if (points.length < 3) { SK.msg = "Mindestens 3 Punkte nötig"; Sketch.renderAll(); return Promise.resolve(); }
+    if (points.length < 3) { SK.msg = t("ui.sk.min_points"); Sketch.renderAll(); return Promise.resolve(); }
     return queue(async () => {
       const before = JSON.stringify(SK.sk);
       const { data } = await api("/api/sketch/solve", request({ points, constraints: [] }));
-      if (!data.sketch || data.state === "invalid") { SK.msg = (errorsOf(data).length ? errorsOf(data) : ["Ungültige Kontur"]).join(" "); Sketch.renderAll(); return; }
+      if (!data.sketch || data.state === "invalid") { SK.msg = (errorsOf(data).length ? errorsOf(data) : [t("ui.sk.invalid_outline")]).join(" "); Sketch.renderAll(); return; }
       skPushHistory(before);
       apply(data);
       SK.msg = "";
@@ -81,7 +81,7 @@
     });
   }
 
-  /** Verlauf. from und to sind SK.hist und SK.redo (oder umgekehrt). */
+  /** History. from and to are SK.hist and SK.redo (or the other way round). */
   function step(from, to) {
     return queue(async () => {
       if (!from.length) return;
@@ -93,7 +93,7 @@
     });
   }
 
-  /** Neu loesen mit der aktuellen Skizze (z.B. nach geaendertem Achsabstand). */
+  /** Solve again with the current sketch (e.g. after a changed centre distance). */
   function resolve() {
     return queue(async () => {
       apply(await callSolve());
@@ -102,7 +102,7 @@
     });
   }
 
-  /** Rechteck aus den Motordaten als neue Skizze (rueckgaengig machbar). */
+  /** Rectangle from the motor data as the new sketch (can be undone). */
   function fromMotor() {
     return queue(async () => {
       const motor = { ...cfg.motor, sketch: null };
@@ -115,9 +115,9 @@
     });
   }
 
-  // --- Abgleich mit der Konfiguration ------------------------------------------------------------------
+  // --- Sync with the configuration ------------------------------------------------------------------
   let syncTimer = null;
-  /** Uebernimmt eine gueltige Skizze in cfg.motor (Breite und Tiefe aus der Bounding Box). */
+  /** Take a valid sketch into cfg.motor (width and depth from the bounding box). */
   function sync() {
     if (!SK.res || SK.res.state === "invalid" || skCount() < 3) return;
     cfg.motor.outline = null;
@@ -132,7 +132,7 @@
     syncTimer = setTimeout(() => { writeInputs(); drawMotor(); refresh(); }, SYNC_DEBOUNCE_MS);
   }
 
-  /** Laedt die Skizze aus cfg (oder das Rechteck des Motors als Vorschau). Nur der neueste Aufruf zaehlt. */
+  /** Load the sketch from cfg (or the rectangle of the motor as a preview). Only the newest call counts. */
   let reloadSeq = 0;
   async function reload() {
     const tab = $("#tab-sketch");
@@ -148,7 +148,7 @@
       sketch = data && data.sketch;
       attached = false;
     }
-    if (mine !== reloadSeq || !sketch) return;  // inzwischen neu geladen
+    if (mine !== reloadSeq || !sketch) return;  // reloaded meanwhile
     SK.sk = sketch;
     SK.attached = attached;
     apply(data);
@@ -161,7 +161,7 @@
     Sketch.renderAll();
   }
 
-  /** Skizze verwerfen, zurueck zum Rechteck des Motors. */
+  /** Discard the sketch, back to the rectangle of the motor. */
   function drop() {
     cfg.motor.sketch = null;
     SK.attached = false;
@@ -170,9 +170,9 @@
     reload();
   }
 
-  // --- Ziehen eines Punktes (gedrosselt, die letzte Position gewinnt) ------------------------------------
-  // Der Ziehvorgang wird mitgegeben, weil SK.drag beim Loslassen schon null sein kann, waehrend die letzte
-  // Antwort noch unterwegs ist. dragRun erlaubt dem Loslassen, auf sie zu warten.
+  // --- Dragging a point (throttled, the last position wins) ------------------------------------
+  // The drag is passed along because SK.drag may already be null on release while the last answer is still
+  // on its way. dragRun lets the release wait for it.
   let dragQueue = null, dragRun = null;
   function dragSolve(drag, target) {
     dragQueue = { drag, target };

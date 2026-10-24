@@ -1,19 +1,19 @@
 "use strict";
-// Motor Skizze. Maus und Tastatur auf der Zeichenflaeche.
+// Motor sketch. Mouse and keyboard on the canvas.
 
 (() => {
   const DOUBLE_CLICK_MS = 400;
   const DOUBLE_CLICK_PX = 6;
-  const DRAG_START_PX = 4;  // ab dieser Bewegung wird ein Punkt gezogen
+  const DRAG_START_PX = 4;  // from this movement on a point is dragged
   const PAN_START_PX = 3;
-  const INSERT_T_MIN = 0.05, INSERT_T_MAX = 0.95;  // eingefuegte Punkte nicht direkt auf einer Ecke
+  const INSERT_T_MIN = 0.05, INSERT_T_MAX = 0.95;  // inserted points not directly on a corner
   const WHEEL_ZOOM = 1.15;
 
   const snap = (v) => { const grid = parseFloat($("#skSnap").value); return grid > 0 ? Math.round(v / grid) * grid : v; };
   const pointerMm = (ev) => svgPoint($("#skCanvas"), ev);
   const closest = (ev, selector) => (ev.target.closest ? ev.target.closest(selector) : null);
 
-  /** Eigene Doppelklick Erkennung. Das Neuzeichnen zerstoert das Ziel des nativen dblclick. */
+  /** Own double click detection. Redrawing destroys the target of the native dblclick. */
   function isDoubleClick(ev) {
     const now = performance.now(), last = SK.lastDown;
     const double = !!last && now - last.t < DOUBLE_CLICK_MS && Math.hypot(ev.clientX - last.x, ev.clientY - last.y) < DOUBLE_CLICK_PX;
