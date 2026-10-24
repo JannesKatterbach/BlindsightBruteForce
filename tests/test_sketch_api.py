@@ -84,7 +84,10 @@ def test_bad_arguments():
     assert call("/api/sketch/insert", {"sketch": sk, "side": "x"})[0] == 400
     assert call("/api/sketch/insert", {"sketch": sk, "side": True})[0] == 400
     assert call("/api/sketch/solve", {"sketch": sk, "gear": "x"})[0] == 400
-    assert call("/api/sketch/solve", {"sketch": sk, "cd": float("nan")})[1]["ok"] is False
+    # NaN ist kein gueltiges JSON und wird schon beim Lesen abgewiesen, ein ungueltiger Wert vom Solver
+    code, body = call("/api/sketch/solve", {"sketch": sk, "cd": float("nan")})
+    assert code == 400 and body["errors"]
+    assert call("/api/sketch/solve", {"sketch": sk, "cd": -1})[1]["ok"] is False
     assert call("/api/sketch/solve", raw=b"[]")[0] == 400
     assert call("/api/sketch/solve", raw=b"{")[0] == 400
     assert call("/api/sketch/zzz", {"sketch": sk})[0] == 404

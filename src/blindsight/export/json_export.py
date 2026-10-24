@@ -8,6 +8,7 @@ import json
 class JsonExporter:
     extension = "json"
     mime = "application/json"
+    label = "JSON"
 
     def export(self, geometry: dict) -> str:
         return json.dumps(geometry, indent=2, ensure_ascii=False)

@@ -131,10 +131,15 @@ def test_real_http_server_security_and_limits():
         req = urllib.request.Request(base + "/api/start", data=b"x" * (9 * 1024 * 1024), method="POST")
         with pytest.raises(Exception):
             urllib.request.urlopen(req)
-        req = urllib.request.Request(base + "/api/start", data=b"{", method="POST")
+        req = urllib.request.Request(base + "/api/start", data=b"{", method="POST", headers={"Content-Type": "application/json"})
         with pytest.raises(urllib.error.HTTPError) as e:
             urllib.request.urlopen(req)
         assert e.value.code == 400
+        # Seitenuebergreifend ohne Vorabfrage sendbare Typen werden abgewiesen (CSRF Schutz)
+        req = urllib.request.Request(base + "/api/start", data=b"{}", method="POST", headers={"Content-Type": "text/plain"})
+        with pytest.raises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req)
+        assert e.value.code == 415
     finally:
         server.shutdown()
         server.server_close()

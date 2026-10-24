@@ -27,8 +27,9 @@ function el(name, attrs = {}, parent) {
   if (parent) parent.appendChild(e);
   return e;
 }
+const JSON_HEADERS = { "Content-Type": "application/json" };  // der Server weist andere Typen bei POST ab
 async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) });
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
   const ct = r.headers.get("Content-Type") || "";
   if (ct.includes("json")) return { status: r.status, data: await r.json() };
   return { status: r.status, data: await r.text() };
@@ -519,7 +520,7 @@ async function pushEdit() {
 async function doExport() {
   const fmt = $("#expFmt").value; if (!lastGeo) return;
   const body = { project: cfg, placements: placementsOf(lastGeo), format: fmt };
-  const r = await fetch("/api/export-layout", { method: "POST", body: JSON.stringify(body) });
+  const r = await fetch("/api/export-layout", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
   if (!r.ok) { alert("Export fehlgeschlagen. " + (await r.text())); return; }
   download("blindsight." + fmt, await r.text(), "text/plain");
 }

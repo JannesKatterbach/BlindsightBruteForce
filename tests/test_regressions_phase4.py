@@ -1,6 +1,7 @@
 """Regressionstests fuer Fehler, die bei der Ueberarbeitung (Version 0.4.0) gefunden wurden."""
 
 import math
+from pathlib import Path
 
 import pytest
 
@@ -356,3 +357,165 @@ def test_registries_match_configuration_options():
     assert set(OPTIMIZERS) == optimizer_options
     assert set(OBJECTIVES) == {f.name for f in dataclasses.fields(WeightsSpec)}
     assert not OPTIMIZERS["exhaustive_small"].supports_parallel
+
+
+# ---------------------------------------------------------------------------
+# Server, Import, Export, Dienst, CLI
+# ---------------------------------------------------------------------------
+import json  # noqa: E402
+
+from blindsight import __version__  # noqa: E402
+from blindsight.cli import main as cli_main  # noqa: E402
+from blindsight.config import MotorSpec  # noqa: E402
+from blindsight.export import EXPORTERS, SvgExporter, build_geometry  # noqa: E402
+from blindsight.export.svg import _f  # noqa: E402
+from blindsight.motor_import import SvgImportError, motor_from_svg, outline_from_svg  # noqa: E402
+from blindsight.service import JobManager, JobNotFound  # noqa: E402
+from blindsight.web.server import App, _url_host  # noqa: E402
+
+
+def _strict_json(payload: bytes):
+    def reject(name):
+        raise AssertionError(f"ungueltiges JSON mit {name}")
+    return json.loads(payload, parse_constant=reject)
+
+
+def _post(app, path, obj=None, raw=None):
+    body = raw if raw is not None else json.dumps(obj).encode()
+    code, ctype, payload = app.handle("POST", path, {}, body)
+    return code, _strict_json(payload)
+
+
+SQUARE_SVG = '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="10" height="20"/></svg>'
+
+
+@pytest.mark.parametrize("body", [
+    {"svg": ["<svg/>"]}, {"svg": 5}, {"svg": SQUARE_SVG, "mm_per_unit": "abc"}, {"svg": SQUARE_SVG, "mm_per_unit": True},
+    {"svg": SQUARE_SVG, "mm_per_unit": -1}, [],
+])
+def test_svg_import_rejects_bad_input_with_400(body):
+    # Frueher stuerzte der Handler bei Listen, Zahlen und Text als Massstab ab
+    code, payload = _post(App(), "/api/svg-motor-import", body)
+    assert code == 400 and payload["errors"] and payload["error"]
+
+
+def test_svg_path_with_curves_is_rejected():
+    svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 0 C 12 5 12 15 10 20 L0 20 Z"/></svg>'
+    with pytest.raises(SvgImportError, match="nicht unterstuetzt"):
+        outline_from_svg(svg, 1.0)
+
+
+def test_motor_from_svg_does_not_share_lists_with_base():
+    base = MotorSpec(outline=[[0, 0], [1, 0], [0, 1]])
+    spec = motor_from_svg(SQUARE_SVG, 8.0, 1.0, base)
+    spec.outline.append([9, 9])
+    assert base.outline == [[0, 0], [1, 0], [0, 1]]
+
+
+@pytest.mark.parametrize("t", [None, "nan", "x", 2])
+def test_sketch_insert_with_bad_t_answers_valid_json(t):
+    code, payload = _post(App(), "/api/sketch/insert", {"sketch": {"points": SQUARE, "constraints": []}, "side": 0, "t": t})
+    # Frueher. float(None) stuerzte ab, "nan" erzeugte ungueltiges JSON mit NaN
+    assert code == 200
+    assert payload["ok"] is False and payload["errors"]
+
+
+def test_deeply_nested_json_is_a_400():
+    code, payload = _post(App(), "/api/start", raw=b"[" * 200_000 + b"]" * 200_000)
+    assert code == 400 and payload["errors"]
+
+
+def test_origin_null_is_rejected():
+    assert not App().host_ok("127.0.0.1:8765", "null")
+
+
+def test_ipv6_hosts_are_compared_without_brackets():
+    app = App({"fe80::1"})
+    assert app.host_ok("[fe80::1]:8765", "http://[fe80::1]:8765")
+    assert App().host_ok("[::1]:8765", None)
+    assert _url_host("::1") == "[::1]" and _url_host("localhost") == "localhost"
+
+
+def test_errors_have_one_form_and_internal_errors_are_500(monkeypatch):
+    app = App()
+    code, _, payload = app.handle("GET", "/api/nope", {}, b"")
+    assert code == 404 and set(_strict_json(payload)) == {"error", "errors"}
+
+    def boom(self, req):
+        raise RuntimeError("kaputt")
+
+    monkeypatch.setattr(App, "default_project", boom)
+    code, _, payload = app.handle("GET", "/api/default", {}, b"")
+    assert code == 500 and "kaputt" in _strict_json(payload)["error"]
+
+
+def test_export_of_unknown_job_has_no_attachment_header():
+    response = App().dispatch("GET", "/api/export/zzz.svg", {}, b"")
+    assert response.code == 404 and "Content-Disposition" not in response.headers
+
+
+def test_placement_limit_is_checked_before_parsing():
+    project = Project().to_dict()
+    code, payload = _post(App(), "/api/validate", {"project": project, "placements": [{"bad": 1}] * 5001})
+    assert code == 400 and "Zu viele" in payload["error"]
+
+
+def test_static_javascript_has_fixed_type():
+    code, ctype, _ = App().handle("GET", "/static/app.js", {}, b"")
+    assert code == 200 and ctype == "text/javascript; charset=utf-8"
+
+
+def test_schema_lists_constraint_types_and_exporters():
+    code, _, payload = App().handle("GET", "/api/schema", {}, b"")
+    data = _strict_json(payload)
+    assert {e["name"] for e in data["exporters"]} == set(EXPORTERS)
+    assert {c["name"] for c in data["sketch_constraints"]} == set(S.CONSTRAINT_TYPES)
+
+
+def test_svg_distance_lines_are_drawn_once_per_pair():
+    model = Model(Project())
+    geo = build_geometry(model, [Placement(30, 60, 1, 0.0), Placement(90, 60, 2, 0.0)])
+    svg = SvgExporter().export(geo)
+    distances = svg.split('<g id="distances"', 1)[1].split("</g>", 1)[0]
+    assert distances.count("<line") == 1
+    assert _f(-0.00001) == "0" and _f(12.5) == "12.5" and _f(120.0) == "120"
+
+
+def test_job_manager_reports_unknown_jobs_and_shuts_down():
+    jm = JobManager()
+    with pytest.raises(JobNotFound):
+        jm.get("zzz")
+    p = Project()
+    p.search.time_limit_s = 60
+    job = jm.start(p)
+    jm.shutdown(timeout=30)
+    assert not job.thread.is_alive()
+    assert job.state == "cancelled"
+
+
+def _cli_config(tmp_path, **search):
+    p = Project()
+    p.target_count = 2
+    p.search.time_limit_s = 1
+    for k, v in search.items():
+        setattr(p.search, k, v)
+    path = tmp_path / "cfg.json"
+    path.write_text(p.to_json(), encoding="utf-8")
+    return path
+
+
+def test_cli_exit_codes(tmp_path):
+    cfg = _cli_config(tmp_path)
+    assert cli_main([str(cfg), "--time", "0", "--quiet"]) == 2  # frueher still ignoriert
+    bad = tmp_path / "bad.json"
+    bad.write_bytes(b"\xff\xfe\x00")
+    assert cli_main([str(bad), "--quiet"]) == 2
+    assert cli_main([str(cfg), "--quiet", "--svg", str(tmp_path)]) == 3  # Verzeichnis statt Datei
+    assert cli_main([str(cfg), "--quiet", "--svg", str(tmp_path / "out.svg")]) == 0
+
+
+def test_version_has_one_source():
+    text = open(Path(__file__).resolve().parents[1] / "pyproject.toml", encoding="utf-8").read()
+    assert 'dynamic = ["version"]' in text and "blindsight.__version__" in text
+    assert __version__ == "0.4.0"
+    assert 'blindsight = "blindsight.web.server:main"' in text

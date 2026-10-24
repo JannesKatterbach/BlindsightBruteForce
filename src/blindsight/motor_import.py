@@ -8,6 +8,7 @@ Regel. Ist der Massstab nicht eindeutig (kein width mit Einheit zusammen mit vie
 geworfen. Es wird nie eine Groesse geraten.
 
 Unterstuetzt. Genau ein <rect>, <polygon>, <polyline> oder <path> mit Geraden (M L H V Z, absolut und relativ).
+Pfade mit Kurven (C S Q T A) werden abgewiesen, statt Kontrollpunkte still als Ecken zu lesen.
 Nicht konvexe Konturen werden durch ihre konvexe Huelle ersetzt (konservativ) und das wird gemeldet.
 Das SVG hat Y nach unten, im Motorsystem zeigt Y nach oben (die Kontur wird gespiegelt und um den
 Mittelpunkt der Bounding Box zentriert).
@@ -15,15 +16,20 @@ Mittelpunkt der Bounding Box zentriert).
 
 from __future__ import annotations
 
-import math
+import copy
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from .config import MotorSpec
-from .geometry import convex_hull
-from .units import LENGTH_UNITS
+from .geometry import convex_hull, polygon_area
+from .units import LENGTH_UNITS, is_finite_number
+
+PT_MM = 25.4 / 72.0  # Punkt
+PC_MM = 25.4 / 6.0  # Pica
+CONVEX_AREA_RATIO = 0.9999  # Flaeche der Kontur relativ zur Huelle, ab der sie als konvex gilt
+LINE_COMMANDS = "MLHVZ"
 
 
 class ScaleRequired(ValueError):
@@ -31,7 +37,7 @@ class ScaleRequired(ValueError):
 
 
 class SvgImportError(ValueError):
-    pass
+    """SVG nicht lesbar oder nicht unterstuetzt (verstaendliche Meldung)."""
 
 
 @dataclass
@@ -44,10 +50,11 @@ class ImportedOutline:
 
 
 _NUM = re.compile(r"^\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*([a-zA-Z%]*)\s*$")
-_TOKEN = re.compile(r"([MmLlHhVvZz])|([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)")
+_TOKEN = re.compile(r"([A-Za-z])|([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)")
 
 
 def _length_mm(text: Optional[str]) -> Optional[float]:
+    """Laenge mit Einheit in mm. None, wenn die Einheit fehlt oder nicht eindeutig ist (px, %)."""
     if not text:
         return None
     m = _NUM.match(text)
@@ -58,13 +65,14 @@ def _length_mm(text: Optional[str]) -> Optional[float]:
     if unit in LENGTH_UNITS:
         return val * LENGTH_UNITS[unit]
     if unit == "pt":
-        return val * 25.4 / 72.0
+        return val * PT_MM
     if unit == "pc":
-        return val * 25.4 / 6.0
+        return val * PC_MM
     return None  # einheitenlos, px und % sind nicht eindeutig
 
 
 def _path_points(d: str) -> list[tuple[float, float]]:
+    """Eckpunkte eines Pfads aus Geraden. Andere Befehle fuehren zu SvgImportError."""
     pts: list[tuple[float, float]] = []
     cmd = None
     cur = (0.0, 0.0)
@@ -102,6 +110,11 @@ def _path_points(d: str) -> list[tuple[float, float]]:
         if m.group(1):
             flush()
             cmd = m.group(1)
+            if cmd.upper() not in LINE_COMMANDS:
+                raise SvgImportError(
+                    f"Pfadbefehl {cmd} wird nicht unterstuetzt (nur Geraden M L H V Z). "
+                    "Kurven bitte vorher in Linien umwandeln"
+                )
             if cmd.upper() == "Z":
                 flush()
         else:
@@ -125,15 +138,25 @@ def _shape_points(e: ET.Element, tag: str) -> list[tuple[float, float]]:
     return _path_points(e.get("d", ""))
 
 
-def outline_from_svg(svg_text: str, mm_per_unit: Optional[float] = None) -> ImportedOutline:
+def _tag(e: ET.Element) -> str:
+    return e.tag.split("}")[-1] if isinstance(e.tag, str) else ""
+
+
+def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
+    """Liest genau eine Kontur aus dem SVG Text. Rueckgabe in mm, zentriert, Y nach oben, konvex.
+
+    mm_per_unit ist der Massstab. Ohne Angabe wird er aus width (mit Einheit) und viewBox bestimmt,
+    sonst wird ScaleRequired geworfen."""
+    if not isinstance(svg_text, str):
+        raise SvgImportError("svg muss Text sein")
+    if mm_per_unit is not None and (not is_finite_number(mm_per_unit) or mm_per_unit <= 0):
+        raise SvgImportError("Der Massstab muss eine positive Zahl sein")
     try:
         root = ET.fromstring(svg_text)
-    except ET.ParseError as exc:
+    except (ET.ParseError, RecursionError, ValueError) as exc:
         raise SvgImportError(f"SVG nicht lesbar. {exc}") from exc
-    tag = lambda e: e.tag.split("}")[-1]
+    tag = _tag
     scale = mm_per_unit
-    if scale is not None and (not math.isfinite(scale) or scale <= 0):
-        raise SvgImportError("Der Massstab muss eine positive Zahl sein")
     notes: list[str] = []
     if scale is None:
         w_mm = _length_mm(root.get("width"))
@@ -166,11 +189,9 @@ def outline_from_svg(svg_text: str, mm_per_unit: Optional[float] = None) -> Impo
     hull = convex_hull(pts)
     if len(hull) < 3:
         raise SvgImportError("Kontur hat keine Flaeche")
-    from .geometry import polygon_area
-
     area_raw = polygon_area(pts)
     area_hull = polygon_area(hull)
-    convex = area_raw >= area_hull * 0.9999
+    convex = area_raw >= area_hull * CONVEX_AREA_RATIO
     if not convex:
         notes.append("Die Kontur ist nicht konvex und wird durch ihre konvexe Huelle ersetzt.")
     w = (max(xs) - min(xs)) * scale
@@ -189,7 +210,7 @@ def motor_outline_from_svg(svg_text: str, mm_per_unit: Optional[float] = None) -
 def motor_from_svg(svg_text: str, height: float, mm_per_unit: Optional[float] = None, base: Optional[MotorSpec] = None) -> MotorSpec:
     """Erzeugt eine MotorSpec. Hoehe (Z) und Zahnraddaten kommen aus base, SVG liefert den Grundriss."""
     o = outline_from_svg(svg_text, mm_per_unit)
-    spec = MotorSpec(**(base.__dict__ if base else {}))
+    spec = copy.deepcopy(base) if base is not None else MotorSpec()  # base bleibt unveraendert
     spec.width, spec.depth, spec.height = o.width, o.depth, height
     spec.outline = o.outline
     return spec

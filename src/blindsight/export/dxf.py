@@ -17,6 +17,7 @@ from .base import holes_by_plane
 class DxfExporter:
     extension = "dxf"
     mime = "application/dxf"
+    label = "DXF"
 
     def export(self, geometry: dict) -> str:
         ents: list[tuple[str, str]] = []  # (Layer, Entitaetstext)

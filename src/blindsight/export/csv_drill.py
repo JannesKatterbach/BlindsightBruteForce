@@ -11,6 +11,7 @@ from .base import holes_by_plane
 class DrillCsvExporter:
     extension = "csv"
     mime = "text/csv"
+    label = "Bohrliste CSV"
 
     def export(self, geometry: dict) -> str:
         buf = io.StringIO()

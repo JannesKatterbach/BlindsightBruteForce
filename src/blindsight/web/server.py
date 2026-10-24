@@ -1,264 +1,452 @@
 """Lokale Web Anwendung (nur Standardbibliothek).
 
-Start. python -m blindsight   (oder blindsight)  und im Browser http://127.0.0.1:8765 oeffnen.
+Start. ``python -m blindsight`` (oder ``blindsight``) und im Browser http://127.0.0.1:8765 oeffnen.
 Die Oberflaeche ist eine reine Darstellung. Alle Berechnungen laufen im Python Kern.
+
+Aufbau
+  App          fachliche Endpunkte, unabhaengig von HTTP (``dispatch`` liefert eine Response)
+  ROUTES       Tabelle (Methode, Pfad, Handler). Ein neuer Endpunkt ist ein Eintrag plus Methode
+  make_handler HTTP Anbindung mit Host und Origin Pruefung, Groessenlimit und Content Type Pruefung
+
+Fehlerantworten haben immer die Form {"error": erste Meldung, "errors": [alle Meldungen]}.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
+import socket
 import threading
+import traceback
 import webbrowser
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib import resources
 from pathlib import Path
-from typing import Any
-from urllib.parse import urlparse, parse_qs
+from typing import Any, Callable, Optional
+from urllib.parse import parse_qs, urlparse
 
+from .. import sketch as sk
+from ..analysis import analyze
 from ..config import ConfigError, Project, motor_from_dict, schema
-from ..export import EXPORTERS, build_geometry
+from ..export import EXPORTERS, build_geometry, exporter_schema
 from ..layout import Placement
 from ..model import Model
-from .. import sketch as sk
 from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
-from ..service import JobManager
+from ..scoring import evaluate
+from ..service import JobManager, JobNotFound
+from ..units import is_finite_number
 
 STATIC = Path(__file__).parent / "static"
 MAX_BODY = 8 * 1024 * 1024
+MAX_PLACEMENTS = 5000
+DEFAULT_PORT = 8765
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+JSON_TYPE = "application/json; charset=utf-8"
+# Feste MIME Typen fuer statische Dateien (mit nosniff darf der Browser nicht raten)
+STATIC_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": JSON_TYPE,
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+}
+# Content Types, die ein Browser ohne Vorabfrage (CORS Preflight) seitenuebergreifend senden darf.
+# POST mit diesen Typen wird abgewiesen, die UI sendet application/json.
+SIMPLE_CONTENT_TYPES = ("application/x-www-form-urlencoded", "multipart/form-data", "text/plain")
+
+__all__ = ["App", "Response", "analyze", "make_handler", "serve", "main"]
 
 
-def _examples_dir() -> Path | None:
+# ---------------------------------------------------------------------------
+# Antworten und Anfragen
+# ---------------------------------------------------------------------------
+@dataclass
+class Response:
+    code: int
+    body: bytes
+    content_type: str = JSON_TYPE
+    headers: dict[str, str] = field(default_factory=dict)
+
+    def as_tuple(self) -> tuple[int, str, bytes]:
+        return self.code, self.content_type, self.body
+
+
+def json_response(obj: Any, code: int = 200) -> Response:
+    """JSON Antwort. NaN und Unendlich sind kein gueltiges JSON und werden als Fehler behandelt."""
+    return Response(code, json.dumps(obj, ensure_ascii=False, allow_nan=False).encode())
+
+
+def error_response(code: int, errors: list[str] | str) -> Response:
+    errors = [errors] if isinstance(errors, str) else list(errors)
+    return json_response({"error": errors[0] if errors else "", "errors": errors}, code)
+
+
+class BadRequest(ValueError):
+    """Ungueltige Anfrage (400)."""
+
+
+def _reject_constant(name: str) -> Any:
+    raise BadRequest(f"{name} ist kein gueltiger Zahlenwert")
+
+
+def parse_json(body: bytes) -> Any:
+    """JSON aus dem Anfragekoerper. NaN, Infinity und zu tiefe Schachtelung fuehren zu BadRequest."""
+    try:
+        return json.loads(body or b"{}", parse_constant=_reject_constant)
+    except RecursionError:
+        raise BadRequest("JSON ist zu tief verschachtelt") from None
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise BadRequest(f"Kein gueltiges JSON. {exc}") from None
+
+
+@dataclass
+class Request:
+    method: str
+    path: str
+    query: dict[str, list[str]]
+    body: bytes
+    tail: str = ""  # Pfadrest nach einem Praefix (z.B. Job Id)
+
+    @property
+    def data(self) -> Any:
+        return parse_json(self.body)
+
+    def dict_data(self) -> dict:
+        data = self.data
+        if not isinstance(data, dict):
+            raise BadRequest("Objekt erwartet")
+        return data
+
+    def int_query(self, name: str, default: int = 0) -> int:
+        try:
+            return int(self.query.get(name, [str(default)])[0])
+        except ValueError:
+            raise BadRequest(f"{name} muss eine ganze Zahl sein") from None
+
+
+def _int(v: Any, name: str = "Wert") -> int:
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise BadRequest(f"{name}. Ganze Zahl erwartet")
+    return v
+
+
+def _examples_dir() -> Optional[Path]:
     for cand in (Path(__file__).resolve().parents[3] / "examples", Path.cwd() / "examples"):
         if cand.is_dir():
             return cand
     return None
 
 
-def analyze(project: Project) -> dict:
-    """Abgeleitete Groessen ohne Optimierung (Ebenen, Stangenlaengen, Probleme)."""
-    model = Model(project)
-    planes = []
-    for p in model.stack.planes:
-        entry = {"index": p.index, "name": p.name, "z_top": p.z_top, "z_bottom": p.z_bottom, "thickness": p.thickness}
-        if p.index > 0:
-            entry["rod"] = model.rod_geometry(p.index).as_dict()
-            entry["problems"] = model.plane_problems(p.index)
-            entry["free_above"] = model.stack.free_height_above(p.index)
-        planes.append(entry)
-    return {"planes": planes, "unit_radius": model.unit_radius, "required_gap": model.gap}
+def _host_name(host: str) -> str:
+    """Hostname ohne Port und ohne eckige Klammern (IPv6), klein geschrieben."""
+    host = host.strip().lower()
+    if host.startswith("["):
+        return host[1:].split("]", 1)[0]
+    if host.count(":") == 1:  # Name oder IPv4 mit Port
+        return host.rsplit(":", 1)[0]
+    return host  # ohne Port oder nackte IPv6 Adresse
 
 
-def _int(v: Any) -> int:
-    if isinstance(v, bool) or not isinstance(v, int):
-        raise ValueError("Ganze Zahl erwartet")
-    return v
+def _url_host(host: str) -> str:
+    """Host fuer eine URL (IPv6 in eckigen Klammern)."""
+    return f"[{host}]" if ":" in host else host
+
+
+# ---------------------------------------------------------------------------
+# Anwendung
+# ---------------------------------------------------------------------------
+Handler = Callable[["App", Request], Response]
+ROUTES: list[tuple[str, str, bool, str]] = []  # (Methode, Pfad oder Praefix, ist Praefix, Methodenname)
+
+
+def route(method: str, path: str, prefix: bool = False):
+    """Dekorator fuer App Methoden. Traegt den Endpunkt in ROUTES ein."""
+    def decorate(fn):
+        ROUTES.append((method, path, prefix, fn.__name__))
+        return fn
+    return decorate
 
 
 class App:
     def __init__(self, allowed_hosts: set[str] | None = None) -> None:
         self.jobs = JobManager()
-        self.allowed_hosts = allowed_hosts  # None = nur Loopback Namen
+        # None = nur Loopback Namen. Eintraege ohne Port, IPv6 ohne Klammern
+        self.allowed_hosts = {_host_name(h) for h in allowed_hosts} if allowed_hosts else None
 
+    # -- Sicherheit ------------------------------------------------------------
     def host_ok(self, host: str | None, origin: str | None) -> bool:
-        """Schutz gegen DNS Rebinding und fremde Webseiten, die lokale Dienste ansprechen."""
-        def name(h: str) -> str:
-            h = h.strip().lower()
-            if h.startswith("["):
-                return h.split("]")[0] + "]"
-            return h.rsplit(":", 1)[0] if ":" in h else h
+        """Schutz gegen DNS Rebinding und fremde Webseiten, die lokale Dienste ansprechen.
 
-        ok = self.allowed_hosts or {"127.0.0.1", "localhost", "[::1]"}
-        if host is None or name(host) not in ok:
+        Host muss ein erlaubter Name sein. Ein Origin muss ebenfalls erlaubt sein. Origin "null"
+        (Sandbox, file://) wird abgewiesen, weil sich dahinter jede Seite verbergen kann."""
+        allowed = self.allowed_hosts or LOOPBACK_HOSTS
+        if host is None or _host_name(host) not in allowed:
             return False
-        if origin and origin != "null":
-            from urllib.parse import urlparse as _u
-
-            if (_u(origin).hostname or "") not in {x.strip("[]") for x in ok}:
+        if origin is not None:
+            if origin.strip().lower() == "null":
+                return False
+            if (urlparse(origin).hostname or "") not in allowed:
                 return False
         return True
 
-    def _sketch_api(self, op: str, data: Any) -> tuple[int, str, bytes]:
-        """Endpunkte der Motor Skizze. Solver Ergebnisse (auch Widersprueche) sind normale Antworten mit ok=false."""
-        def js(obj, code=200):
-            return code, "application/json; charset=utf-8", json.dumps(obj, ensure_ascii=False).encode()
-
-        if not isinstance(data, dict):
-            raise ValueError("Objekt erwartet")
-        cd = data.get("cd", 5.0)
-        gear = data.get("gear")
-        if gear is not None:
-            if not (isinstance(gear, list) and len(gear) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in gear)):
-                raise ValueError("gear muss [Durchmesser, Breite] sein")
-            gear = (float(gear[0]), float(gear[1]))
-        if op == "from-motor":
-            motor = motor_from_dict(data.get("motor"))
-            skd = sk.legacy_to_sketch(motor, with_constraints=data.get("constraints", True))
-            return js(sk.solve(skd, cd=motor.center_distance, gear=(motor.gear_diameter, motor.gear_width)).as_dict())
-        skd = data.get("sketch")
-        if not isinstance(skd, dict):
-            raise ValueError("sketch (Objekt mit points und constraints) erforderlich")
-        skd = sk.sketch_dict(skd)
-        errs = sk.validate_structure(skd)
-        if errs:
-            return js({"ok": False, "errors": errs, "sketch": skd, "state": "invalid", "dof": 0, "constraints": [], "warnings": []})
+    # -- Verteilung --------------------------------------------------------------
+    def dispatch(self, method: str, path: str, query: dict, body: bytes) -> Response:
+        """Sucht den Endpunkt in ROUTES und fuehrt ihn aus. Fehler werden zu 4xx oder 500."""
         try:
-            if op == "solve":
-                return js(sk.solve(skd, cd=cd, drag=data.get("drag"), gear=gear).as_dict())
-            if op == "hull":
-                skd = sk.hull_sketch(skd)
-            elif op == "insert":
-                skd = sk.insert_point(skd, _int(data.get("side")), float(data.get("t", 0.5)))
-            elif op == "delete":
-                skd = sk.delete_point(skd, _int(data.get("point")))
-            else:
-                return js({"error": "nicht gefunden"}, 404)
-        except sk.SketchError as exc:
-            return js({"ok": False, "errors": exc.errors, "sketch": skd, "state": "invalid", "dof": 0, "constraints": [], "warnings": []})
-        return js(sk.solve(skd, cd=cd, gear=gear).as_dict())
+            for r_method, r_path, prefix, name in ROUTES:
+                if r_method != method:
+                    continue
+                if prefix and path.startswith(r_path):
+                    return getattr(self, name)(Request(method, path, query, body, path[len(r_path):]))
+                if not prefix and path == r_path:
+                    return getattr(self, name)(Request(method, path, query, body))
+            return error_response(404, "nicht gefunden")
+        except ConfigError as exc:
+            return error_response(400, exc.errors)
+        except SvgImportError as exc:
+            return error_response(400, str(exc))
+        except JobNotFound as exc:
+            return error_response(404, str(exc))
+        except BadRequest as exc:
+            return error_response(400, f"Ungueltige Anfrage. {exc}")
+        except ValueError as exc:  # Pruefungen im Kern (Placement, Skizze, Export) melden ValueError
+            return error_response(400, f"Ungueltige Anfrage. {exc}")
+        except Exception as exc:  # Programmfehler. Der Server bleibt erreichbar
+            traceback.print_exc()
+            return error_response(500, f"Interner Fehler. {type(exc).__name__}: {exc}")
 
     def handle(self, method: str, path: str, query: dict, body: bytes) -> tuple[int, str, bytes]:
-        def js(obj, code=200):
-            return code, "application/json; charset=utf-8", json.dumps(obj, ensure_ascii=False).encode()
+        """Wie dispatch, als Tupel (Code, Content Type, Inhalt). Schnittstelle aus frueheren Versionen."""
+        return self.dispatch(method, path, query, body).as_tuple()
 
+    # -- Statische Dateien und Stammdaten -------------------------------------------
+    @route("GET", "/")
+    @route("GET", "/index.html")
+    def index(self, req: Request) -> Response:
+        return Response(200, (STATIC / "index.html").read_bytes(), STATIC_TYPES[".html"])
+
+    @route("GET", "/static/", prefix=True)
+    def static_file(self, req: Request) -> Response:
+        f = (STATIC / req.tail).resolve()
+        if STATIC.resolve() not in f.parents or not f.is_file():
+            return error_response(404, "nicht gefunden")
+        return Response(200, f.read_bytes(), STATIC_TYPES.get(f.suffix.lower(), "application/octet-stream"))
+
+    @route("GET", "/favicon.ico")
+    def favicon(self, req: Request) -> Response:
+        return Response(204, b"", STATIC_TYPES[".ico"])
+
+    @route("GET", "/api/schema")
+    def get_schema(self, req: Request) -> Response:
+        out = schema()
+        out["sketch_constraints"] = sk.constraint_schema()
+        out["exporters"] = exporter_schema()
+        return json_response(out)
+
+    @route("GET", "/api/default")
+    def default_project(self, req: Request) -> Response:
+        return json_response(Project().to_dict())
+
+    @route("GET", "/api/examples")
+    def examples(self, req: Request) -> Response:
+        d = _examples_dir()
+        return json_response(sorted(p.stem for p in d.glob("*.json")) if d else [])
+
+    @route("GET", "/api/example/", prefix=True)
+    def example(self, req: Request) -> Response:
+        d = _examples_dir()
+        f = d / (Path(req.tail).name + ".json") if d else None
+        if not f or not f.is_file():
+            return error_response(404, "Beispiel nicht gefunden")
         try:
-            if method == "GET":
-                if path in ("/", "/index.html"):
-                    return 200, "text/html; charset=utf-8", (STATIC / "index.html").read_bytes()
-                if path.startswith("/static/"):
-                    f = (STATIC / path[len("/static/"):]).resolve()
-                    if STATIC.resolve() not in f.parents or not f.is_file():
-                        return js({"error": "nicht gefunden"}, 404)
-                    return 200, mimetypes.guess_type(f.name)[0] or "application/octet-stream", f.read_bytes()
-                if path == "/favicon.ico":
-                    return 204, "image/x-icon", b""
-                if path == "/api/schema":
-                    return js(schema())
-                if path == "/api/default":
-                    return js(Project().to_dict())
-                if path == "/api/examples":
-                    d = _examples_dir()
-                    return js(sorted(p.stem for p in d.glob("*.json")) if d else [])
-                if path.startswith("/api/example/"):
-                    d = _examples_dir()
-                    f = d / (Path(path).name + ".json") if d else None
-                    if not f or not f.is_file():
-                        return js({"error": "Beispiel nicht gefunden"}, 404)
-                    return js(json.loads(f.read_text(encoding="utf-8")))
-                if path.startswith("/api/status/"):
-                    return js(self.jobs.get(path.rsplit("/", 1)[1]).status_dict())
-                if path.startswith("/api/live/"):
-                    job = self.jobs.get(path.rsplit("/", 1)[1])
-                    pls = [Placement(**p) for p in job.best_so_far()]
-                    return js({"geometry": build_geometry(job.model, pls) if pls else None})
-                if path.startswith("/api/result/"):
-                    job = self.jobs.get(path.rsplit("/", 1)[1])
-                    if job.result is None:
-                        return js({"error": "Noch kein Ergebnis"}, 409)
-                    idx = int(query.get("solution", ["0"])[0])
-                    out = {"result": job.result.as_dict(), "geometry": None}
-                    out["result"]["solutions"] = [
-                        {"score": s.score.as_dict(), "count": len(s.placements)} for s in job.result.solutions
-                    ]
-                    if job.result.solutions:
-                        idx = max(0, min(idx, len(job.result.solutions) - 1))
-                        out["geometry"] = build_geometry(job.model, job.result.solutions[idx].placements)
-                        out["solution_index"] = idx
-                    return js(out)
-                if path.startswith("/api/export/"):
-                    name = path.rsplit("/", 1)[1]
-                    job_id, _, ext = name.partition(".")
-                    job = self.jobs.get(job_id)
-                    if job.result is None or not job.result.solutions or ext not in EXPORTERS:
-                        return js({"error": "Export nicht moeglich"}, 404)
-                    idx = int(query.get("solution", ["0"])[0])
-                    idx = max(0, min(idx, len(job.result.solutions) - 1))
-                    geo = build_geometry(job.model, job.result.solutions[idx].placements)
-                    ex = EXPORTERS[ext]()
-                    return 200, ex.mime + "; charset=utf-8", ex.export(geo).encode()
-            elif method == "POST":
-                data = json.loads(body or b"{}")
-                if path == "/api/start":
-                    project = Project.from_dict(data)
-                    job = self.jobs.start(project)
-                    return js({"job_id": job.id})
-                if path in ("/api/validate", "/api/export-layout"):
-                    if not isinstance(data, dict) or "project" not in data or not isinstance(data.get("placements"), list):
-                        raise ValueError("Erwartet {project, placements}")
-                    project = Project.from_dict(data["project"])
-                    n = project.stack.n_motor_planes
-                    pls = [Placement.from_dict(p, n) for p in data["placements"]]
-                    if len(pls) > 5000:
-                        raise ValueError("Zu viele Platzierungen (max 5000)")
-                    model = Model(project)
-                    geo = build_geometry(model, pls)
-                    if path == "/api/validate":
-                        from ..scoring import evaluate
+            return json_response(json.loads(f.read_text(encoding="utf-8")))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            return error_response(500, f"Beispiel nicht lesbar. {exc}")
 
-                        sc = evaluate(model, pls, project.search.weights, project.target_count).as_dict() if pls else None
-                        return js({"geometry": geo, "valid": not geo["collisions"], "score": sc})
-                    fmt = data.get("format", "svg")
-                    if fmt not in EXPORTERS:
-                        raise ValueError(f"Unbekanntes Exportformat {fmt}")
-                    ex = EXPORTERS[fmt]()
-                    return 200, ex.mime + "; charset=utf-8", ex.export(geo).encode()
-                if path == "/api/analyze":
-                    return js(analyze(Project.from_dict(data)))
-                if path.startswith("/api/cancel/"):
-                    self.jobs.cancel(path.rsplit("/", 1)[1])
-                    return js({"ok": True})
-                if path.startswith("/api/sketch/"):
-                    return self._sketch_api(path.rsplit("/", 1)[1], data)
-                if path == "/api/svg-motor-import":
-                    try:
-                        o = outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
-                    except ScaleRequired as exc:
-                        return js({"scale_required": True, "message": str(exc)})
-                    out = {"width": o.width, "depth": o.depth, "outline": o.outline, "convex": o.was_convex, "notes": o.notes}
-                    if isinstance(data.get("motor"), dict):  # Skizze im Stangenrahmen passend zum aktuellen Motor
-                        motor = motor_from_dict(data["motor"])
-                        out["sketch"] = sk.sketch_from_outline(o.outline, motor)
-                    return js(out)
-        except ConfigError as exc:
-            return js({"errors": exc.errors}, 400)
-        except SvgImportError as exc:
-            return js({"errors": [str(exc)]}, 400)
-        except KeyError as exc:
-            return js({"error": str(exc)}, 404)
-        except (ValueError, json.JSONDecodeError) as exc:
-            return js({"errors": [f"Ungueltige Anfrage. {exc}"]}, 400)
-        return js({"error": "nicht gefunden"}, 404)
+    # -- Laeufe ----------------------------------------------------------------------
+    @route("POST", "/api/start")
+    def start(self, req: Request) -> Response:
+        job = self.jobs.start(Project.from_dict(req.data))
+        return json_response({"job_id": job.id})
+
+    @route("GET", "/api/status/", prefix=True)
+    def status(self, req: Request) -> Response:
+        return json_response(self.jobs.get(req.tail).status_dict())
+
+    @route("POST", "/api/cancel/", prefix=True)
+    def cancel(self, req: Request) -> Response:
+        self.jobs.cancel(req.tail)
+        return json_response({"ok": True})
+
+    @route("GET", "/api/live/", prefix=True)
+    def live(self, req: Request) -> Response:
+        job = self.jobs.get(req.tail)
+        placements = [Placement(**p) for p in job.best_so_far()]
+        return json_response({"geometry": build_geometry(job.model, placements) if placements else None})
+
+    @route("GET", "/api/result/", prefix=True)
+    def result(self, req: Request) -> Response:
+        job = self.jobs.get(req.tail)
+        if job.result is None:
+            return error_response(409, "Noch kein Ergebnis")
+        out = {"result": job.result.as_dict(), "geometry": None}
+        out["result"]["solutions"] = [{"score": s.score.as_dict(), "count": len(s.placements)} for s in job.result.solutions]
+        if job.result.solutions:
+            idx = self._solution_index(req, len(job.result.solutions))
+            out["geometry"] = build_geometry(job.model, job.result.solutions[idx].placements)
+            out["solution_index"] = idx
+        return json_response(out)
+
+    @route("GET", "/api/export/", prefix=True)
+    def export_result(self, req: Request) -> Response:
+        job_id, _, ext = req.tail.partition(".")
+        job = self.jobs.get(job_id)
+        if job.result is None or not job.result.solutions or ext not in EXPORTERS:
+            return error_response(404, "Export nicht moeglich")
+        idx = self._solution_index(req, len(job.result.solutions))
+        response = self._export(EXPORTERS[ext](), build_geometry(job.model, job.result.solutions[idx].placements))
+        response.headers["Content-Disposition"] = f'attachment; filename="blindsight.{ext}"'
+        return response
+
+    @staticmethod
+    def _solution_index(req: Request, count: int) -> int:
+        return max(0, min(req.int_query("solution"), count - 1))
+
+    @staticmethod
+    def _export(exporter, geometry: dict) -> Response:
+        return Response(200, exporter.export(geometry).encode(), exporter.mime + "; charset=utf-8")
+
+    # -- Anordnungen ohne Lauf ---------------------------------------------------------
+    def _layout_request(self, req: Request) -> tuple[dict, Project, Model, list[Placement]]:
+        data = req.data
+        if not isinstance(data, dict) or "project" not in data or not isinstance(data.get("placements"), list):
+            raise BadRequest("Erwartet {project, placements}")
+        if len(data["placements"]) > MAX_PLACEMENTS:
+            raise BadRequest(f"Zu viele Platzierungen (max {MAX_PLACEMENTS})")
+        project = Project.from_dict(data["project"])
+        n = project.stack.n_motor_planes
+        placements = [Placement.from_dict(p, n) for p in data["placements"]]
+        return data, project, Model(project), placements
+
+    @route("POST", "/api/validate")
+    def validate(self, req: Request) -> Response:
+        _, project, model, placements = self._layout_request(req)
+        geometry = build_geometry(model, placements)
+        score = evaluate(model, placements, project.search.weights, project.target_count).as_dict() if placements else None
+        return json_response({"geometry": geometry, "valid": not geometry["collisions"], "score": score})
+
+    @route("POST", "/api/export-layout")
+    def export_layout(self, req: Request) -> Response:
+        data, _, model, placements = self._layout_request(req)
+        fmt = data.get("format", "svg")
+        if fmt not in EXPORTERS:
+            raise BadRequest(f"Unbekanntes Exportformat {fmt}")
+        return self._export(EXPORTERS[fmt](), build_geometry(model, placements))
+
+    @route("POST", "/api/analyze")
+    def analyze_project(self, req: Request) -> Response:
+        return json_response(analyze(Project.from_dict(req.data)))
+
+    # -- Motor -------------------------------------------------------------------------
+    @route("POST", "/api/svg-motor-import")
+    def svg_motor_import(self, req: Request) -> Response:
+        data = req.dict_data()
+        try:
+            outline = outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
+        except ScaleRequired as exc:
+            return json_response({"scale_required": True, "message": str(exc)})
+        out = {"width": outline.width, "depth": outline.depth, "outline": outline.outline,
+               "convex": outline.was_convex, "notes": outline.notes}
+        if isinstance(data.get("motor"), dict):  # Skizze im Stangenrahmen passend zum aktuellen Motor
+            out["sketch"] = sk.sketch_from_outline(outline.outline, motor_from_dict(data["motor"]))
+        return json_response(out)
+
+    @route("POST", "/api/sketch/", prefix=True)
+    def sketch_api(self, req: Request) -> Response:
+        """Endpunkte der Motor Skizze. Solver Ergebnisse (auch Widersprueche) sind normale Antworten mit ok=false."""
+        op = req.tail
+        data = req.dict_data()
+        gear = self._gear_arg(data.get("gear"))
+        if op == "from-motor":
+            motor = motor_from_dict(data.get("motor"))
+            sketch = sk.legacy_to_sketch(motor, with_constraints=data.get("constraints", True))
+            return json_response(sk.solve(sketch, cd=motor.center_distance, gear=(motor.gear_diameter, motor.gear_width)).as_dict())
+        if op not in ("solve", "hull", "insert", "delete"):
+            return error_response(404, "nicht gefunden")
+        sketch = data.get("sketch")
+        if not isinstance(sketch, dict):
+            raise BadRequest("sketch (Objekt mit points und constraints) erforderlich")
+        sketch = sk.sketch_dict(sketch)
+        errors = sk.validate_structure(sketch)
+        if errors:
+            return json_response(self._invalid_sketch(sketch, errors))
+        cd = data.get("cd", 5.0)
+        try:
+            if op == "solve":
+                return json_response(sk.solve(sketch, cd=cd, drag=data.get("drag"), gear=gear).as_dict())
+            if op == "hull":
+                sketch = sk.hull_sketch(sketch)
+            elif op == "insert":
+                sketch = sk.insert_point(sketch, _int(data.get("side"), "side"), data.get("t", 0.5))
+            else:
+                sketch = sk.delete_point(sketch, _int(data.get("point"), "point"))
+        except sk.SketchError as exc:
+            return json_response(self._invalid_sketch(sketch, exc.errors))
+        return json_response(sk.solve(sketch, cd=cd, gear=gear).as_dict())
+
+    @staticmethod
+    def _gear_arg(gear: Any) -> Optional[tuple[float, float]]:
+        if gear is None:
+            return None
+        if not (isinstance(gear, list) and len(gear) == 2 and all(is_finite_number(v) for v in gear)):
+            raise BadRequest("gear muss [Durchmesser, Breite] sein")
+        return float(gear[0]), float(gear[1])
+
+    @staticmethod
+    def _invalid_sketch(sketch: dict, errors: list[str]) -> dict:
+        return {"ok": False, "errors": errors, "sketch": sketch, "state": "invalid", "dof": 0, "constraints": [],
+                "warnings": []}
 
 
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
 def make_handler(app: App):
-    class Handler(BaseHTTPRequestHandler):
+    class RequestHandler(BaseHTTPRequestHandler):
         def _serve(self, method: str) -> None:
-            u = urlparse(self.path)
+            url = urlparse(self.path)
             if not app.host_ok(self.headers.get("Host"), self.headers.get("Origin")):
-                self._send(403, "application/json", b'{"error": "Host oder Origin nicht erlaubt"}', u.path)
+                self._send(error_response(403, "Host oder Origin nicht erlaubt"))
+                return
+            if method == "POST" and self._simple_content_type():
+                self._send(error_response(415, "POST erwartet Content-Type application/json"))
                 return
             try:
-                n = int(self.headers.get("Content-Length") or 0)
+                length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
-                n = -1
-            if n < 0 or n > MAX_BODY:
-                self._send(413 if n > 0 else 400, "application/json", b'{"error": "Ungueltige oder zu grosse Anfrage"}', u.path)
+                length = -1
+            if length < 0 or length > MAX_BODY:
+                self._send(error_response(413 if length > 0 else 400, "Ungueltige oder zu grosse Anfrage"))
                 return
-            body = self.rfile.read(n) if n else b""
-            code, ctype, payload = app.handle(method, u.path, parse_qs(u.query), body)
-            self._send(code, ctype, payload, u.path)
+            body = self.rfile.read(length) if length else b""
+            self._send(app.dispatch(method, url.path, parse_qs(url.query), body))
 
-        def _send(self, code: int, ctype: str, payload: bytes, path: str) -> None:
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(payload)))
+        def _simple_content_type(self) -> bool:
+            ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+            return ctype in SIMPLE_CONTENT_TYPES
+
+        def _send(self, response: Response) -> None:
+            self.send_response(response.code)
+            self.send_header("Content-Type", response.content_type)
+            self.send_header("Content-Length", str(len(response.body)))
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
-            if path.startswith("/api/export/"):
-                self.send_header("Content-Disposition", f'attachment; filename="blindsight.{path.rsplit(".", 1)[-1]}"')
+            for name, value in response.headers.items():
+                self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(payload)
+            self.wfile.write(response.body)
 
         def do_GET(self):  # noqa: N802
             self._serve("GET")
@@ -269,35 +457,40 @@ def make_handler(app: App):
         def log_message(self, fmt, *args):  # ruhige Konsole
             pass
 
-    return Handler
+    return RequestHandler
 
 
-def serve(host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> ThreadingHTTPServer:
-    app = App(None if host in ("127.0.0.1", "localhost", "::1") else {host.lower(), "127.0.0.1", "localhost"})
-    server = ThreadingHTTPServer((host, port), make_handler(app))
+class _IPv6Server(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+
+def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT, open_browser: bool = True) -> ThreadingHTTPServer:
+    """Erzeugt den Server (noch ohne serve_forever). Fremde Hosts muessen ausdruecklich angegeben werden."""
+    app = App(None if host.lower() in LOOPBACK_HOSTS else {host, "127.0.0.1", "localhost"})
+    server_class = _IPv6Server if ":" in host else ThreadingHTTPServer
+    server = server_class((host, port), make_handler(app))
     server.app = app  # type: ignore[attr-defined]
     server.daemon_threads = True
     if open_browser:
-        threading.Timer(0.5, lambda: webbrowser.open(f"http://{host}:{server.server_address[1]}")).start()
+        url = f"http://{_url_host(host)}:{server.server_address[1]}"
+        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     return server
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Project Blindsight Web Oberflaeche")
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
     server = serve(args.host, args.port, not args.no_browser)
-    print(f"Project Blindsight laeuft auf http://{args.host}:{server.server_address[1]}  (Beenden mit Strg+C)")
+    print(f"Project Blindsight laeuft auf http://{_url_host(args.host)}:{server.server_address[1]}  (Beenden mit Strg+C)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nBeendet.")
     finally:
-        for job in list(server.app.jobs.jobs.values()):  # type: ignore[attr-defined]
-            if job.stop:
-                job.stop.cancel()
+        server.app.jobs.shutdown()  # type: ignore[attr-defined]
         server.server_close()
 
 

@@ -13,8 +13,10 @@ from ..model import Model
 
 
 class Exporter(Protocol):
-    extension: str
+    extension: str  # Dateiendung und Name in der API (/api/export/<job>.<extension>)
     mime: str
+    label: str  # Bezeichnung in der UI
+
 
     def export(self, geometry: dict) -> str: ...
 
