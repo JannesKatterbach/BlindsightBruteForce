@@ -68,13 +68,13 @@ def validate_structure(sk: dict, prefix: str = "motor.sketch") -> list[str]:
     """Prueft Typen, Indizes und Wertebereiche. Gibt alle Fehler mit Feldpfad zurueck."""
     pts, cons = sk.get("points"), sk.get("constraints")
     if not isinstance(pts, list) or not isinstance(cons, list):
-        return [f"{prefix}. points und constraints muessen Listen sein"]
+        return [f"{prefix}. points und constraints müssen Listen sein"]
     errs: list[str] = []
     n = len(pts)
     if n < MIN_POINTS:
-        errs.append(f"{prefix}.points. Mindestens {MIN_POINTS} Punkte noetig (sind {n})")
+        errs.append(f"{prefix}.points. Mindestens {MIN_POINTS} Punkte nötig (sind {n})")
     if n > MAX_POINTS:
-        errs.append(f"{prefix}.points. Hoechstens {MAX_POINTS} Punkte erlaubt (sind {n})")
+        errs.append(f"{prefix}.points. Höchstens {MAX_POINTS} Punkte erlaubt (sind {n})")
     for i, p in enumerate(pts):
         if not (isinstance(p, (list, tuple)) and len(p) == 2 and all(is_finite_number(v) for v in p)):
             errs.append(f"{prefix}.points[{i}]. Muss [x, y] mit endlichen Zahlen sein")
@@ -99,7 +99,7 @@ def _constraint_errors(c: dict, n: int, tag: str) -> list[str]:
             what = "Seite" if f in ctype.sides else "Punkt"
             errs.append(f"{tag}.{f}. {what} {idx} existiert nicht (0..{n - 1})")
     if len(ctype.sides) == 2 and isinstance(c["a"], int) and c["a"] == c["b"]:
-        errs.append(f"{tag}. Die beiden Seiten muessen verschieden sein")
+        errs.append(f"{tag}. Die beiden Seiten müssen verschieden sein")
     if ctype.value is not None and not is_finite_number(c["value"]):
         errs.append(f"{tag}.value. Zahl erforderlich")
     elif ctype.value2 is not None and not is_finite_number(c["value2"]):
@@ -171,7 +171,7 @@ def insert_point(sk: dict, side: int, t: float = 0.5) -> dict:
     if not is_finite_number(t) or not 0 < t < 1:
         raise SketchError("t. Muss eine Zahl zwischen 0 und 1 sein (exklusiv)")
     if n >= MAX_POINTS:
-        raise SketchError(f"Hoechstens {MAX_POINTS} Punkte erlaubt")
+        raise SketchError(f"Höchstens {MAX_POINTS} Punkte erlaubt")
     a, b = pts[side], pts[(side + 1) % n]
     new = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
     new_pts = [list(p) for p in pts[: side + 1]] + [new] + [list(p) for p in pts[side + 1:]]
@@ -222,7 +222,7 @@ def delete_point(sk: dict, v: int) -> dict:
     if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v < n:
         raise SketchError(f"Punkt {v} existiert nicht")
     if n <= MIN_POINTS:
-        raise SketchError(f"Mindestens {MIN_POINTS} Punkte noetig")
+        raise SketchError(f"Mindestens {MIN_POINTS} Punkte nötig")
     return remap_vertices(sk, [i for i in range(n) if i != v])
 
 
@@ -230,6 +230,6 @@ def hull_sketch(sk: dict) -> dict:
     """Ersetzt die Kontur durch ihre konvexe Huelle (gegen den Uhrzeigersinn, Start beim kleinsten alten Index)."""
     keep = convex_hull_indices(sk["points"])
     if len(keep) < MIN_POINTS:
-        raise SketchError("Die Huelle hat weniger als 3 Punkte")
+        raise SketchError("Die Hülle hat weniger als 3 Punkte")
     first = keep.index(min(keep))
     return remap_vertices(sk, keep[first:] + keep[:first])

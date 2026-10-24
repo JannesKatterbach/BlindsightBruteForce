@@ -31,8 +31,8 @@ def _parser() -> argparse.ArgumentParser:
     ap.add_argument("config", help="Pfad zur JSON Konfiguration")
     ap.add_argument("--svg", help="SVG Ausgabedatei")
     ap.add_argument("--json", help="JSON Ausgabedatei der Geometrie")
-    ap.add_argument("--time", type=float, help="Zeitlimit in Sekunden (ueberschreibt die Konfiguration)")
-    ap.add_argument("--seed", type=int, help="Zufalls Seed (ueberschreibt die Konfiguration)")
+    ap.add_argument("--time", type=float, help="Zeitlimit in Sekunden (überschreibt die Konfiguration)")
+    ap.add_argument("--seed", type=int, help="Zufalls Seed (überschreibt die Konfiguration)")
     ap.add_argument("--quiet", action="store_true")
     return ap
 
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     if not result.best:
         return EXIT_NO_SOLUTION
     best = result.best
-    print(f"Beste Loesung. {len(best.placements)} von {result.target} Stangen, Score {best.score.total:.3f}")
+    print(f"Beste Lösung. {len(best.placements)} von {result.target} Stangen, Score {best.score.total:.3f}")
     for name, value in best.score.terms.items():
         print(f"   {name:11s} {value:.3f} (Gewicht {best.score.weights[name]:.2f})")
     geometry = build_geometry(model, best.placements)

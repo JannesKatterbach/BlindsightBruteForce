@@ -314,7 +314,7 @@ class Project:
         try:
             return cls.from_dict(json.loads(text))
         except json.JSONDecodeError as exc:
-            raise ConfigError(f"Ungueltiges JSON. {exc}") from exc
+            raise ConfigError(f"Ungültiges JSON. {exc}") from exc
         except RecursionError:
             raise ConfigError("JSON zu tief verschachtelt") from None
 
@@ -348,14 +348,14 @@ class Project:
             if search.angle_step <= 0:
                 raise ConfigError("search.angle_step. Muss positiv sein")
             if (search.angle_max - search.angle_min) / search.angle_step > MAX_ANGLE_COUNT:
-                raise ConfigError(f"search.angle_step. Zu klein, ergibt ueber {MAX_ANGLE_COUNT} Winkel")
+                raise ConfigError(f"search.angle_step. Zu klein, ergibt über {MAX_ANGLE_COUNT} Winkel")
             angles = set()
             a = search.angle_min
             while a < search.angle_max - EPS:
                 angles.add(normalize_angle_deg(a))
                 a += search.angle_step
         if not angles:
-            raise ConfigError("search.allowed_angles. Keine zulaessigen Motorwinkel")
+            raise ConfigError("search.allowed_angles. Keine zulässigen Motorwinkel")
         return sorted(angles)
 
     def angles_for_plane(self, plane: int) -> list[float]:
@@ -369,16 +369,16 @@ class Project:
 def _check_motor(proj: Project, errs: list[str]) -> None:
     motor = proj.motor
     if motor.axis_height > motor.height:
-        errs.append("motor.axis_height. Die Abtriebsachse liegt ausserhalb der Motorhoehe")
+        errs.append("motor.axis_height. Die Abtriebsachse liegt außerhalb der Motorhöhe")
     lo, hi = motor.center_distance_min, motor.center_distance_max
     if (lo is None) != (hi is None):
-        errs.append("motor.center_distance_min. Achsabstand min und max muessen zusammen angegeben werden")
+        errs.append("motor.center_distance_min. Achsabstand min und max müssen zusammen angegeben werden")
     elif lo is not None and hi is not None:
         if hi < lo:
             errs.append("motor.center_distance_max. Muss >= center_distance_min sein")
         elif not lo - EPS <= motor.center_distance <= hi + EPS:
             errs.append(
-                f"motor.center_distance. Der Achsabstand {motor.center_distance:g} liegt ausserhalb des Bereichs "
+                f"motor.center_distance. Der Achsabstand {motor.center_distance:g} liegt außerhalb des Bereichs "
                 f"{lo:g} bis {hi:g}"
             )
     if motor.sketch is not None:
@@ -394,20 +394,20 @@ def _check_stack(proj: Project, errs: list[str]) -> None:
     before = len(errs)
     if stack.mode == "gaps":
         if len(stack.gaps) < n:
-            errs.append(f"stack.gaps. Modus 'gaps' braucht {n} Abstaende (G0-G1, G1-G2, ...)")
+            errs.append(f"stack.gaps. Modus 'gaps' braucht {n} Abstände (G0-G1, G1-G2, ...)")
         elif any(g <= 0 for g in stack.gaps[:n]):
-            errs.append("stack.gaps. Alle Ebenenabstaende muessen positiv sein")
+            errs.append("stack.gaps. Alle Ebenenabstände müssen positiv sein")
     elif stack.mode == "distances":
         dist = stack.distances[:n]
         if len(dist) < n:
-            errs.append(f"stack.distances. Modus 'distances' braucht {n} Abstaende zu G0")
+            errs.append(f"stack.distances. Modus 'distances' braucht {n} Abstände zu G0")
         elif any(x <= 0 for x in dist) or any(dist[i] >= dist[i + 1] for i in range(len(dist) - 1)):
-            errs.append("stack.distances. Abstaende zu G0 muessen positiv und streng aufsteigend sein")
+            errs.append("stack.distances. Abstände zu G0 müssen positiv und streng aufsteigend sein")
     if stack.thicknesses is not None:
         if len(stack.thicknesses) < n:
             errs.append(f"stack.thicknesses. {n} Dicken erwartet (eine je Motorebene)")
         elif any(t <= 0 for t in stack.thicknesses):
-            errs.append("stack.thicknesses. Alle Dicken muessen positiv sein")
+            errs.append("stack.thicknesses. Alle Dicken müssen positiv sein")
     if len(errs) == before:
         errs.extend(plane_overlap_errors(stack))
     if stack.allowed_planes is not None:
@@ -439,7 +439,7 @@ def plane_overlap_errors(stack: StackSpec) -> list[str]:
         bottom = tops[i] - stack.plane_thickness(i)
         if tops[i + 1] >= bottom:
             out.append(
-                f"stack. Ebenen G{i} und G{i + 1} ueberlappen. Abstand {tops[i] - tops[i + 1]:.2f} mm "
+                f"stack. Ebenen G{i} und G{i + 1} überlappen. Abstand {tops[i] - tops[i + 1]:.2f} mm "
                 f"ist kleiner als die Dicke von G{i} ({stack.plane_thickness(i):.2f} mm)"
             )
     return out
@@ -448,9 +448,9 @@ def plane_overlap_errors(stack: StackSpec) -> list[str]:
 def _check_bounds(proj: Project, errs: list[str]) -> None:
     bounds = proj.bounds
     if bounds.xmax <= bounds.xmin or bounds.ymax <= bounds.ymin:
-        errs.append("bounds. Bauraum hat keine positive Flaeche (xmax>xmin, ymax>ymin)")
+        errs.append("bounds. Bauraum hat keine positive Fläche (xmax>xmin, ymax>ymin)")
     elif 2 * bounds.edge_margin >= min(bounds.width, bounds.height):
-        errs.append("bounds.edge_margin. Randabstand ist groesser als der halbe Bauraum")
+        errs.append("bounds.edge_margin. Randabstand ist größer als der halbe Bauraum")
 
 
 def _check_obstacles(proj: Project, errs: list[str]) -> None:
@@ -462,7 +462,7 @@ def _check_obstacles(proj: Project, errs: list[str]) -> None:
         if obstacle.z1 < obstacle.z0:
             errs.append(f"{tag}. z1 muss >= z0 sein")
         if obstacle.shape == "rect" and (obstacle.w <= 0 or obstacle.h <= 0):
-            errs.append(f"{tag}. Breite und Hoehe muessen positiv sein")
+            errs.append(f"{tag}. Breite und Höhe müssen positiv sein")
         if obstacle.shape == "circle" and obstacle.r <= 0:
             errs.append(f"{tag}.r. Radius muss positiv sein")
         if obstacle.plane is not None and not 1 <= obstacle.plane <= n:
@@ -475,13 +475,13 @@ def _check_search(proj: Project, errs: list[str]) -> None:
         if pattern not in PATTERNS:
             errs.append(f"search.patterns. Unbekanntes Muster '{pattern}' ({', '.join(PATTERNS)})")
     if not search.patterns:
-        errs.append("search.patterns. Mindestens ein Muster ist noetig")
+        errs.append("search.patterns. Mindestens ein Muster ist nötig")
     if len(search.patterns) != len(set(search.patterns)):
         errs.append("search.patterns. Muster doppelt angegeben")
     if search.angle_max <= search.angle_min:
-        errs.append("search.angle_max. Muss groesser als angle_min sein")
+        errs.append("search.angle_max. Muss größer als angle_min sein")
     if sum(search.weights.as_dict().values()) <= 0:
-        errs.append("search.weights. Nicht alle Gewichte duerfen 0 sein")
+        errs.append("search.weights. Nicht alle Gewichte dürfen 0 sein")
     try:
         proj.allowed_angle_list()
     except ConfigError as exc:
@@ -490,20 +490,20 @@ def _check_search(proj: Project, errs: list[str]) -> None:
 
 def _check_plane_key(label: str, key: str, n: int, errs: list[str]) -> None:
     if not (key.isdigit() and 1 <= int(key) <= n):
-        errs.append(f"{label}. Schluessel '{key}' ist keine Motorebene (1..{n})")
+        errs.append(f"{label}. Schlüssel '{key}' ist keine Motorebene (1..{n})")
 
 
 def _check_outline(outline: list[list[float]], errs: list[str]) -> None:
     if len(outline) < 3 or any(len(p) != 2 for p in outline):
-        errs.append("motor.outline. Mindestens 3 Punkte [x, y] noetig")
+        errs.append("motor.outline. Mindestens 3 Punkte [x, y] nötig")
         return
     area = signed_area(outline)
     if abs(area) < EPS_AREA:
-        errs.append("motor.outline. Kontur hat keine Flaeche")
+        errs.append("motor.outline. Kontur hat keine Fläche")
         return
     ccw = outline if area > 0 else list(reversed(outline))
     if not is_convex_ccw(ccw):
-        errs.append("motor.outline. Kontur muss konvex sein (nicht konvexe Motoren bitte als Huelle angeben)")
+        errs.append("motor.outline. Kontur muss konvex sein (nicht konvexe Motoren bitte als Hülle angeben)")
 
 
 # ---------------------------------------------------------------------------
@@ -529,69 +529,69 @@ class Meta:
 
 FIELD_META: list[Meta] = [
     Meta("name", "Name", "Bezeichnung des Projekts", "text", group="general"),
-    Meta("target_count", "Gewuenschte Anzahl Stangen", "So viele Gewindestangen mit Motoren sollen platziert werden", "int", 1, 100000, group="general"),
+    Meta("target_count", "Gewünschte Anzahl Stangen", "So viele Gewindestangen mit Motoren sollen platziert werden", "int", 1, 100000, group="general"),
     Meta("clearance", "Sicherheitsabstand", "Mindestabstand zwischen allen fremden Bauteilen", "len", 0, 1000, group="general"),
     Meta("tolerance", "Toleranz", "Wird zum Sicherheitsabstand addiert (Fertigung, Rundung). Wirksamer Abstand = Sicherheitsabstand + Toleranz", "len", 0, 1000, group="general"),
-    Meta("rod.diameter", "Durchmesser", "Aussendurchmesser des Gewindes", "len", 0, 1000, True, group="rod"),
-    Meta("rod.stroke", "Maximaler Hub ueber G0", "So weit muss jede Stange oberhalb von G0 ausfahren koennen, unabhaengig von der Motorebene", "len", 0, 100000, True, group="rod"),
+    Meta("rod.diameter", "Durchmesser", "Außendurchmesser des Gewindes", "len", 0, 1000, True, group="rod"),
+    Meta("rod.stroke", "Maximaler Hub über G0", "So weit muss jede Stange oberhalb von G0 ausfahren können, unabhängig von der Motorebene", "len", 0, 100000, True, group="rod"),
     Meta("rod.engage_below", "Gewinde unter Zahnradachse (ausgefahren)", "Mindestgewinde unter der Zahnradachse bei maximalem Ausfahren", "len", 0, 100000, group="rod"),
-    Meta("rod.engage_above", "Gewinde ueber Zahnradachse (eingefahren)", "Mindestgewinde ueber der Zahnradachse bei vollem Einfahren", "len", 0, 100000, group="rod"),
-    Meta("rod.length_tolerance", "Laengenzuschlag", "Zusaetzlicher Sicherheitszuschlag der Stangenlaenge", "len", 0, 100000, group="rod"),
-    Meta("rod.retract_depth", "Spitze eingefahren unter G0", "Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = buendig)", "len", 0, 100000, group="rod"),
-    Meta("rod.hole_clearance", "Radiales Lochspiel", "Spiel der Durchgangsloecher in den Ebenen (je Seite)", "len", 0, 1000, group="rod"),
-    Meta("motor.width", "Breite (x)", "Gehaeusebreite quer zur Welle", "len", 0, 10000, True, group="motor"),
-    Meta("motor.depth", "Tiefe (y, Wellenrichtung)", "Gehaeusetiefe entlang der Welle", "len", 0, 10000, True, group="motor"),
-    Meta("motor.height", "Hoehe (z)", "Gehaeusehoehe senkrecht zur Ebene", "len", 0, 10000, True, group="motor"),
-    Meta("motor.shaft_x", "Abtriebsachse, x Versatz", "Seitlicher Versatz der Abtriebsachse zur Gehaeusemitte", "len", -10000, 10000, group="motor"),
-    Meta("motor.axis_height", "Achshoehe ueber Montageflaeche", "Hoehe der Abtriebsachse ueber der Montageflaeche", "len", 0, 10000, group="motor"),
-    Meta("motor.gear_diameter", "Zahnrad Durchmesser", "Aussendurchmesser des Antriebszahnrads", "len", 0, 10000, True, group="motor"),
+    Meta("rod.engage_above", "Gewinde über Zahnradachse (eingefahren)", "Mindestgewinde über der Zahnradachse bei vollem Einfahren", "len", 0, 100000, group="rod"),
+    Meta("rod.length_tolerance", "Längenzuschlag", "Zusätzlicher Sicherheitszuschlag der Stangenlänge", "len", 0, 100000, group="rod"),
+    Meta("rod.retract_depth", "Spitze eingefahren unter G0", "Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = bündig)", "len", 0, 100000, group="rod"),
+    Meta("rod.hole_clearance", "Radiales Lochspiel", "Spiel der Durchgangslöcher in den Ebenen (je Seite)", "len", 0, 1000, group="rod"),
+    Meta("motor.width", "Breite (x)", "Gehäusebreite quer zur Welle", "len", 0, 10000, True, group="motor"),
+    Meta("motor.depth", "Tiefe (y, Wellenrichtung)", "Gehäusetiefe entlang der Welle", "len", 0, 10000, True, group="motor"),
+    Meta("motor.height", "Höhe (z)", "Gehäusehöhe senkrecht zur Ebene", "len", 0, 10000, True, group="motor"),
+    Meta("motor.shaft_x", "Abtriebsachse, x Versatz", "Seitlicher Versatz der Abtriebsachse zur Gehäusemitte", "len", -10000, 10000, group="motor"),
+    Meta("motor.axis_height", "Achshöhe über Montagefläche", "Höhe der Abtriebsachse über der Montagefläche", "len", 0, 10000, group="motor"),
+    Meta("motor.gear_diameter", "Zahnrad Durchmesser", "Außendurchmesser des Antriebszahnrads", "len", 0, 10000, True, group="motor"),
     Meta("motor.gear_width", "Zahnrad Breite", "Axiale Breite des Zahnrads", "len", 0, 10000, True, group="motor"),
-    Meta("motor.gear_gap", "Abstand Gehaeuse zu Zahnrad", "Axialer Abstand zwischen Gehaeusekante und Zahnrad", "len", 0, 10000, group="motor"),
-    Meta("motor.center_distance", "Achsabstand Zahnrad zu Stange", "Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur ueber diesen Abstand modelliert", "len", 0, 10000, group="motor"),
+    Meta("motor.gear_gap", "Abstand Gehäuse zu Zahnrad", "Axialer Abstand zwischen Gehäusekante und Zahnrad", "len", 0, 10000, group="motor"),
+    Meta("motor.center_distance", "Achsabstand Zahnrad zu Stange", "Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur über diesen Abstand modelliert", "len", 0, 10000, group="motor"),
     Meta("motor.center_distance_min", "Achsabstand min (optional)", "Untergrenze, wenn der Optimierer den Achsabstand variieren darf", "len", 0, 10000, group="motor", optional=True),
     Meta("motor.center_distance_max", "Achsabstand max (optional)", "Obergrenze, wenn der Optimierer den Achsabstand variieren darf", "len", 0, 10000, group="motor", optional=True),
     Meta("motor.center_distance_steps", "Achsabstand Stufen", "Anzahl der Stufen zwischen min und max (1 = nur nominal)", "int", 1, 50, group="motor"),
-    Meta("motor.own_clearance", "Eigenabstand Gehaeuse zur Stange", "Mindestabstand des Gehaeuses zur eigenen Stange", "len", 0, 1000, group="motor"),
-    Meta("motor.mount", "Montage", "Motor steht auf der Ebene oder haengt darunter", "enum", group="motor",
-         options=(("top", "Motor steht auf der Ebene"), ("bottom", "Motor haengt unter der Ebene"))),
+    Meta("motor.own_clearance", "Eigenabstand Gehäuse zur Stange", "Mindestabstand des Gehäuses zur eigenen Stange", "len", 0, 1000, group="motor"),
+    Meta("motor.mount", "Montage", "Motor steht auf der Ebene oder hängt darunter", "enum", group="motor",
+         options=(("top", "Motor steht auf der Ebene"), ("bottom", "Motor hängt unter der Ebene"))),
     Meta("stack.n_motor_planes", "Anzahl Motorebenen", "Anzahl der Ebenen G1 bis Gn, keine feste Obergrenze", "int", 1, 1000, group="stack"),
-    Meta("stack.mode", "Abstandsmodus", "Wie die Ebenenhoehen angegeben werden", "enum", group="stack",
-         options=(("uniform", "Einheitlicher Abstand"), ("gaps", "Einzelabstaende G(i) zu G(i+1)"), ("distances", "Abstand jeder Ebene zu G0"))),
+    Meta("stack.mode", "Abstandsmodus", "Wie die Ebenenhöhen angegeben werden", "enum", group="stack",
+         options=(("uniform", "Einheitlicher Abstand"), ("gaps", "Einzelabstände G(i) zu G(i+1)"), ("distances", "Abstand jeder Ebene zu G0"))),
     Meta("stack.uniform_spacing", "Einheitlicher Ebenenabstand", "Abstand zwischen allen Ebenen (Modus uniform)", "len", 0, 100000, True, group="stack"),
-    Meta("stack.gaps", "Einzelabstaende (Liste)", "Abstaende G0-G1, G1-G2, ... (Modus gaps)", "lenlist", group="stack"),
-    Meta("stack.distances", "Abstaende zu G0 (Liste)", "Abstand jeder Motorebene zu G0, aufsteigend (Modus distances)", "lenlist", group="stack"),
+    Meta("stack.gaps", "Einzelabstände (Liste)", "Abstände G0-G1, G1-G2, ... (Modus gaps)", "lenlist", group="stack"),
+    Meta("stack.distances", "Abstände zu G0 (Liste)", "Abstand jeder Motorebene zu G0, aufsteigend (Modus distances)", "lenlist", group="stack"),
     Meta("stack.thickness", "Dicke Motorebenen", "Plattendicke der Ebenen G1 bis Gn", "len", 0, 1000, True, group="stack"),
     Meta("stack.g0_thickness", "Dicke G0", "Plattendicke der oberen Referenzebene", "len", 0, 1000, True, group="stack"),
-    Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke fuer jede Motorebene, ueberschreibt die gemeinsame Dicke", "lenlist", group="stack", optional=True),
-    Meta("stack.allowed_planes", "Erlaubte Motorebenen (Liste, leer = alle)", "Nur diese Ebenen duerfen Motoren tragen", "listint", group="stack", optional=True),
+    Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke für jede Motorebene, überschreibt die gemeinsame Dicke", "lenlist", group="stack", optional=True),
+    Meta("stack.allowed_planes", "Erlaubte Motorebenen (Liste, leer = alle)", "Nur diese Ebenen dürfen Motoren tragen", "listint", group="stack", optional=True),
     Meta("bounds.xmin", "x min", "Bauraum, linke Grenze", "len", -1e6, 1e6, group="bounds"),
     Meta("bounds.xmax", "x max", "Bauraum, rechte Grenze", "len", -1e6, 1e6, group="bounds"),
     Meta("bounds.ymin", "y min", "Bauraum, untere Grenze", "len", -1e6, 1e6, group="bounds"),
     Meta("bounds.ymax", "y max", "Bauraum, obere Grenze", "len", -1e6, 1e6, group="bounds"),
-    Meta("bounds.edge_margin", "Randabstand", "Zusaetzlicher Abstand aller Bauteile zum Rand", "len", 0, 1e6, group="bounds"),
-    Meta("bounds.parts_in_bounds", "Im Bauraum muessen liegen", "Alle Bauteile oder nur die Stangen", "enum", group="bounds",
+    Meta("bounds.edge_margin", "Randabstand", "Zusätzlicher Abstand aller Bauteile zum Rand", "len", 0, 1e6, group="bounds"),
+    Meta("bounds.parts_in_bounds", "Im Bauraum müssen liegen", "Alle Bauteile oder nur die Stangen", "enum", group="bounds",
          options=(("all", "alle Bauteile"), ("rods", "nur Stangen"))),
     Meta("search.optimizer", "Optimierer", "Suchstrategie", "enum", group="search",
          options=(("pattern_greedy", "Muster und lokale Suche"), ("anneal_free", "Freie Verteilung (Annealing)"), ("exhaustive_small", "Exakt auf Raster (kleine Aufgaben)"))),
-    Meta("search.layout_goal", "Anordnungsziel", "compact packt dicht (kleine Flaeche), spread verteilt gleichmaessig ueber den ganzen Bauraum", "enum", group="search",
-         options=(("compact", "Kompakt (kleine Grundflaeche)"), ("spread", "Verteilt ueber den Bauraum"))),
+    Meta("search.layout_goal", "Anordnungsziel", "compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum", "enum", group="search",
+         options=(("compact", "Kompakt (kleine Grundfläche)"), ("spread", "Verteilt über den Bauraum"))),
     Meta("search.patterns", "Muster (square, hex_x, hex_y)", "Verteilungsstruktur der Kandidaten", "liststr", group="search"),
     Meta("search.fixed_pitch", "Feste Teilung (optional)", "Nur diese Rasterteilung verwenden statt sie zu suchen", "len", 0, 100000, True, group="search", optional=True),
-    Meta("search.angle_step", "Winkelschritt (Grad)", "Raster der zulaessigen Motorwinkel", "num", 0, 360, True, group="search"),
+    Meta("search.angle_step", "Winkelschritt (Grad)", "Raster der zulässigen Motorwinkel", "num", 0, 360, True, group="search"),
     Meta("search.angle_min", "Winkel von (Grad)", "Kleinster Motorwinkel", "num", -3600, 3600, group="search"),
     Meta("search.angle_max", "Winkel bis (Grad, exklusiv)", "360 = voller Kreis", "num", -3600, 3600, group="search"),
     Meta("search.allowed_angles", "Nur diese Winkel (Liste, leer = Raster)", "Explizite Liste erlaubter Motorwinkel", "list", group="search", optional=True),
     Meta("search.time_limit_s", "Zeitlimit (s)", "Maximale Rechenzeit", "num", 0, 86400, True, group="search"),
-    Meta("search.max_candidates", "Max. Kandidaten", "Maximale Anzahl geprueften Platzierungen", "int", 1, 10**12, group="search"),
-    Meta("search.seed", "Seed", "Zufallsstartwert fuer reproduzierbare Laeufe", "int", 0, 2**31 - 1, group="search"),
-    Meta("search.top_k", "Anzahl Loesungen", "Wie viele beste Loesungen behalten werden", "int", 1, 50, group="search"),
+    Meta("search.max_candidates", "Max. Kandidaten", "Maximale Anzahl geprüften Platzierungen", "int", 1, 10**12, group="search"),
+    Meta("search.seed", "Seed", "Zufallsstartwert für reproduzierbare Läufe", "int", 0, 2**31 - 1, group="search"),
+    Meta("search.top_k", "Anzahl Lösungen", "Wie viele beste Lösungen behalten werden", "int", 1, 50, group="search"),
     Meta("search.refine_fraction", "Anteil lokale Suche", "Zeitanteil der Verfeinerung (0 bis 0.9)", "num", 0, 0.9, group="search"),
     Meta("search.stagnation_s", "Stagnation (s, optional)", "Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert", "num", 0, 86400, True, group="search", optional=True),
-    Meta("search.workers", "Parallele Laeufe", "Anzahl Prozesse fuer unabhaengige Seeds (1 = ohne Parallelisierung)", "int", 1, 64, group="search"),
+    Meta("search.workers", "Parallele Läufe", "Anzahl Prozesse für unabhängige Seeds (1 = ohne Parallelisierung)", "int", 1, 64, group="search"),
     Meta("search.weights.count", "Anzahl Stangen", "Gewicht des Ziels Anzahl", "num", 0, 1000, group="weights"),
-    Meta("search.weights.area", "Kleine Grundflaeche", "Gewicht des Ziels Grundflaeche", "num", 0, 1000, group="weights"),
-    Meta("search.weights.uniformity", "Gleichmaessige Verteilung", "Gewicht der gleichmaessigen Nachbarabstaende", "num", 0, 1000, group="weights"),
-    Meta("search.weights.regularity", "Regelmaessiges Muster", "Gewicht der Quadrat oder Hexagonalordnung", "num", 0, 1000, group="weights"),
+    Meta("search.weights.area", "Kleine Grundfläche", "Gewicht des Ziels Grundfläche", "num", 0, 1000, group="weights"),
+    Meta("search.weights.uniformity", "Gleichmäßige Verteilung", "Gewicht der gleichmäßigen Nachbarabstände", "num", 0, 1000, group="weights"),
+    Meta("search.weights.regularity", "Regelmäßiges Muster", "Gewicht der Quadrat oder Hexagonalordnung", "num", 0, 1000, group="weights"),
 ]
 META_BY_PATH = {m.path: m for m in FIELD_META}
 NUMERIC_KINDS = ("len", "num", "int")
@@ -617,20 +617,20 @@ def _validate_fields(proj: Project, errs: list[str]) -> None:
         elif meta.kind == "enum":
             allowed = [option[0] for option in (meta.options or ())]
             if value not in allowed:
-                errs.append(f"{meta.path}. Unzulaessiger Wert '{value}'. Erlaubt. {allowed}")
+                errs.append(f"{meta.path}. Unzulässiger Wert '{value}'. Erlaubt. {allowed}")
         elif meta.kind in NUMBER_LIST_KINDS:
             if not all(is_finite_number(x) for x in value):
-                errs.append(f"{meta.path}. Alle Eintraege muessen endliche Zahlen sein")
+                errs.append(f"{meta.path}. Alle Einträge müssen endliche Zahlen sein")
     for i, obstacle in enumerate(proj.obstacles):
         for name in ("x", "y", "w", "h", "r", "angle", "z0", "z1"):
             if not is_finite_number(getattr(obstacle, name)):
                 errs.append(f"obstacles[{i}].{name}. Muss eine endliche Zahl sein")
     for key, zones in proj.stack.mount_zones.items():
         if not all(is_finite_number(c) for zone in zones for c in zone):
-            errs.append(f"stack.mount_zones[{key}]. Koordinaten muessen endliche Zahlen sein")
+            errs.append(f"stack.mount_zones[{key}]. Koordinaten müssen endliche Zahlen sein")
     if proj.motor.outline is not None:
         if not all(is_finite_number(c) for p in proj.motor.outline for c in p):
-            errs.append("motor.outline. Koordinaten muessen endliche Zahlen sein")
+            errs.append("motor.outline. Koordinaten müssen endliche Zahlen sein")
 
 
 def _check_number(meta: Meta, value: Any, errs: list[str]) -> None:
@@ -640,10 +640,10 @@ def _check_number(meta: Meta, value: Any, errs: list[str]) -> None:
     if meta.lo is not None:
         too_small = value <= meta.lo if meta.strict_lo else value < meta.lo
         if too_small:
-            relation = "groesser als" if meta.strict_lo else "mindestens"
+            relation = "größer als" if meta.strict_lo else "mindestens"
             errs.append(f"{meta.path}. Muss {relation} {meta.lo:g} sein (ist {value:g})")
     if meta.hi is not None and value > meta.hi:
-        errs.append(f"{meta.path}. Darf hoechstens {meta.hi:g} sein (ist {value:g})")
+        errs.append(f"{meta.path}. Darf höchstens {meta.hi:g} sein (ist {value:g})")
 
 
 _isnum = is_finite_number  # Name aus frueheren Versionen

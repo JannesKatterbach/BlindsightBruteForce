@@ -12,10 +12,10 @@ INTERSECT_TOL = 1e-12  # Orientierungstest beim Seitenschnitt (mm^2)
 WINDING_TOL = 1e-6  # Abweichung der Gesamtdrehung von 360 Grad (rad)
 GEAR_OVERLAP_TOL = 1e-6  # ab dieser Eindringtiefe (mm) ragt das Zahnrad ins Gehaeuse
 
-MSG_ZERO_SIDE = "Zwei Punkte liegen aufeinander (Seite der Laenge 0)"
-MSG_NO_AREA = "Die Kontur hat keine Flaeche oder ist im Uhrzeigersinn orientiert"
+MSG_ZERO_SIDE = "Zwei Punkte liegen aufeinander (Seite der Länge 0)"
+MSG_NO_AREA = "Die Kontur hat keine Fläche oder ist im Uhrzeigersinn orientiert"
 MSG_SELF_INTERSECTION = "Die Kontur schneidet sich selbst"
-MSG_NOT_CONVEX = "Die Kontur ist nicht konvex (das Modell braucht ein konvexes Gehaeuse, siehe Konvexe Huelle)"
+MSG_NOT_CONVEX = "Die Kontur ist nicht konvex (das Modell braucht ein konvexes Gehäuse, siehe Konvexe Hülle)"
 
 
 def _segments_cross(p1, p2, p3, p4) -> bool:
@@ -95,7 +95,7 @@ def gear_overlap_message(pts: list, cd_nominal: float, cd: float, gear_diameter:
     shifted = [[x + shift, y] for x, y in pts]
     depth = penetration(shifted, gear_box(cd, gear_diameter, gear_width))
     if depth > GEAR_OVERLAP_TOL:
-        return f"Das Zahnrad ragt {depth:.2f} mm in das Gehaeuse (Achsabstand {cd:g} mm)"
+        return f"Das Zahnrad ragt {depth:.2f} mm in das Gehäuse (Achsabstand {cd:g} mm)"
     return ""
 
 

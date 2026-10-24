@@ -35,12 +35,12 @@ STATE_OVER = "over"  # mindestens ein Constraint ist redundant
 STATE_CONFLICT = "conflict"  # mindestens ein Constraint widerspricht den anderen
 STATE_INVALID = "invalid"  # Eingabe ungueltig oder nicht loesbar
 
-MSG_TIMEOUT = "Zeitlimit beim Loesen ueberschritten (zu viele oder zu komplizierte Constraints)"
-MSG_DRAG_REJECTED = "Die gezogene Lage verletzt Constraints. Die Skizze bleibt unveraendert"
-MSG_UNSOLVED = "Die Constraints lassen sich nicht gleichzeitig erfuellen"
-MSG_BAD_DRAG = "drag. Erwartet {point, target:[x, y]} mit gueltigem Punkt"
+MSG_TIMEOUT = "Zeitlimit beim Lösen überschritten (zu viele oder zu komplizierte Constraints)"
+MSG_DRAG_REJECTED = "Die gezogene Lage verletzt Constraints. Die Skizze bleibt unverändert"
+MSG_UNSOLVED = "Die Constraints lassen sich nicht gleichzeitig erfüllen"
+MSG_BAD_DRAG = "drag. Erwartet {point, target:[x, y]} mit gültigem Punkt"
 MSG_BAD_CD = "cd. Achsabstand muss eine Zahl >= 0 sein"
-MSG_NO_AREA = "motor.sketch.points. Die Kontur hat keine Flaeche"
+MSG_NO_AREA = "motor.sketch.points. Die Kontur hat keine Fläche"
 
 
 @dataclass

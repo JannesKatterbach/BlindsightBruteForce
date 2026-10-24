@@ -88,7 +88,7 @@ class BadRequest(ValueError):
 
 
 def _reject_constant(name: str) -> Any:
-    raise BadRequest(f"{name} ist kein gueltiger Zahlenwert")
+    raise BadRequest(f"{name} ist kein gültiger Zahlenwert")
 
 
 def parse_json(body: bytes) -> Any:
@@ -98,7 +98,7 @@ def parse_json(body: bytes) -> Any:
     except RecursionError:
         raise BadRequest("JSON ist zu tief verschachtelt") from None
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise BadRequest(f"Kein gueltiges JSON. {exc}") from None
+        raise BadRequest(f"Kein gültiges JSON. {exc}") from None
 
 
 @dataclass
@@ -210,9 +210,9 @@ class App:
         except JobNotFound as exc:
             return error_response(404, str(exc))
         except BadRequest as exc:
-            return error_response(400, f"Ungueltige Anfrage. {exc}")
+            return error_response(400, f"Ungültige Anfrage. {exc}")
         except ValueError as exc:  # Pruefungen im Kern (Placement, Skizze, Export) melden ValueError
-            return error_response(400, f"Ungueltige Anfrage. {exc}")
+            return error_response(400, f"Ungültige Anfrage. {exc}")
         except Exception as exc:  # Programmfehler. Der Server bleibt erreichbar
             traceback.print_exc()
             return error_response(500, f"Interner Fehler. {type(exc).__name__}: {exc}")
@@ -304,7 +304,7 @@ class App:
         job_id, _, ext = req.tail.partition(".")
         job = self.jobs.get(job_id)
         if job.result is None or not job.result.solutions or ext not in EXPORTERS:
-            return error_response(404, "Export nicht moeglich")
+            return error_response(404, "Export nicht möglich")
         idx = self._solution_index(req, len(job.result.solutions))
         response = self._export(EXPORTERS[ext](), build_geometry(job.model, job.result.solutions[idx].placements))
         response.headers["Content-Disposition"] = f'attachment; filename="blindsight.{ext}"'
@@ -428,7 +428,7 @@ def make_handler(app: App):
             except ValueError:
                 length = -1
             if length < 0 or length > MAX_BODY:
-                self._send(error_response(413 if length > 0 else 400, "Ungueltige oder zu grosse Anfrage"))
+                self._send(error_response(413 if length > 0 else 400, "Ungültige oder zu große Anfrage"))
                 return
             body = self.rfile.read(length) if length else b""
             self._send(app.dispatch(method, url.path, parse_qs(url.query), body))
@@ -478,13 +478,13 @@ def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT, open_browser: bool 
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Project Blindsight Web Oberflaeche")
+    ap = argparse.ArgumentParser(description="Project Blindsight Web Oberfläche")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
     server = serve(args.host, args.port, not args.no_browser)
-    print(f"Project Blindsight laeuft auf http://{_url_host(args.host)}:{server.server_address[1]}  (Beenden mit Strg+C)")
+    print(f"Project Blindsight läuft auf http://{_url_host(args.host)}:{server.server_address[1]}  (Beenden mit Strg+C)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -69,7 +69,7 @@ class SvgExporter:
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{_f(total_w)}mm" height="{_f(h)}mm" '
             f'viewBox="0 0 {_f(total_w)} {_f(h)}" data-unit="mm" data-scale="1 SVG unit = 1 mm">',
             f"<title>{escape(geometry['name'])}</title>",
-            f"<desc>Project Blindsight. Massstab 1:1, Einheit mm. Ursprung links unten im Bauraum "
+            f"<desc>Project Blindsight. Maßstab 1:1, Einheit mm. Ursprung links unten im Bauraum "
             f"({_f(b['xmin'])}, {_f(b['ymin'])}). Geometrisches Ergebnis, kein fertiges PCB Layout.</desc>",
         ]
         for idx, (gid, plane) in enumerate(sheets):

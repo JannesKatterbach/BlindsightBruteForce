@@ -250,7 +250,7 @@ class Layout:
         if ignore is not None and ignore in self.units and self.units[ignore].plane == pl.plane:
             count -= 1
         if count >= cap:
-            return f"Ebene G{pl.plane} traegt bereits die maximale Anzahl Motoren ({cap})"
+            return f"Ebene G{pl.plane} trägt bereits die maximale Anzahl Motoren ({cap})"
         return ""
 
     def check(self, pl: Placement, ignore: Optional[int] = None, collect: bool = False) -> CheckResult:
@@ -288,7 +288,7 @@ class Layout:
                     continue
                 message = (
                     f"{KIND_LABELS[p.kind]} kollidiert mit {obstacle.label} "
-                    f"(Abstand {dist:.2f} mm, benoetigt {gap:.2f} mm)"
+                    f"(Abstand {dist:.2f} mm, benötigt {gap:.2f} mm)"
                 )
                 if not collect:
                     return CheckResult(False, reason=message)
@@ -304,7 +304,7 @@ class Layout:
                         continue
                     message = (
                         f"{KIND_LABELS[p.kind]} kollidiert mit {KIND_LABELS[q.kind]} von Einheit {uid} "
-                        f"(Abstand {dist:.2f} mm, benoetigt {gap:.2f} mm)"
+                        f"(Abstand {dist:.2f} mm, benötigt {gap:.2f} mm)"
                     )
                     if not collect:
                         return CheckResult(False, reason=message)
@@ -360,7 +360,7 @@ class Layout:
             first = next(u for u in ids if self.units[u].plane == plane)
             pl = self.units[first]
             out.append(Collision(first, -1, KIND_HOUSING, "capacity", 0.0, gap, pl.x, pl.y,
-                                 f"Ebene G{plane} traegt {count} Motoren, erlaubt sind {cap}"))
+                                 f"Ebene G{plane} trägt {count} Motoren, erlaubt sind {cap}"))
         return out
 
     def _pair_collisions(self, ids: list[int]) -> list[Collision]:
@@ -378,7 +378,7 @@ class Layout:
                             out.append(Collision(
                                 a, b, p.kind, q.kind, dist, gap, *_midpoint(p, q),
                                 f"Einheit {a} ({KIND_LABELS[p.kind]}) und Einheit {b} ({KIND_LABELS[q.kind]}) "
-                                f"Abstand {dist:.2f} mm, benoetigt {gap:.2f} mm",
+                                f"Abstand {dist:.2f} mm, benötigt {gap:.2f} mm",
                             ))
         return out
 

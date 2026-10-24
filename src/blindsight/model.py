@@ -102,7 +102,7 @@ class PlaneStack:
         for upper, lower in zip(self.planes, self.planes[1:]):
             if lower.z_top >= upper.z_bottom:
                 raise ConfigError(
-                    f"Ebenen {upper.name} und {lower.name} ueberlappen. Abstand {upper.z_top - lower.z_top:.2f} mm "
+                    f"Ebenen {upper.name} und {lower.name} überlappen. Abstand {upper.z_top - lower.z_top:.2f} mm "
                     f"ist kleiner als die Dicke von {upper.name} ({upper.thickness:.2f} mm)"
                 )
 
@@ -221,19 +221,19 @@ class Model:
                 dist = z_gap(*housing_z, other.z_bottom, other.z_top)
                 if dist < gap - EPS:
                     problems.append(
-                        f"Motorgehaeuse (Hoehe {housing_z[1] - housing_z[0]:.1f} mm) passt nicht zwischen die Ebenen. "
-                        f"Abstand zu {other.name} nur {max(dist, 0):.2f} mm, benoetigt {gap:.2f} mm"
+                        f"Motorgehäuse (Höhe {housing_z[1] - housing_z[0]:.1f} mm) passt nicht zwischen die Ebenen. "
+                        f"Abstand zu {other.name} nur {max(dist, 0):.2f} mm, benötigt {gap:.2f} mm"
                     )
             dist = z_gap(*gear_z, other.z_bottom, other.z_top)
             if dist < gap - EPS:
                 problems.append(
-                    f"Zahnrad kollidiert vertikal mit {other.name} (Abstand {max(dist, 0):.2f} mm, benoetigt {gap:.2f} mm)"
+                    f"Zahnrad kollidiert vertikal mit {other.name} (Abstand {max(dist, 0):.2f} mm, benötigt {gap:.2f} mm)"
                 )
         rod = self._rod_geo[plane.index]
         if rod.engage_above_actual < self.project.rod.engage_above - EPS:
             problems.append(
                 f"Zahnradachse liegt zu nah an G0. Eingefahren nur {rod.engage_above_actual:.1f} mm Gewinde "
-                f"ueber der Achse, benoetigt {self.project.rod.engage_above:.1f} mm"
+                f"über der Achse, benötigt {self.project.rod.engage_above:.1f} mm"
             )
         return problems
 
@@ -258,7 +258,7 @@ class Model:
         message = ""
         if distance < motor.own_clearance - EPS:
             message = (
-                f"Motorgehaeuse beruehrt die eigene Stange (Abstand {max(distance, 0):.2f} mm, benoetigt "
+                f"Motorgehäuse berührt die eigene Stange (Abstand {max(distance, 0):.2f} mm, benötigt "
                 f"{motor.own_clearance:.2f} mm). Zahnradabstand oder Achsabstand anpassen"
             )
         self._cd_problem_cache[key] = message
@@ -384,12 +384,12 @@ class Model:
                 continue
             bx0, by0, bx1, by1 = part.prism.fp.bbox
             if bx0 < x0 - EPS or by0 < y0 - EPS or bx1 > x1 + EPS or by1 > y1 + EPS:
-                return f"{part.label} liegt ausserhalb des Bauraums"
+                return f"{part.label} liegt außerhalb des Bauraums"
         zones = self.project.stack.mount_zones.get(str(plane_index))
         if zones:
             for part in parts:
                 if part.kind == KIND_HOUSING and not any(_bbox_inside(part.prism.fp.bbox, zone) for zone in zones):
-                    return "Motor liegt ausserhalb der Montagebereiche der Ebene"
+                    return "Motor liegt außerhalb der Montagebereiche der Ebene"
         return None
 
 

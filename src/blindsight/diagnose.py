@@ -20,7 +20,7 @@ def single_unit_report(model: Model) -> list[str]:
     usable = model.usable_planes()
     if not usable:
         msgs = [f"{p.name}. {problem}" for p in model.stack.motor_planes for problem in model.plane_problems(p.index)]
-        msgs.append("Keine Motorebene ist nutzbar. Ebenenabstand erhoehen, Motor niedriger waehlen oder Montage aendern")
+        msgs.append("Keine Motorebene ist nutzbar. Ebenenabstand erhöhen, Motor niedriger wählen oder Montage ändern")
         return msgs
     bounds = model.project.bounds
     layout = Layout(model)
@@ -35,7 +35,7 @@ def single_unit_report(model: Model) -> list[str]:
                     reasons[result.reason] += 1
     most_common = reasons.most_common(1)[0][0]
     return [
-        f"Selbst eine einzelne Einheit passt nicht in den Bauraum. Haeufigster Grund. {most_common}",
+        f"Selbst eine einzelne Einheit passt nicht in den Bauraum. Häufigster Grund. {most_common}",
         f"Die Einheit reicht bis {model.unit_radius:.1f} mm von der Stangenachse. "
         f"Bauraum {bounds.width:.0f} mal {bounds.height:.0f} mm",
     ]

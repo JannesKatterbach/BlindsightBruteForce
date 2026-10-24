@@ -32,4 +32,4 @@ def get_optimizer(name: str = "pattern_greedy") -> "Optimizer":
     try:
         return OPTIMIZERS[name]()
     except KeyError:
-        raise ValueError(f"Unbekannter Optimierer '{name}'. Verfuegbar. {sorted(OPTIMIZERS)}") from None
+        raise ValueError(f"Unbekannter Optimierer '{name}'. Verfügbar. {sorted(OPTIMIZERS)}") from None

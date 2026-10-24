@@ -48,7 +48,7 @@ def to_mm(value: float, unit: str = "mm") -> float:
     try:
         return float(value) * LENGTH_UNITS[unit]
     except KeyError:
-        raise ValueError(f"Unbekannte Laengeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
+        raise ValueError(f"Unbekannte Längeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
 
 
 def from_mm(value_mm: float, unit: str = "mm") -> float:
@@ -56,7 +56,7 @@ def from_mm(value_mm: float, unit: str = "mm") -> float:
     try:
         return float(value_mm) / LENGTH_UNITS[unit]
     except KeyError:
-        raise ValueError(f"Unbekannte Laengeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
+        raise ValueError(f"Unbekannte Längeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
 
 
 def deg2rad(deg: float) -> float:

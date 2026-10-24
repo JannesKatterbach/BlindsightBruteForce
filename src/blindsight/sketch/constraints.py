@@ -196,7 +196,7 @@ def _distance_side_ref(c: dict, geo: SketchGeometry) -> Residuals:
 # Pruefung der Zahlenwerte. Liefert "" oder eine Meldung (ohne Feldpfad).
 # ---------------------------------------------------------------------------
 def _positive_length(v: float) -> str:
-    return "" if v > EPS_LEN else "Laenge muss groesser als 0 sein"
+    return "" if v > EPS_LEN else "Länge muss größer als 0 sein"
 
 
 def _interior_angle_range(v: float) -> str:
@@ -245,7 +245,7 @@ class ConstraintType:
 CONSTRAINT_TYPES: dict[str, ConstraintType] = {
     t.name: t
     for t in (
-        ConstraintType("length", "Laenge", _length, sides=("a",), value="len", check_value=_positive_length,
+        ConstraintType("length", "Länge", _length, sides=("a",), value="len", check_value=_positive_length,
                        on_split=SPLIT_DROP),
         ConstraintType("angle", "Winkel", _interior_angle, points=("a",), value="deg", check_value=_interior_angle_range),
         ConstraintType("angle_sides", "Winkel zwischen Seiten", _angle_between_sides, sides=("a", "b"), value="deg",

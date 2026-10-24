@@ -114,7 +114,7 @@ function renderMetrics() {
     ["Stangen", M.count], ["Grundfläche (Bounding Box)", `${M.footprint_width.toFixed(1)} x ${M.footprint_height.toFixed(1)} mm`],
     ["Fläche", M.footprint_area.toFixed(0) + " mm²"], ["Mittlerer Nachbarabstand", M.mean_nn_distance.toFixed(2) + " mm"],
     ["Variation Nachbarabstand", M.nn_cv.toFixed(3)], ["Ordnung Quadrat (psi4)", M.psi4.toFixed(2)], ["Ordnung Hex (psi6)", M.psi6.toFixed(2)],
-    ["Einfache Obergrenze Anzahl", r.upper_bound], ["Kandidaten", r.candidates.toLocaleString("de")], ["Zeit", r.elapsed.toFixed(1) + " s"],
+    ["Obergrenze Anzahl (Oler)", r.upper_bound], ["Kandidaten", r.candidates.toLocaleString("de")], ["Zeit", r.elapsed.toFixed(1) + " s"],
   ];
   for (const key of Object.keys(M).filter((k) => k.startsWith("plane_"))) rows.push([`Einheiten auf G${key.split("_")[1]}`, M[key]]);
   $("#metrics").innerHTML = rows.map(([k, v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join("");

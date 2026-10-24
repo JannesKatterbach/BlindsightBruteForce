@@ -165,8 +165,8 @@ class Optimizer(ABC):
 # Gemeinsamer Rahmen
 # ---------------------------------------------------------------------------
 MSG_NO_SOLUTION = (
-    "Es wurde keine gueltige Anordnung gefunden. Moegliche Ursachen. Bauraum zu klein, Sicherheitsabstand zu gross, "
-    "Motoren zu hoch oder zu breit fuer die Ebenenabstaende, zu wenige erlaubte Winkel oder Ebenen."
+    "Es wurde keine gültige Anordnung gefunden. Mögliche Ursachen. Bauraum zu klein, Sicherheitsabstand zu groß, "
+    "Motoren zu hoch oder zu breit für die Ebenenabstände, zu wenige erlaubte Winkel oder Ebenen."
 )
 STATUS_MESSAGES = {
     STATUS_TIME_LIMIT: "Das Zeitlimit wurde erreicht. Mehr Rechenzeit kann bessere Ergebnisse liefern.",
@@ -187,31 +187,31 @@ def describe_result(res: OptimizationResult, grid_exact: bool = False) -> None:
         if res.status in (STATUS_COMPLETED, STATUS_STAGNATION):
             res.status = STATUS_INFEASIBLE
         res.messages.append(MSG_NO_SOLUTION)
-        res.optimality_note = "Keine Loesung gefunden. Das beweist nicht, dass keine existiert."
+        res.optimality_note = "Keine Lösung gefunden. Das beweist nicht, dass keine existiert."
         return
     if found >= target:
         res.proven_optimal = False
         if grid_exact:
             res.optimality_note = (
-                f"Zielanzahl {target} erreicht. Die kleinste Grundflaeche ist nur bezogen auf das untersuchte Raster "
+                f"Zielanzahl {target} erreicht. Die kleinste Grundfläche ist nur bezogen auf das untersuchte Raster "
                 "optimal, nicht im stetigen Raum."
             )
         else:
             res.optimality_note = (
-                f"Zielanzahl {target} erreicht, die Anzahl kann nicht weiter steigen. Grundflaeche, Gleichmaessigkeit und "
-                "Regelmaessigkeit sind beste gefundene Werte und nicht als optimal bewiesen."
+                f"Zielanzahl {target} erreicht, die Anzahl kann nicht weiter steigen. Grundfläche, Gleichmäßigkeit und "
+                "Regelmäßigkeit sind beste gefundene Werte und nicht als optimal bewiesen."
             )
     elif found >= res.upper_bound:
         res.proven_optimal = True
         res.optimality_note = f"{found} Stangen erreichen die theoretische Obergrenze des Bauraums."
     else:
         res.optimality_note = (
-            f"Nur {found} von {target} Stangen platzierbar. Beste gefundene Loesung, nicht als optimal bewiesen "
-            f"(einfache Flaechenschranke {res.upper_bound})."
+            f"Nur {found} von {target} Stangen platzierbar. Beste gefundene Lösung, nicht als optimal bewiesen "
+            f"(Obergrenze nach Oler {res.upper_bound})."
         )
         res.messages.append(
             f"Nur {found} von {target} Einheiten konnten kollisionsfrei platziert werden. "
-            "Hilfreich waeren ein groesserer Bauraum, mehr Motorebenen, kleinerer Sicherheitsabstand, "
+            "Hilfreich wären ein größerer Bauraum, mehr Motorebenen, kleinerer Sicherheitsabstand, "
             "kleinere Motoren oder mehr erlaubte Winkel. Oder mehr Rechenzeit."
         )
     best_count = len(res.best.placements) if res.best else 0
@@ -236,7 +236,7 @@ def begin(model, stop: StopToken, counter: Counter, optimizer_name: str) -> tupl
     if diagnosis:
         res.status = STATUS_INFEASIBLE
         res.messages = diagnosis
-        res.optimality_note = "Keine gueltige Loesung. Bereits eine einzelne Einheit ist nicht platzierbar."
+        res.optimality_note = "Keine gültige Lösung. Bereits eine einzelne Einheit ist nicht platzierbar."
         res.candidates = counter.checks
         res.elapsed = stop.elapsed
         return res, True

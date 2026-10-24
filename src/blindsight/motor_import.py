@@ -87,7 +87,7 @@ def _path_points(d: str) -> list[tuple[float, float]]:
         rel = cmd.islower()
         if c in "ML":
             if len(nums) % 2 or not nums:
-                raise SvgImportError("Pfad. Ungueltige Koordinaten")
+                raise SvgImportError("Pfad. Ungültige Koordinaten")
             for i in range(0, len(nums), 2):
                 x, y = nums[i], nums[i + 1]
                 cur = (cur[0] + x, cur[1] + y) if rel else (x, y)
@@ -112,7 +112,7 @@ def _path_points(d: str) -> list[tuple[float, float]]:
             cmd = m.group(1)
             if cmd.upper() not in LINE_COMMANDS:
                 raise SvgImportError(
-                    f"Pfadbefehl {cmd} wird nicht unterstuetzt (nur Geraden M L H V Z). "
+                    f"Pfadbefehl {cmd} wird nicht unterstützt (nur Geraden M L H V Z). "
                     "Kurven bitte vorher in Linien umwandeln"
                 )
             if cmd.upper() == "Z":
@@ -133,7 +133,7 @@ def _shape_points(e: ET.Element, tag: str) -> list[tuple[float, float]]:
     if tag in ("polygon", "polyline"):
         nums = [float(v) for v in re.findall(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", e.get("points", ""))]
         if len(nums) < 6 or len(nums) % 2:
-            raise SvgImportError("Polygon mit zu wenigen oder ungueltigen Punkten")
+            raise SvgImportError("Polygon mit zu wenigen oder ungültigen Punkten")
         return [(nums[i], nums[i + 1]) for i in range(0, len(nums), 2)]
     return _path_points(e.get("d", ""))
 
@@ -150,7 +150,7 @@ def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
     if not isinstance(svg_text, str):
         raise SvgImportError("svg muss Text sein")
     if mm_per_unit is not None and (not is_finite_number(mm_per_unit) or mm_per_unit <= 0):
-        raise SvgImportError("Der Massstab muss eine positive Zahl sein")
+        raise SvgImportError("Der Maßstab muss eine positive Zahl sein")
     try:
         root = ET.fromstring(svg_text)
     except (ET.ParseError, RecursionError, ValueError) as exc:
@@ -163,14 +163,14 @@ def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
         vb = root.get("viewBox")
         if w_mm is None or not vb:
             raise ScaleRequired(
-                "Der Massstab des SVG ist nicht eindeutig (width mit Einheit und viewBox fehlen). Bitte mm pro SVG Einheit angeben."
+                "Der Maßstab des SVG ist nicht eindeutig (width mit Einheit und viewBox fehlen). Bitte mm pro SVG Einheit angeben."
             )
         try:
             vbw = float(re.split(r"[ ,]+", vb.strip())[2])
         except (IndexError, ValueError):
             raise ScaleRequired("viewBox nicht lesbar. Bitte mm pro SVG Einheit angeben.") from None
         if vbw <= 0:
-            raise ScaleRequired("viewBox ungueltig. Bitte mm pro SVG Einheit angeben.")
+            raise ScaleRequired("viewBox ungültig. Bitte mm pro SVG Einheit angeben.")
         scale = w_mm / vbw
     shapes = [e for e in root.iter() if tag(e) in ("rect", "polygon", "polyline", "path")]
     if len(shapes) != 1:
@@ -188,16 +188,16 @@ def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
     pts = [((x - cx) * scale, -(y - cy) * scale) for x, y in raw]
     hull = convex_hull(pts)
     if len(hull) < 3:
-        raise SvgImportError("Kontur hat keine Flaeche")
+        raise SvgImportError("Kontur hat keine Fläche")
     area_raw = polygon_area(pts)
     area_hull = polygon_area(hull)
     convex = area_raw >= area_hull * CONVEX_AREA_RATIO
     if not convex:
-        notes.append("Die Kontur ist nicht konvex und wird durch ihre konvexe Huelle ersetzt.")
+        notes.append("Die Kontur ist nicht konvex und wird durch ihre konvexe Hülle ersetzt.")
     w = (max(xs) - min(xs)) * scale
     d = (max(ys) - min(ys)) * scale
     if w <= 0 or d <= 0:
-        raise SvgImportError("Kontur hat keine Flaeche")
+        raise SvgImportError("Kontur hat keine Fläche")
     return ImportedOutline([[x, y] for x, y in hull], w, d, convex, notes)
 
 

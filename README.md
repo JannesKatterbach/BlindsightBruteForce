@@ -13,7 +13,7 @@ python run.py                    # Web UI auf http://127.0.0.1:8765
 python run.py --port 9000 --no-browser
 ```
 
-Mit virtueller Umgebung (nur nötig für die Tests oder den Befehl `blindsight`). Die Aktivierung hängt von der Shell ab
+Mit virtueller Umgebung (nur nötig für die Tests oder die Befehle `blindsight` und `blindsight-cli`). Die Aktivierung hängt von der Shell ab
 
 ```bash
 python -m venv .venv
@@ -21,7 +21,8 @@ source .venv/bin/activate          # bash, zsh
 source .venv/bin/activate.fish     # fish
 .venv\Scripts\activate            # Windows
 pip install -e ".[dev]"
-blindsight                         # oder python -m blindsight
+blindsight                         # Web UI, oder python -m blindsight
+blindsight-cli examples/small_hex.json --svg out.svg   # Kommandozeile
 ```
 
 Ohne Aktivierung geht es immer direkt über die Programme der Umgebung (auch bei Arch Linux mit "externally-managed-environment")
@@ -38,26 +39,38 @@ Weitere Befehle
 ```bash
 python run.py --port 9000 --no-browser                 # anderer Port, Browser nicht öffnen
 PYTHONPATH=src python -m blindsight.cli examples/small_hex.json --svg out.svg --json out.json --time 20
-python -m pytest                                       # Tests (braucht pytest)
+python -m pytest                                       # Tests (braucht pytest, Browser Tests zusätzlich Playwright)
 ```
+
+Exitcodes der Kommandozeile
+
+| Code | Bedeutung |
+|---|---|
+| 0 | Lösung gefunden, Dateien geschrieben |
+| 1 | keine gültige Lösung gefunden |
+| 2 | Konfiguration nicht lesbar oder ungültig (auch nach `--time` und `--seed`) |
+| 3 | Ausgabedatei nicht schreibbar |
 
 ## Architektur
 
 | Modul | Aufgabe |
 |---|---|
-| `units.py` | zentrale Einheiten, intern mm und Grad in der Konfiguration |
-| `config.py` | Eingabedaten als Dataclasses, JSON laden und speichern, Validierung mit Fehlerliste |
-| `geometry.py` | Prismen (Kreis oder konvexes Polygon plus Z Intervall), exakte Abstände, SAT |
+| `units.py` | Einheiten, zentrale Toleranzen (`EPS`, `ANGLE_TOL_DEG`, ...), Zahlprüfung, Winkelnormierung |
+| `errors.py` | Fehlerklassen mit Meldungsliste (`ValidationError`, `ConfigError`, `SketchError`) |
+| `config.py` | Eingabedaten als Dataclasses, JSON laden und speichern, `FIELD_META` (Schema für Validierung, UI und Doku), Prüfung je Abschnitt |
+| `geometry.py` | Prismen (Kreis oder konvexes Polygon plus Z Intervall), exakte Abstände, SAT, Hülle, Flächen, Rotation |
 | `model.py` | Ebenen, Stangenlängen, Bauteile je Platzierung, Bauraum, statische Prüfung je Ebene |
-| `layout.py` | Menge platzierter Einheiten, inkrementelle Kollisionsprüfung mit Raumraster, Kollisionsliste |
-| `patterns.py` | Kandidatengenerierung (Quadrat, Hexagon in x oder y) |
-| `scoring.py` | Zielfunktion mit konfigurierbaren Gewichten und Aufschlüsselung |
-| `optimizers/` | Schnittstelle `Optimizer`, Registry, gemeinsame Bausteine (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `parallel` |
+| `layout.py` | Menge platzierter Einheiten, Einheitenregeln (`UNIT_RULES`), inkrementelle Kollisionsprüfung mit Raumraster |
+| `patterns.py` | Kandidatenmuster (`PATTERNS`) und Reihenfolgen (`ORDER_TABLE`) |
+| `scoring.py` | Zielfunktion mit Teilzielen (`OBJECTIVES`), Kennzahlen, Obergrenze der Anzahl (Ungleichung von Oler) |
+| `optimizers/` | Register (`registry.py`), Basisklasse mit Rahmen (`base.py`), gemeinsame Suche und lokale Suche (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `parallel` |
 | `diagnose.py` | verständliche Gründe, wenn keine Lösung existiert |
-| `export/` | `build_geometry` (formatneutral), SVG, JSON, DXF, Bohrliste CSV, Protokoll `Exporter` für weitere Formate |
-| `service.py` | Hintergrundläufe in Threads mit Fortschritt und Abbruch |
-| `web/` | HTTP Server (stdlib) und Oberfläche (HTML, JS, CSS) |
-| `sketch.py` | parametrische Motor Skizze, Constraint Solver, Freiheitsgrade, Konvexität |
+| `analysis.py` | abgeleitete Größen ohne Optimierung (Ebenen, Stangenlängen, Probleme) |
+| `sketch/` | Motor Skizze. `constraints` (Register der Typen), `structure`, `polygon`, `numeric` (Levenberg Marquardt, Rang), `solver`, `motor` |
+| `export/` | `build_geometry` (formatneutral), Register `EXPORTERS` mit SVG, JSON, DXF, Bohrliste CSV |
+| `service.py` | Hintergrundläufe in Threads mit Fortschritt, Abbruch und Herunterfahren |
+| `web/server.py` | HTTP Server (stdlib) mit Routentabelle, einheitlicher Fehlerform, Host, Origin und Content Type Prüfung |
+| `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand), `ui` (Reiter), `sketch` (Skizze) |
 | `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
 | `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
@@ -65,7 +78,43 @@ python -m pytest                                       # Tests (braucht pytest)
 Entscheidungen
 - Eigene Geometrie statt shapely. Alle Körper sind konvex (Quader, Zylinder), Abstände sind exakt und es ist nichts zu installieren
 - Stdlib Server statt Flask. Die UI ist nur Darstellung, der Kern ist von ihr getrennt und einzeln testbar
-- Optimierer und Bewertung sind austauschbar. Neue Strategien kommen in `optimizers/__init__.py`
+- Register statt verstreuter Fallunterscheidungen. Optimierer, Muster, Teilziele, Exportformate, Constraint Typen und Einheitenregeln sind je eine Tabelle, Tests prüfen, dass Register und Konfigurationsoptionen übereinstimmen
+
+## Konventionen
+
+- Längen intern immer in mm. Die UI rechnet Eingaben in cm oder inch um, gespeichert wird in mm
+- Winkel in der Konfiguration in Grad (`angle_deg`), im Rechenkern in Radiant (`angle_rad`). Winkellisten werden auf 0 bis unter 360 Grad normiert
+- Koordinaten. Welt mit z = 0 an der Oberseite von G0, nach unten negativ. Motoren im Stangenrahmen, Ursprung ist die eigene Gewindestange, das Zahnrad liegt bei (-Achsabstand, 0)
+- Polygone gegen den Uhrzeigersinn. Seite i geht von Punkt i nach Punkt i+1
+- Meldungen beginnen mit dem Feldpfad (`rod.diameter. Muss größer als 0 sein`), damit die UI sie dem Feld zuordnet. Prüfungen sammeln alle Probleme statt beim ersten abzubrechen
+- Sprache. Sichtbare Texte und Meldungen mit Umlauten, Code, Kommentare und Docstrings in ASCII
+
+## Erweitern
+
+Neuer Constraint Typ der Skizze
+1. In `sketch/constraints.py` eine Residuen Fabrik `(c, geo) -> (x -> Liste)` schreiben
+2. Einen `ConstraintType` in `CONSTRAINT_TYPES` eintragen (Seiten und Punktfelder, Werteart `len` oder `deg`, Wertebereich, Verhalten beim Teilen einer Seite)
+3. Optional einen Knopf mit `data-sk-add` in `index.html` und einen Eintrag in `TOOLS` (`js/sketch/constraints.js`). Bezeichnung und Werteart kommen über `/api/schema`
+
+Neues Kandidatenmuster
+1. Funktion `(pitch, region) -> Punkte` in `patterns.py`, Eintrag in `PATTERNS` und `PATTERN_DENSITY`
+2. Die Konfiguration erlaubt den Namen in `search.patterns` automatisch
+
+Neuer Optimierer
+1. Modul in `optimizers/` mit einer Unterklasse von `Optimizer`, die `search` implementiert und mit `@register` markiert ist. Den Rahmen (Zähler, Abbruch, Machbarkeit) übernimmt `Optimizer.run`, gemeinsame Bausteine liegen in `common.SearchBase`
+2. Import in `optimizers/__init__.py`, Option in `search.optimizer` (`FIELD_META`). `supports_parallel = False`, wenn weitere Seeds nichts bringen
+
+Neues Teilziel der Bewertung
+1. Funktion `(LayoutStats) -> float` in `scoring.OBJECTIVES`
+2. Gleichnamiges Feld in `config.WeightsSpec` und ein `FIELD_META` Eintrag in der Gruppe `weights`. Der Regler in der UI entsteht daraus
+
+Neues Exportformat
+1. Klasse mit `extension`, `mime`, `label` und `export(geometry) -> str` in `export/`
+2. Eintrag in `_EXPORTER_CLASSES` (`export/__init__.py`). Server, CLI und Formatauswahl der UI kennen es dann
+
+Neue Ergebnisansicht oder Einheitenregel
+- Ansicht. Zeichenfunktion in `VIEWS` (`js/ui/views.js`) und eine Option in `#viewSel`
+- Regel für eine einzelne Einheit. Funktion `(model, placement, parts) -> Meldung` in `layout.UNIT_RULES`, sie gilt dann für `check` und `all_collisions`
 
 ## Geometrisches Modell
 
@@ -116,8 +165,12 @@ Zielfunktion (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
 | `uniformity` | gleichmäßige Nachbarabstände |
 | `regularity` | Quadrat oder Hexagonalordnung (psi4, psi6) |
 
-Ehrlichkeit. Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die einfache
-Flächenschranke erreicht wird, wird Optimalität gemeldet.
+Gleichmäßigkeit gilt für eine einzelne Einheit als erfüllt. Regelmäßigkeit braucht mindestens 4 Nachbarn und ist sonst 0.
+
+Ehrlichkeit. Das Ergebnis ist die beste gefundene Lösung und wird nie als global optimal bezeichnet. Nur wenn die
+Obergrenze der Anzahl erreicht wird, wird Optimalität gemeldet. Die Obergrenze folgt aus der Ungleichung von Oler für
+Punkte mit Mindestabstand d (Stangendurchmesser plus Sicherheitsabstand) im Rechteck der zulässigen Stangenmitten mit
+Fläche A und Umfang P, N <= 2/sqrt(3) A/d² + P/(2d) + 1. Motoren bleiben dabei unberücksichtigt.
 
 ## Motor Skizze (CAD Stil)
 
@@ -133,7 +186,7 @@ Bedienung
 - Polygon zeichnen. Klick setzt Punkte, Enter oder Doppelklick schließt. Punkte lassen sich ziehen (der Solver hält alle Constraints ein), Doppelklick auf eine Seite fügt einen Punkt ein, Rechtsklick oder Entf löscht ihn
 - Seiten und Punkte anklicken (Umschalt für mehrere), dann ein Werkzeug wählen. Werte erscheinen direkt an der Skizze
 - Alternativ die Tabellen "Seiten" und "Punkte". Länge, Winkel und Koordinaten eintippen setzt den passenden Constraint, die Auswahl "parallel zu" legt Parallelität fest
-- Rückgängig und Wiederholen (Strg+Z, Strg+Y), Zoom mit Mausrad, Verschieben mit der Maus auf leerer Fläche, Raster mit Fang
+- Rückgängig und Wiederholen (Strg+Z, Strg+Y oder Strg+Umschalt+Z), Zoom mit Mausrad, Verschieben mit der Maus auf leerer Fläche, Raster mit Fang
 - Maße lassen sich in mm, cm oder inch eingeben, Winkel immer in Grad
 
 Constraints
@@ -179,7 +232,7 @@ Regeln und Grenzen
 - Das Zahnrad darf nicht ins Gehäuse ragen (Warnung in der Skizze, Fehler in der Konfiguration), der Abstand der Stange zum Gehäuse muss `motor.own_clearance` einhalten
 - Mit Skizze werden `width`, `depth`, `shaft_x`, `gear_gap` und `outline` ignoriert, `width` und `depth` zeigen dann die Bounding Box
 - Höchstens 40 Punkte und 150 Constraints, der Solver bricht nach 3 s ab
-- Der Solver ist reines Python (Levenberg Marquardt mit Minimum Norm Schritten) und liegt in `sketch.py`, die UI ruft ihn über `/api/sketch/solve`, `from-motor`, `hull`, `insert` und `delete` auf
+- Der Solver ist reines Python (Levenberg Marquardt mit Minimum Norm Schritten) und liegt im Paket `sketch/`, die UI ruft ihn über `/api/sketch/solve`, `from-motor`, `hull`, `insert` und `delete` auf
 - SVG Import erzeugt eine Skizze ohne Constraints, die Kontur wird wie ein Umriss zum Zahnrad gesetzt
 
 ## Optimierer
@@ -188,11 +241,12 @@ Regeln und Grenzen
 |---|---|---|
 | `pattern_greedy` | Quadrat und Hexagonalraster, gierige Zuordnung, Teilungssuche, lokale Suche | beste gefundene Lösung |
 | `anneal_free` | freie Verteilung, Mehrfachstart, Simulated Annealing | beste gefundene Lösung |
-| `exhaustive_small` | Backtracking auf diskretem Raster, kleinstes Fenster der Stangenmitten | bewiesen nur bezogen auf das Raster und nur ohne Knotenlimit, bis 14 Stangen |
+| `exhaustive_small` | Backtracking auf diskretem Raster, Fenster der Stangenmitten mit den wenigsten Rasterpunkten | bewiesen nur bezogen auf das Raster und nur ohne Knotenlimit, bis 14 Stangen |
 
 Anordnungsziel `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
 `search.workers` größer 1 startet unabhängige Seeds in getrennten Prozessen und führt die Ergebnisse zusammen.
-Mit `search.stagnation_s` endet ein Lauf früh, sobald die Zielanzahl erreicht ist und sich nichts mehr verbessert.
+Mit `search.stagnation_s` endet ein Lauf früh, sobald die bestbewertete Lösung die Zielanzahl erreicht und sich so lange nichts
+mehr verbessert. Hat die bestbewertete Lösung wegen der Gewichtung weniger Einheiten als eine andere, steht das in den Hinweisen.
 
 ## Parameter
 
@@ -203,64 +257,64 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | Parameter | Bedeutung | Einheit | Grenzen |
 |---|---|---|---|
 | `name` | Name. Bezeichnung des Projekts |  |  |
-| `target_count` | Gewuenschte Anzahl Stangen. So viele Gewindestangen mit Motoren sollen platziert werden |  | >= 1, <= 100000 |
+| `target_count` | Gewünschte Anzahl Stangen. So viele Gewindestangen mit Motoren sollen platziert werden |  | >= 1, <= 100000 |
 | `clearance` | Sicherheitsabstand. Mindestabstand zwischen allen fremden Bauteilen | mm | >= 0, <= 1000 |
 | `tolerance` | Toleranz. Wird zum Sicherheitsabstand addiert (Fertigung, Rundung). Wirksamer Abstand = Sicherheitsabstand + Toleranz | mm | >= 0, <= 1000 |
-| `rod.diameter` | Durchmesser. Aussendurchmesser des Gewindes | mm | > 0, <= 1000 |
-| `rod.stroke` | Maximaler Hub ueber G0. So weit muss jede Stange oberhalb von G0 ausfahren koennen, unabhaengig von der Motorebene | mm | > 0, <= 100000 |
+| `rod.diameter` | Durchmesser. Außendurchmesser des Gewindes | mm | > 0, <= 1000 |
+| `rod.stroke` | Maximaler Hub über G0. So weit muss jede Stange oberhalb von G0 ausfahren können, unabhängig von der Motorebene | mm | > 0, <= 100000 |
 | `rod.engage_below` | Gewinde unter Zahnradachse (ausgefahren). Mindestgewinde unter der Zahnradachse bei maximalem Ausfahren | mm | >= 0, <= 100000 |
-| `rod.engage_above` | Gewinde ueber Zahnradachse (eingefahren). Mindestgewinde ueber der Zahnradachse bei vollem Einfahren | mm | >= 0, <= 100000 |
-| `rod.length_tolerance` | Laengenzuschlag. Zusaetzlicher Sicherheitszuschlag der Stangenlaenge | mm | >= 0, <= 100000 |
-| `rod.retract_depth` | Spitze eingefahren unter G0. Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = buendig) | mm | >= 0, <= 100000 |
-| `rod.hole_clearance` | Radiales Lochspiel. Spiel der Durchgangsloecher in den Ebenen (je Seite) | mm | >= 0, <= 1000 |
-| `motor.width` | Breite (x). Gehaeusebreite quer zur Welle | mm | > 0, <= 10000 |
-| `motor.depth` | Tiefe (y, Wellenrichtung). Gehaeusetiefe entlang der Welle | mm | > 0, <= 10000 |
-| `motor.height` | Hoehe (z). Gehaeusehoehe senkrecht zur Ebene | mm | > 0, <= 10000 |
-| `motor.shaft_x` | Abtriebsachse, x Versatz. Seitlicher Versatz der Abtriebsachse zur Gehaeusemitte | mm | >= -10000, <= 10000 |
-| `motor.axis_height` | Achshoehe ueber Montageflaeche. Hoehe der Abtriebsachse ueber der Montageflaeche | mm | >= 0, <= 10000 |
-| `motor.gear_diameter` | Zahnrad Durchmesser. Aussendurchmesser des Antriebszahnrads | mm | > 0, <= 10000 |
+| `rod.engage_above` | Gewinde über Zahnradachse (eingefahren). Mindestgewinde über der Zahnradachse bei vollem Einfahren | mm | >= 0, <= 100000 |
+| `rod.length_tolerance` | Längenzuschlag. Zusätzlicher Sicherheitszuschlag der Stangenlänge | mm | >= 0, <= 100000 |
+| `rod.retract_depth` | Spitze eingefahren unter G0. Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = bündig) | mm | >= 0, <= 100000 |
+| `rod.hole_clearance` | Radiales Lochspiel. Spiel der Durchgangslöcher in den Ebenen (je Seite) | mm | >= 0, <= 1000 |
+| `motor.width` | Breite (x). Gehäusebreite quer zur Welle | mm | > 0, <= 10000 |
+| `motor.depth` | Tiefe (y, Wellenrichtung). Gehäusetiefe entlang der Welle | mm | > 0, <= 10000 |
+| `motor.height` | Höhe (z). Gehäusehöhe senkrecht zur Ebene | mm | > 0, <= 10000 |
+| `motor.shaft_x` | Abtriebsachse, x Versatz. Seitlicher Versatz der Abtriebsachse zur Gehäusemitte | mm | >= -10000, <= 10000 |
+| `motor.axis_height` | Achshöhe über Montagefläche. Höhe der Abtriebsachse über der Montagefläche | mm | >= 0, <= 10000 |
+| `motor.gear_diameter` | Zahnrad Durchmesser. Außendurchmesser des Antriebszahnrads | mm | > 0, <= 10000 |
 | `motor.gear_width` | Zahnrad Breite. Axiale Breite des Zahnrads | mm | > 0, <= 10000 |
-| `motor.gear_gap` | Abstand Gehaeuse zu Zahnrad. Axialer Abstand zwischen Gehaeusekante und Zahnrad | mm | >= 0, <= 10000 |
-| `motor.center_distance` | Achsabstand Zahnrad zu Stange. Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur ueber diesen Abstand modelliert | mm | >= 0, <= 10000 |
+| `motor.gear_gap` | Abstand Gehäuse zu Zahnrad. Axialer Abstand zwischen Gehäusekante und Zahnrad | mm | >= 0, <= 10000 |
+| `motor.center_distance` | Achsabstand Zahnrad zu Stange. Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur über diesen Abstand modelliert | mm | >= 0, <= 10000 |
 | `motor.center_distance_min` | Achsabstand min (optional). Untergrenze, wenn der Optimierer den Achsabstand variieren darf | mm | >= 0, <= 10000 |
 | `motor.center_distance_max` | Achsabstand max (optional). Obergrenze, wenn der Optimierer den Achsabstand variieren darf | mm | >= 0, <= 10000 |
 | `motor.center_distance_steps` | Achsabstand Stufen. Anzahl der Stufen zwischen min und max (1 = nur nominal) |  | >= 1, <= 50 |
-| `motor.own_clearance` | Eigenabstand Gehaeuse zur Stange. Mindestabstand des Gehaeuses zur eigenen Stange | mm | >= 0, <= 1000 |
-| `motor.mount` | Montage. Motor steht auf der Ebene oder haengt darunter |  | `top` / `bottom` |
+| `motor.own_clearance` | Eigenabstand Gehäuse zur Stange. Mindestabstand des Gehäuses zur eigenen Stange | mm | >= 0, <= 1000 |
+| `motor.mount` | Montage. Motor steht auf der Ebene oder hängt darunter |  | `top` / `bottom` |
 | `stack.n_motor_planes` | Anzahl Motorebenen. Anzahl der Ebenen G1 bis Gn, keine feste Obergrenze |  | >= 1, <= 1000 |
-| `stack.mode` | Abstandsmodus. Wie die Ebenenhoehen angegeben werden |  | `uniform` / `gaps` / `distances` |
+| `stack.mode` | Abstandsmodus. Wie die Ebenenhöhen angegeben werden |  | `uniform` / `gaps` / `distances` |
 | `stack.uniform_spacing` | Einheitlicher Ebenenabstand. Abstand zwischen allen Ebenen (Modus uniform) | mm | > 0, <= 100000 |
-| `stack.gaps` | Einzelabstaende (Liste). Abstaende G0-G1, G1-G2, ... (Modus gaps) | mm |  |
-| `stack.distances` | Abstaende zu G0 (Liste). Abstand jeder Motorebene zu G0, aufsteigend (Modus distances) | mm |  |
+| `stack.gaps` | Einzelabstände (Liste). Abstände G0-G1, G1-G2, ... (Modus gaps) | mm |  |
+| `stack.distances` | Abstände zu G0 (Liste). Abstand jeder Motorebene zu G0, aufsteigend (Modus distances) | mm |  |
 | `stack.thickness` | Dicke Motorebenen. Plattendicke der Ebenen G1 bis Gn | mm | > 0, <= 1000 |
 | `stack.g0_thickness` | Dicke G0. Plattendicke der oberen Referenzebene | mm | > 0, <= 1000 |
-| `stack.thicknesses` | Dicke je Ebene (Liste, optional). Eigene Dicke fuer jede Motorebene, ueberschreibt die gemeinsame Dicke | mm |  |
-| `stack.allowed_planes` | Erlaubte Motorebenen (Liste, leer = alle) (optional). Nur diese Ebenen duerfen Motoren tragen |  |  |
+| `stack.thicknesses` | Dicke je Ebene (Liste, optional). Eigene Dicke für jede Motorebene, überschreibt die gemeinsame Dicke | mm |  |
+| `stack.allowed_planes` | Erlaubte Motorebenen (Liste, leer = alle) (optional). Nur diese Ebenen dürfen Motoren tragen |  |  |
 | `bounds.xmin` | x min. Bauraum, linke Grenze | mm | >= -1e+06, <= 1e+06 |
 | `bounds.xmax` | x max. Bauraum, rechte Grenze | mm | >= -1e+06, <= 1e+06 |
 | `bounds.ymin` | y min. Bauraum, untere Grenze | mm | >= -1e+06, <= 1e+06 |
 | `bounds.ymax` | y max. Bauraum, obere Grenze | mm | >= -1e+06, <= 1e+06 |
-| `bounds.edge_margin` | Randabstand. Zusaetzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
-| `bounds.parts_in_bounds` | Im Bauraum muessen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
+| `bounds.edge_margin` | Randabstand. Zusätzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
+| `bounds.parts_in_bounds` | Im Bauraum müssen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
 | `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` |
-| `search.layout_goal` | Anordnungsziel. compact packt dicht (kleine Flaeche), spread verteilt gleichmaessig ueber den ganzen Bauraum |  | `compact` / `spread` |
+| `search.layout_goal` | Anordnungsziel. compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum |  | `compact` / `spread` |
 | `search.patterns` | Muster (square, hex_x, hex_y). Verteilungsstruktur der Kandidaten |  |  |
 | `search.fixed_pitch` | Feste Teilung (optional). Nur diese Rasterteilung verwenden statt sie zu suchen | mm | > 0, <= 100000 |
-| `search.angle_step` | Winkelschritt (Grad). Raster der zulaessigen Motorwinkel |  | > 0, <= 360 |
+| `search.angle_step` | Winkelschritt (Grad). Raster der zulässigen Motorwinkel |  | > 0, <= 360 |
 | `search.angle_min` | Winkel von (Grad). Kleinster Motorwinkel |  | >= -3600, <= 3600 |
 | `search.angle_max` | Winkel bis (Grad, exklusiv). 360 = voller Kreis |  | >= -3600, <= 3600 |
-| `search.allowed_angles` | Nur diese Winkel (Liste, leer = Raster) (optional). Explizite Liste erlaubter Motorwinkel | mm |  |
+| `search.allowed_angles` | Nur diese Winkel (Liste, leer = Raster) (optional). Explizite Liste erlaubter Motorwinkel |  |  |
 | `search.time_limit_s` | Zeitlimit (s). Maximale Rechenzeit |  | > 0, <= 86400 |
-| `search.max_candidates` | Max. Kandidaten. Maximale Anzahl geprueften Platzierungen |  | >= 1 |
-| `search.seed` | Seed. Zufallsstartwert fuer reproduzierbare Laeufe |  | >= 0 |
-| `search.top_k` | Anzahl Loesungen. Wie viele beste Loesungen behalten werden |  | >= 1, <= 50 |
+| `search.max_candidates` | Max. Kandidaten. Maximale Anzahl geprüften Platzierungen |  | >= 1 |
+| `search.seed` | Seed. Zufallsstartwert für reproduzierbare Läufe |  | >= 0 |
+| `search.top_k` | Anzahl Lösungen. Wie viele beste Lösungen behalten werden |  | >= 1, <= 50 |
 | `search.refine_fraction` | Anteil lokale Suche. Zeitanteil der Verfeinerung (0 bis 0.9) |  | >= 0, <= 0.9 |
 | `search.stagnation_s` | Stagnation (s, optional). Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert |  | > 0, <= 86400 |
-| `search.workers` | Parallele Laeufe. Anzahl Prozesse fuer unabhaengige Seeds (1 = ohne Parallelisierung) |  | >= 1, <= 64 |
+| `search.workers` | Parallele Läufe. Anzahl Prozesse für unabhängige Seeds (1 = ohne Parallelisierung) |  | >= 1, <= 64 |
 | `search.weights.count` | Anzahl Stangen. Gewicht des Ziels Anzahl |  | >= 0, <= 1000 |
-| `search.weights.area` | Kleine Grundflaeche. Gewicht des Ziels Grundflaeche |  | >= 0, <= 1000 |
-| `search.weights.uniformity` | Gleichmaessige Verteilung. Gewicht der gleichmaessigen Nachbarabstaende |  | >= 0, <= 1000 |
-| `search.weights.regularity` | Regelmaessiges Muster. Gewicht der Quadrat oder Hexagonalordnung |  | >= 0, <= 1000 |
+| `search.weights.area` | Kleine Grundfläche. Gewicht des Ziels Grundfläche |  | >= 0, <= 1000 |
+| `search.weights.uniformity` | Gleichmäßige Verteilung. Gewicht der gleichmäßigen Nachbarabstände |  | >= 0, <= 1000 |
+| `search.weights.regularity` | Regelmäßiges Muster. Gewicht der Quadrat oder Hexagonalordnung |  | >= 0, <= 1000 |
 <!-- PARAMS:END -->
 
 Weitere Felder ohne Tabellenzeile
@@ -295,16 +349,18 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 
 ## Oberfläche
 
-- Reiter Geometrie. Formulare mit Tooltips, Einheitenwahl, Fehler direkt am Feld. Motor Editor mit ziehbaren Griffen
-  (Größe, Zahnrad, Achsabstand), Konturzeichnen (wird automatisch konvex), SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
+- Reiter Geometrie. Formulare mit Tooltips, Einheitenwahl, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
+  SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
+- Reiter Motor Skizze. Kontur zeichnen und bemaßen (siehe oben), Zahnradachse ziehen
 - Reiter Ebenen. Abstandsmodi, Tabelle je Ebene (erlaubt, Kapazität, Winkel, Dicke), berechnete Stangenlängen und Seitenschnitt
 - Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
 - Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter, Fortschritt, Live Vorschau der besten Lösung
 - Reiter Ergebnisse. Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht (mit der Maus drehen), Kollisionen, engste Stellen,
   Vergleich der Top Lösungen, manuelles Bearbeiten mit sofortiger Prüfung, Export (SVG, DXF, CSV, JSON), Ergebnis speichern und laden
 
-Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten) und
-begrenzt die Größe von Anfragen.
+Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten,
+`Origin: null` wird abgewiesen), nimmt POST nur als `application/json` an, weist NaN und zu tief verschachteltes JSON ab und
+begrenzt die Größe von Anfragen. Fehlerantworten haben immer die Form `{"error": ..., "errors": [...]}`.
 
 ## Mechanische Annahmen und Einschränkungen
 

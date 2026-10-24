@@ -60,10 +60,10 @@ class ExhaustiveSmallOptimizer(Optimizer):
         if target > MAX_TARGET:
             res.status = STATUS_INFEASIBLE
             res.messages.append(
-                f"Der exakte Modus ist nur fuer bis zu {MAX_TARGET} Stangen gedacht (Zielanzahl {target}). "
+                f"Der exakte Modus ist nur für bis zu {MAX_TARGET} Stangen gedacht (Zielanzahl {target}). "
                 "Bitte 'pattern_greedy' oder 'anneal_free' verwenden."
             )
-            res.optimality_note = "Nicht ausgefuehrt."
+            res.optimality_note = "Nicht ausgeführt."
             res.elapsed = stop.elapsed
             return res
         search = SearchBase(model, counter, stop, random.Random(se.seed), progress)
@@ -86,18 +86,18 @@ class ExhaustiveSmallOptimizer(Optimizer):
                 complete = False
                 break
             complete = complete and not budget_hit
-            search.report(f"Fenster {w} x {h} widerlegt" + (" (unvollstaendig)" if budget_hit else ""))
+            search.report(f"Fenster {w} x {h} widerlegt" + (" (unvollständig)" if budget_hit else ""))
         out = finish(res, search, stop, counter, grid_exact=True)
         if found and complete and out.best:
             out.proven_optimal = True
             out.optimality_note = (
                 f"Fenster mit den wenigsten Rasterpunkten auf dem Raster {step:.2f} mm bewiesen (alle kleineren Fenster "
-                "vollstaendig widerlegt, Fenster in der Ecke des Bauraums). Im stetigen Raum oder an anderer Stelle "
+                "vollständig widerlegt, Fenster in der Ecke des Bauraums). Im stetigen Raum oder an anderer Stelle "
                 "kann eine kleinere Anordnung existieren."
             )
         elif found:
             out.optimality_note = (
-                "Loesung gefunden, aber kleinere Fenster wurden nicht vollstaendig widerlegt (Knotenlimit oder Abbruch). "
+                "Lösung gefunden, aber kleinere Fenster wurden nicht vollständig widerlegt (Knotenlimit oder Abbruch). "
                 "Nicht als optimal bewiesen."
             )
         return out

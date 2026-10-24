@@ -59,7 +59,7 @@ def test_overlapping_planes_fail_validation():
     p.stack.distances = [10.0, 11.0, 30.0]  # G1 und G2 liegen naeher als die Plattendicke
     with pytest.raises(ConfigError) as exc:
         p.validate()
-    assert any("ueberlappen" in e for e in exc.value.errors)
+    assert any("überlappen" in e for e in exc.value.errors)
 
 
 def test_unknown_stack_mode_is_reported():
@@ -93,7 +93,7 @@ def test_nominal_center_distance_outside_range_is_an_error():
     p.motor.center_distance_steps = 3
     with pytest.raises(ConfigError) as exc:
         p.validate()
-    assert any("ausserhalb des Bereichs" in e for e in exc.value.errors)
+    assert any("außerhalb des Bereichs" in e for e in exc.value.errors)
 
 
 def test_angle_list_has_no_duplicate_zero_and_360():
@@ -401,7 +401,7 @@ def test_svg_import_rejects_bad_input_with_400(body):
 
 def test_svg_path_with_curves_is_rejected():
     svg = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 0 C 12 5 12 15 10 20 L0 20 Z"/></svg>'
-    with pytest.raises(SvgImportError, match="nicht unterstuetzt"):
+    with pytest.raises(SvgImportError, match="nicht unterstützt"):
         outline_from_svg(svg, 1.0)
 
 

@@ -82,7 +82,7 @@ def check_sketch_motor(motor: Any, prefix: str = "motor.sketch") -> tuple[list[t
 def _check_sketch_motor(motor: Any, prefix: str) -> tuple[list[tuple[float, float]], list[str]]:
     res = solve(motor.sketch, cd=motor.center_distance)
     if not res.ok:
-        return [], list(res.errors or [f"{prefix}. Skizze nicht loesbar"])
+        return [], list(res.errors or [f"{prefix}. Skizze nicht lösbar"])
     if not res.convex:
         return [], [f"{prefix}. {w}" for w in res.warnings]
     pts = res.sketch["points"]

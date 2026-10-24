@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.4.0
+Überarbeitung für Lesbarkeit und Erweiterbarkeit, ohne neue Funktionen. Alle bisherigen Abläufe, Dateiformate, API Pfade und
+öffentlichen Namen bleiben erhalten.
+
+Aufbau
+- Register statt verstreuter Fallunterscheidungen. Constraint Typen (`sketch/constraints.py`), Muster, Teilziele der Bewertung,
+  Optimierer (`optimizers/registry.py`), Exportformate und Einheitenregeln (`layout.UNIT_RULES`). Tests prüfen, dass Register
+  und Konfigurationsoptionen übereinstimmen
+- Skizze als Paket `sketch/` (Register, Struktur, Polygon, Numerik, Solver, Motor), Optimierer mit Template Methode
+  `Optimizer.run` und abstraktem `search`, lokale Suche als eigene Klasse
+- Server mit Routentabelle, `Response` Objekt und einheitlicher Fehlerform, `analyze` in `analysis.py`
+- Oberfläche in klassische Skripte unter `web/static/js` aufgeteilt (Kern, Reiter, Skizze), Schema gestützte Gewichte,
+  Exportformate und Constraint Bezeichnungen
+- Gemeinsame Bausteine. Geometrie Hilfen, Fehlerklassen, zentrale Toleranzen, benannte Konstanten
+- Sichtbare Texte und Meldungen mit Umlauten
+- `blindsight` startet die Web UI, `blindsight-cli` die Kommandozeile, Version an einer Stelle (`blindsight.__version__`)
+- README mit Abschnitten Konventionen und Erweitern, Exitcodes der Kommandozeile
+
+Behobene Fehler, Rechenkern
+- Hexagonalraster war verzerrt (Nachbarn nur 0,9 x Teilung)
+- Skizze. `ok=False` ohne Meldung nach der Konfliktdiagnose, Ziehen bei Punkten im Uhrzeigersinn bewegte den falschen Punkt,
+  abgelehntes Ziehen lieferte eine verschobene Startlage, `diagnose=False` lieferte keinen Hinweis, Selbstschnitt über die
+  Windungszahl blieb ohne Meldung, nicht iterierbare Eingaben stürzten ab, `insert_point` nahm t außerhalb 0 bis 1,
+  `enabled` wurde nicht geprüft, die Motorskizze wurde je Lauf mehrfach gelöst (jetzt zwischengespeichert)
+- Konfiguration. Bool Felder und `X | None` Typen wurden nicht geprüft, überlappende Ebenen und unbekannter Stapelmodus
+  bestanden die Validierung, Achsabstand min ohne max und Nominalwert außerhalb des Bereichs wurden still hingenommen,
+  Winkellisten konnten 0 und 360 doppelt enthalten
+- Diagnose prüfte nur den nominalen Achsabstand und meldete fälschlich, dass keine einzelne Einheit passt
+- Obergrenze der Anzahl war keine strenge Schranke (0, obwohl eine Stange passt). Jetzt Ungleichung von Oler
+- Regelmäßigkeit sprang zwischen einer und zwei bis vier Einheiten
+- "Nur n von Ziel" erschien, obwohl Anordnungen mit voller Anzahl gefunden wurden
+- Lokale Suche. Abkühlung bezog sich auf das Gesamtzeitlimit, Zwischenstände fehlten, leeres Startlayout brach ab
+- Exakte Suche erzeugte alle Fenster vorab, Rasterpunkte wurden erst nach der Erzeugung begrenzt
+- Parallele Läufe. Signatur ohne Achsabstand, Seed Überlauf, Diagnosen mehrfach, Stagnationsstatus ging verloren,
+  Kandidatenzähler blieb 0, Beenden über interne Attribute
+- `free_height_above(0)` griff auf die letzte Ebene zu
+
+Behobene Fehler, Server, Import, Export, Kommandozeile
+- Abstürze statt 4xx (SVG Import mit Liste, Zahl oder Text als Maßstab, `t: null`, tief verschachteltes JSON), allgemeiner
+  500 Fang, NaN in Anfragen wird abgewiesen, Antworten sind immer gültiges JSON
+- Sicherheit. `Origin: null` wird abgewiesen, POST nur als `application/json`
+- `Content-Disposition` kommt aus dem Exporter, unbekannte Läufe sind `JobNotFound` statt pauschal jedes `KeyError`,
+  Platzierungslimit vor dem Einlesen, IPv6 Hosts, feste MIME Typen
+- SVG Pfade mit Kurven werden abgewiesen statt falsch gelesen, `motor_from_svg` kopiert tief
+- Dienst. Zugriffe unter Sperre, Abbruch endet immer als `cancelled`, Herunterfahren wartet auf die Threads
+- Kommandozeile. `--time 0` wurde ignoriert, Kodierungs und Schreibfehler endeten als Traceback
+- SVG Export zeichnete Nachbarabstände doppelt, Zahlen konnten als -0 erscheinen
+
+Behobene Fehler, Oberfläche
+- Skizze. Späte Antwort nach dem Loslassen warf einen TypeError, Änderungen konnten sich überholen, Verlauf wuchs
+  unbegrenzt, Strg+Umschalt+Z machte rückgängig
+- Ebenentabelle folgte der Ebenenzahl nicht, doppelte Editoren für erlaubte Ebenen und Dicken, Eingaben gingen bei einem
+  zweiten change Ereignis verloren
+- Bearbeiten. Klick ohne Bewegung markierte das Ergebnis als bearbeitet, Zurücksetzen bei geladenem Ergebnis ging nicht,
+  x und y ohne Einheit
+- Alte Ergebnisanzeigen blieben bei leerem Ergebnis, Tooltips gingen verloren, Abfragen überlappten
+- Unmaskierte Werte in Tabellen, leere Pflichtfelder wurden zu null, Zone mit leerer Ebene wurde zum Schlüssel NaN,
+  `zoneAdd` stürzte bei `null` ab, Gewichtsregler kappte Werte über 20, Export immer als Text, gleiche Datei lud nicht erneut
+
 ## 0.3.0
 - Neuer Reiter Motor Skizze mit Zeichenfläche. Die Getriebestange liegt im Ursprung, der Motor dreht um sie (Drehvorschau, Hüllkurve, Loch und Eigenabstand Ring)
 - Parametrische Skizze mit Constraints. Länge, Winkel (benachbart und beliebig), parallel, rechtwinklig, gleich lang, horizontal, vertikal, Punkt fixieren, Koordinaten, Abstand zu Stange und Zahnrad

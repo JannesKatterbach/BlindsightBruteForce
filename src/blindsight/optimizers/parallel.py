@@ -71,8 +71,8 @@ def _run_pool(model: Model, jobs: list[dict], progress, stop: StopToken) -> list
                     results.append({"error": str(exc)})
             if progress:
                 progress(ProgressInfo(
-                    "Parallele Laeufe", sum(r.get("candidates", 0) for r in results), stop.elapsed, 0, 0.0,
-                    f"{len(results)} von {len(jobs)} Laeufen fertig", min(1.0, stop.elapsed / search.time_limit_s),
+                    "Parallele Läufe", sum(r.get("candidates", 0) for r in results), stop.elapsed, 0, 0.0,
+                    f"{len(results)} von {len(jobs)} Läufen fertig", min(1.0, stop.elapsed / search.time_limit_s),
                 ))
             if stop.cancelled or stop.elapsed > search.time_limit_s + HANG_GRACE_S:
                 for future in pending:
@@ -127,5 +127,5 @@ def run_parallel(model: Model, progress, stop: StopToken, counter: Counter) -> O
     counter.checks = max(counter.checks, out.candidates)
     describe_result(out)
     if len(results) < len(jobs):
-        out.messages.append(f"Nur {len(results)} von {len(jobs)} Laeufen wurden beendet.")
+        out.messages.append(f"Nur {len(results)} von {len(jobs)} Läufen wurden beendet.")
     return out
