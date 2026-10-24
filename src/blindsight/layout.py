@@ -1,17 +1,14 @@
-"""Layout (Menge platzierter Einheiten) und Kollisionspruefung.
+"""Layout (set of placed units) and collision check.
 
-Ein Layout haelt Platzierungen (Stangenposition, Motorebene, Motorwinkel, Achsabstand)
-und prueft neue Platzierungen inkrementell gegen die bereits vorhandenen. Ein
-Raumraster beschleunigt die Nachbarsuche.
+A layout holds placements (rod position, motor layer, motor angle, centre distance) and checks new
+placements incrementally against the existing ones. A spatial grid speeds up the neighbour search.
 
-Regel. Zwei Bauteile sind nur dann kollisionsfrei, wenn ihr echter Mindestabstand
-im Raum >= Sicherheitsabstand + Toleranz ist. Der eigene Eingriff Zahnrad zu
-eigener Stange gehoert zum Entwurf und wird nicht geprueft.
+Rule. Two parts are only free of collisions if their true minimum distance in space is >= safety
+clearance + tolerance. The mesh of a gear with its own rod belongs to the design and is not checked.
 
-Erweitern. Eine neue Bedingung fuer eine einzelne Einheit ist eine Funktion
-``(model, placement, parts) -> Meldung`` in ``UNIT_RULES``. Sie wird dann sowohl beim
-schnellen ``Layout.check`` als auch bei der vollstaendigen Pruefung ``all_collisions``
-angewendet.
+Extending. A new condition for a single unit is a function ``(model, placement, parts) -> message``
+in ``UNIT_RULES``. It is then applied both in the fast ``Layout.check`` and in the full check
+``all_collisions``.
 """
 
 from __future__ import annotations
@@ -21,14 +18,17 @@ from dataclasses import asdict, dataclass, field
 from typing import Callable, Iterable, Optional
 
 from .geometry import prism_distance
-from .model import KIND_GEAR, KIND_HOUSING, KIND_OBSTACLE, KIND_ROD, Model, Part
+from .i18n import tr
+from .model import KIND_HOUSING, KIND_OBSTACLE, KIND_ROD, Model, Part, part_label
 from .units import ANGLE_TOL_DEG, EPS, is_finite_number, normalize_angle_deg
 
-SIGNATURE_DIGITS = 2  # Rundung (mm, Grad) beim Vergleich zweier Layouts auf Gleichheit
-REACH_SLACK = 1e-6  # Zuschlag auf die Reichweite, damit Rundung keine Nachbarn verliert
+SIGNATURE_DIGITS = 2  # rounding (mm, degrees) when comparing two layouts for equality
+REACH_SLACK = 1e-6  # allowance on the reach so that rounding loses no neighbours
 
-KIND_LABELS = {KIND_HOUSING: "Motor", KIND_GEAR: "Zahnrad", KIND_ROD: "Gewindestange", KIND_OBSTACLE: "Hindernis"}
-_KIND_DE = KIND_LABELS  # Name aus frueheren Versionen
+
+def kind_label(kind: str):
+    """Label of a part kind in collision messages (the rod is called threaded rod there)."""
+    return part_label("threaded_rod" if kind == KIND_ROD else kind)
 
 PLACEMENT_FIELDS = ("x", "y", "plane", "angle", "cd")
 
@@ -37,33 +37,33 @@ PLACEMENT_FIELDS = ("x", "y", "plane", "angle", "cd")
 class Placement:
     x: float
     y: float
-    plane: int  # Index der Motorebene (1..n)
-    angle: float  # Grad
-    cd: Optional[float] = None  # Achsabstand Zahnrad zu Stange, None = nominal
+    plane: int  # index of the motor layer (1..n)
+    angle: float  # degrees
+    cd: Optional[float] = None  # centre distance gear to rod, None = nominal
 
     @staticmethod
     def from_dict(data: object, n_planes: int) -> "Placement":
-        """Strenge Pruefung einer von aussen kommenden Platzierung (UI, JSON Dateien)."""
+        """Strict check of a placement from outside (UI, JSON files)."""
         if not isinstance(data, dict):
-            raise ValueError("Platzierung muss ein Objekt sein")
+            raise ValueError(tr("placement.not_object"))
         extra = set(data) - set(PLACEMENT_FIELDS)
         if extra:
-            raise ValueError(f"Unbekannte Felder in Platzierung. {sorted(extra)}")
+            raise ValueError(tr("placement.unknown_fields", fields=sorted(extra)))
 
         def number(key: str) -> float:
             value = data.get(key)
             if not is_finite_number(value):
-                raise ValueError(f"Platzierung.{key} muss eine endliche Zahl sein")
+                raise ValueError(tr("placement.number", key=key))
             return float(value)
 
         plane = data.get("plane")
         if isinstance(plane, bool) or not isinstance(plane, int) or not 1 <= plane <= n_planes:
-            raise ValueError(f"Platzierung.plane muss eine ganze Zahl von 1 bis {n_planes} sein")
+            raise ValueError(tr("placement.plane", n=n_planes))
         cd = None
         if data.get("cd") is not None:
             cd = number("cd")
             if cd < 0:
-                raise ValueError("Platzierung.cd darf nicht negativ sein")
+                raise ValueError(tr("placement.cd_negative"))
         return Placement(number("x"), number("y"), plane, number("angle"), cd)
 
     def as_dict(self) -> dict:
@@ -74,8 +74,8 @@ class Placement:
 
 
 def layout_signature(placements: Iterable[Placement]) -> tuple:
-    """Reihenfolgeunabhaengiger Schluessel eines Layouts. Gleiche Layouts (bis auf Rundung) haben
-    denselben Schluessel. Der Achsabstand gehoert dazu, None wird wie 0 behandelt."""
+    """Order independent key of a layout. Equal layouts (up to rounding) have the same key. The centre
+    distance is part of it, None counts as 0."""
     digits = SIGNATURE_DIGITS
     return tuple(sorted(
         (round(p.x, digits), round(p.y, digits), p.plane, round(p.angle, digits), round(p.cd or 0.0, digits))
@@ -85,11 +85,11 @@ def layout_signature(placements: Iterable[Placement]) -> tuple:
 
 @dataclass
 class Collision:
-    a: int  # Unit Id, -1 bei festem Hindernis oder Bauraum
+    a: int  # unit id, -1 for a fixed obstacle or the build area
     b: int
     kind_a: str
     kind_b: str
-    gap: float  # tatsaechlicher Abstand
+    gap: float  # actual distance
     required: float
     x: float
     y: float
@@ -102,24 +102,24 @@ class Collision:
 @dataclass
 class CheckResult:
     ok: bool
-    # Bei ok die kleinste gemessene Distanz zu Nachbarn und Hindernissen. Distanzen ab dem
-    # Sicherheitsabstand werden nur so genau wie noetig berechnet (prism_distance mit cutoff),
-    # der Wert ist daher eine untere Schranke des echten Abstands, aber nie kleiner als gap.
+    # If ok, the smallest measured distance to neighbours and obstacles. Distances beyond the safety
+    # clearance are only computed as precisely as needed (prism_distance with cutoff), so the value is
+    # a lower bound of the true distance, but never smaller than gap.
     min_gap: float = math.inf
     reason: str = ""
     collisions: list[Collision] = field(default_factory=list)
 
 
 class Counter:
-    """Gemeinsamer Zaehler fuer untersuchte Kandidaten (ueber mehrere Layouts hinweg)."""
+    """Shared counter of examined candidates (across several layouts)."""
 
     def __init__(self) -> None:
         self.checks = 0
 
 
 # ---------------------------------------------------------------------------
-# Regeln fuer eine einzelne Einheit. Jede liefert "" (erfuellt) oder eine Meldung.
-# Die Kapazitaet je Ebene haengt vom ganzen Layout ab und wird im Layout geprueft.
+# Rules for a single unit. Each returns "" (satisfied) or a message.
+# The capacity per layer depends on the whole layout and is checked in the layout.
 # ---------------------------------------------------------------------------
 UnitRule = Callable[[Model, Placement, list[Part]], str]
 
@@ -136,15 +136,15 @@ def _rule_center_distance(model: Model, pl: Placement, parts: list[Part]) -> str
 def _rule_angle(model: Model, pl: Placement, parts: list[Part]) -> str:
     if angle_allowed(model, pl):
         return ""
-    return f"Motorwinkel {pl.angle:g} Grad ist auf Ebene G{pl.plane} nicht erlaubt"
+    return tr("layout.angle_not_allowed", angle=pl.angle, plane=pl.plane)
 
 
 def _rule_bounds(model: Model, pl: Placement, parts: list[Part]) -> str:
     return model.within_bounds(parts, pl.plane) or ""
 
 
-# (Art fuer Collision.kind_b, Regel, braucht Bauteile). Regeln ohne Bauteile laufen zuerst,
-# so muessen fuer klar unzulaessige Platzierungen keine Prismen erzeugt werden.
+# (kind for Collision.kind_b, rule, needs parts). Rules without parts run first, so no prisms have to
+# be built for clearly invalid placements.
 UNIT_RULES: list[tuple[str, UnitRule, bool]] = [
     ("plane", _rule_plane, False),
     ("rod", _rule_center_distance, False),
@@ -154,16 +154,13 @@ UNIT_RULES: list[tuple[str, UnitRule, bool]] = [
 
 
 def angle_allowed(model: Model, pl: Placement) -> bool:
-    """True, wenn der Winkel (modulo 360) in der Winkelliste der Ebene liegt."""
+    """True if the angle (modulo 360) is in the angle list of the layer."""
     angle = normalize_angle_deg(pl.angle)
     for allowed in model.angles_for(pl.plane):
         diff = abs(angle - allowed)
         if diff < ANGLE_TOL_DEG or abs(diff - 360.0) < ANGLE_TOL_DEG:
             return True
     return False
-
-
-_angle_allowed = angle_allowed  # Name aus frueheren Versionen
 
 
 def _midpoint(p: Part, q: Part) -> tuple[float, float]:
@@ -179,8 +176,8 @@ class Layout:
         self._grid: dict[tuple[int, int], set[int]] = {}
         self._next_id = 0
         self._plane_count: dict[int, int] = {}
-        # Zwei Einheiten koennen nur kollidieren, wenn ihre Stangenachsen hoechstens
-        # 2 * Einheitenradius + Abstand auseinander liegen. Das ist auch die Rasterweite.
+        # Two units can only collide if their rod axes are at most 2 * unit radius + clearance apart.
+        # This is also the grid cell size.
         self._reach = 2.0 * model.unit_radius + model.gap + REACH_SLACK
         self._cell = self._reach
 
@@ -189,7 +186,7 @@ class Layout:
         """Largest rod to rod distance at which two units can still collide (mm)."""
         return self._reach
 
-    # -- Verwaltung ---------------------------------------------------------
+    # -- Bookkeeping ---------------------------------------------------------
     def __len__(self) -> int:
         return len(self.units)
 
@@ -200,7 +197,7 @@ class Layout:
         return (math.floor(x / self._cell), math.floor(y / self._cell))
 
     def add(self, pl: Placement) -> int:
-        """Fuegt ohne Pruefung hinzu und liefert die neue Unit Id."""
+        """Add without a check and return the new unit id."""
         uid = self._next_id
         self._next_id += 1
         self.units[uid] = pl
@@ -233,7 +230,7 @@ class Layout:
         return self.counter.checks
 
     def _neighbors(self, x: float, y: float) -> list[int]:
-        """Unit Ids in der eigenen und den acht umliegenden Rasterzellen."""
+        """Unit ids in the own and the eight surrounding grid cells."""
         cx, cy = self._cell_of(x, y)
         out = []
         for i in (cx - 1, cx, cx + 1):
@@ -246,7 +243,7 @@ class Layout:
     def _in_reach(self, a: Placement, b: Placement) -> bool:
         return math.hypot(a.x - b.x, a.y - b.y) <= self._reach
 
-    # -- Pruefung -------------------------------------------------------------
+    # -- Check -------------------------------------------------------------
     def _capacity_problem(self, pl: Placement, ignore: Optional[int]) -> str:
         cap = self.model.capacity.get(pl.plane)
         if cap is None:
@@ -255,14 +252,14 @@ class Layout:
         if ignore is not None and ignore in self.units and self.units[ignore].plane == pl.plane:
             count -= 1
         if count >= cap:
-            return f"Ebene G{pl.plane} trägt bereits die maximale Anzahl Motoren ({cap})"
+            return tr("layout.capacity_full", plane=pl.plane, cap=cap)
         return ""
 
     def check(self, pl: Placement, ignore: Optional[int] = None, collect: bool = False) -> CheckResult:
-        """Prueft eine Platzierung gegen Einheitenregeln, Kapazitaet, Hindernisse und vorhandene Einheiten.
+        """Check a placement against unit rules, capacity, obstacles and existing units.
 
-        ignore ist eine Unit Id, die nicht beruecksichtigt wird (zum Verschieben einer Einheit).
-        Mit collect werden alle Kollisionen gesammelt, sonst endet die Pruefung bei der ersten.
+        ignore is a unit id that is not considered (for moving a unit). With collect all collisions are
+        gathered, otherwise the check stops at the first one.
         """
         self.counter.checks += 1
         model = self.model
@@ -291,10 +288,7 @@ class Layout:
                 if dist >= need:
                     min_gap = min(min_gap, dist)
                     continue
-                message = (
-                    f"{KIND_LABELS[p.kind]} kollidiert mit {obstacle.label} "
-                    f"(Abstand {dist:.2f} mm, benötigt {gap:.2f} mm)"
-                )
+                message = tr("layout.hits_obstacle", part=kind_label(p.kind), obstacle=obstacle.label, distance=dist, gap=gap)
                 if not collect:
                     return CheckResult(False, reason=message)
                 collisions.append(Collision(-1, -1, p.kind, KIND_OBSTACLE, dist, gap, p.prism.fp.cx, p.prism.fp.cy, message))
@@ -307,10 +301,8 @@ class Layout:
                     if dist >= need:
                         min_gap = min(min_gap, dist)
                         continue
-                    message = (
-                        f"{KIND_LABELS[p.kind]} kollidiert mit {KIND_LABELS[q.kind]} von Einheit {uid} "
-                        f"(Abstand {dist:.2f} mm, benötigt {gap:.2f} mm)"
-                    )
+                    message = tr("layout.hits_unit", part=kind_label(p.kind), other=kind_label(q.kind), unit=uid,
+                                 distance=dist, gap=gap)
                     if not collect:
                         return CheckResult(False, reason=message)
                     collisions.append(Collision(-1, uid, p.kind, q.kind, dist, gap, *_midpoint(p, q), message))
@@ -319,13 +311,13 @@ class Layout:
         return CheckResult(True, min_gap=min_gap)
 
     def try_add(self, pl: Placement) -> Optional[int]:
-        """Fuegt hinzu, wenn die Platzierung zulaessig ist. Liefert die Unit Id oder None."""
+        """Add if the placement is valid. Returns the unit id or None."""
         if self.check(pl).ok:
             return self.add(pl)
         return None
 
     def all_collisions(self) -> list[Collision]:
-        """Vollstaendige Pruefung des gesamten Layouts (fuer Visualisierung und Validierung)."""
+        """Full check of the whole layout (for display and validation)."""
         out: list[Collision] = []
         ids = sorted(self.units)
         for uid in ids:
@@ -335,7 +327,7 @@ class Layout:
         return out
 
     def _unit_collisions(self, uid: int) -> list[Collision]:
-        """Verletzte Einheitenregeln und Kollisionen mit Hindernissen einer Einheit."""
+        """Violated unit rules and collisions with obstacles of one unit."""
         model = self.model
         gap = model.gap
         pl = self.units[uid]
@@ -344,14 +336,14 @@ class Layout:
         for kind, rule, _ in UNIT_RULES:
             message = rule(model, pl, parts)
             if message:
-                out.append(Collision(uid, -1, KIND_HOUSING, kind, 0.0, gap, pl.x, pl.y, f"Einheit {uid}. {message}"))
+                out.append(Collision(uid, -1, KIND_HOUSING, kind, 0.0, gap, pl.x, pl.y, tr("layout.unit_message", unit=uid, message=message)))
         for obstacle in model.obstacles:
             for p in parts:
                 dist = prism_distance(p.prism, obstacle.prism, gap)
                 if dist < gap - EPS:
                     out.append(Collision(
                         uid, -1, p.kind, KIND_OBSTACLE, dist, gap, p.prism.fp.cx, p.prism.fp.cy,
-                        f"Einheit {uid}. {KIND_LABELS[p.kind]} kollidiert mit {obstacle.label}",
+                        tr("layout.unit_hits_obstacle", unit=uid, part=kind_label(p.kind), obstacle=obstacle.label),
                     ))
         return out
 
@@ -365,11 +357,11 @@ class Layout:
             first = next(u for u in ids if self.units[u].plane == plane)
             pl = self.units[first]
             out.append(Collision(first, -1, KIND_HOUSING, "capacity", 0.0, gap, pl.x, pl.y,
-                                 f"Ebene G{plane} trägt {count} Motoren, erlaubt sind {cap}"))
+                                 tr("layout.capacity_exceeded", plane=plane, count=count, cap=cap)))
         return out
 
     def _pair_collisions(self, ids: list[int]) -> list[Collision]:
-        """Kollisionen zwischen allen Paaren von Einheiten (ohne Raster, auch fuer unsortierte Eingaben)."""
+        """Collisions between all pairs of units (without the grid, also for unsorted input)."""
         gap = self.model.gap
         out = []
         for i, a in enumerate(ids):
@@ -382,13 +374,13 @@ class Layout:
                         if dist < gap - EPS:
                             out.append(Collision(
                                 a, b, p.kind, q.kind, dist, gap, *_midpoint(p, q),
-                                f"Einheit {a} ({KIND_LABELS[p.kind]}) und Einheit {b} ({KIND_LABELS[q.kind]}) "
-                                f"Abstand {dist:.2f} mm, benötigt {gap:.2f} mm",
+                                tr("layout.pair", a=a, part_a=kind_label(p.kind), b=b, part_b=kind_label(q.kind),
+                                   distance=dist, gap=gap),
                             ))
         return out
 
     def closest_pairs(self, limit: int = 12) -> list[dict]:
-        """Die engsten Bauteilpaare verschiedener Einheiten (Abstand im Raum), aufsteigend nach Abstand."""
+        """The closest part pairs of different units (distance in space), ascending by distance."""
         found: list[dict] = []
         for a in sorted(self.units):
             pa = self.units[a]
@@ -411,7 +403,7 @@ class Layout:
 
 
 def layout_from_placements(model: Model, placements: Iterable[Placement], counter: Optional[Counter] = None) -> Layout:
-    """Layout ohne Pruefung aus Platzierungen aufbauen (Kollisionen ueber all_collisions abfragen)."""
+    """Build a layout from placements without a check (query collisions with all_collisions)."""
     layout = Layout(model, counter)
     for pl in placements:
         layout.add(pl)

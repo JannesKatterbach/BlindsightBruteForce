@@ -1,23 +1,21 @@
-"""Eingabedaten (Konfiguration) als Dataclasses mit schemagetriebener Validierung.
+"""Input data (configuration) as dataclasses with schema driven validation.
 
-Alle Laengen in mm, Winkel in Grad. Die Konfiguration ist reines Datenmodell
-und kennt weder Optimierer noch UI. Sie laesst sich als JSON laden und speichern.
+All lengths in mm, angles in degrees, time in seconds. The configuration is a pure data model and knows
+neither optimizers nor UI. It can be loaded from and saved to JSON.
 
-Aufbau dieser Datei
-  1. Dataclasses (RodSpec, MotorSpec, StackSpec, ...), Standardwerte sind Platzhalter
-  2. Project mit Laden, Speichern und Validierung
-  3. FIELD_META. Beschreibung jedes einfachen Feldes (Label, Hilfetext, Einheit,
-     Grenzen, Auswahl). Daraus entstehen Feldpruefung, UI Formulare (/api/schema)
-     und die Parametertabelle der README (docs.py)
-  4. Typgetriebenes Einlesen aus JSON (_build, _coerce)
+Layout of this file
+  1. Dataclasses (RodSpec, MotorSpec, StackSpec, ...). The defaults are placeholders
+  2. Project with loading, saving and validation
+  3. FIELD_META. Description of every simple field (kind, limits, choices, group). Field checks, the UI
+     forms (/api/schema) and the parameter table of the README (docs.py) are built from it. Labels and
+     tips live in the translation catalogs (keys ``field.<path>.label`` and ``field.<path>.tip``)
+  4. Type driven reading from JSON (_build, _coerce)
 
-Erweitern. Ein neues einfaches Feld braucht ein Dataclass Attribut und einen
-Eintrag in FIELD_META. Pruefungen, die mehrere Felder betreffen, gehoeren in die
-passende ``_check_*`` Funktion in Abschnitt 2.
+Extending. A new simple field needs a dataclass attribute, an entry in FIELD_META and its label and tip
+in the catalogs. Checks that involve several fields belong into the matching ``_check_*`` function.
 
-Wichtig. Die Standardwerte sind Platzhalter fuer ein erstes Ausprobieren und
-keine Herstellerdaten. Alle mechanisch relevanten Masse muessen mit den realen
-Bauteilen ueberschrieben werden.
+Important. The defaults are placeholders for a first try and not manufacturer data. All mechanically
+relevant dimensions must be overwritten with the real parts.
 """
 
 from __future__ import annotations
@@ -31,11 +29,12 @@ from typing import Any, Optional
 
 from .errors import ConfigError
 from .geometry import is_convex_ccw, signed_area
+from .i18n import LocalText, tr
 from .patterns import PATTERNS
 from .sketch import check_sketch_motor
 from .units import EPS, EPS_AREA, FAR_AWAY, is_finite_number, normalize_angle_deg
 
-MAX_ANGLE_COUNT = 100_000  # Schutz gegen winzige Winkelschritte
+MAX_ANGLE_COUNT = 100_000  # protection against tiny angle steps
 
 STACK_MODES = ("uniform", "gaps", "distances")
 MOUNT_MODES = ("top", "bottom")
@@ -47,7 +46,7 @@ OBSTACLE_SHAPES = ("rect", "circle")
 # ---------------------------------------------------------------------------
 @dataclass
 class RodSpec:
-    """Gewindestange (vertikal)."""
+    """Threaded rod (vertical)."""
 
     diameter: float = 4.0
     stroke: float = 50.0
@@ -60,7 +59,7 @@ class RodSpec:
 
 @dataclass
 class ConstraintSpec:
-    """Ein Constraint der Motor Skizze (Typen und Bedeutung siehe sketch/constraints.py)."""
+    """One constraint of the motor sketch (types and meaning see sketch/constraints.py)."""
 
     type: str = "length"
     a: Optional[int] = None
@@ -74,7 +73,7 @@ class ConstraintSpec:
 
 @dataclass
 class SketchSpec:
-    """Parametrische Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse, mm)."""
+    """Parametric housing outline in the rod frame (origin = rod axis, mm)."""
 
     points: list[list[float]] = field(default_factory=list)
     constraints: list[ConstraintSpec] = field(default_factory=list)
@@ -82,21 +81,21 @@ class SketchSpec:
 
 @dataclass
 class MotorSpec:
-    """Motor mit seitlichem Antriebszahnrad, vereinfacht als Prisma plus Zahnradquader.
+    """Motor with a side mounted drive gear, simplified as a prism plus a gear box.
 
-    Es gibt zwei Arten, das Gehaeuse zu beschreiben.
+    There are two ways to describe the housing.
 
-    Ohne Skizze (Gehaeusesystem, Motorwinkel 0 Grad, Draufsicht)
-      * Gehaeuse um (0, 0) zentriert. Ein Rechteck width mal depth oder, mit
-        ``outline``, ein konvexes Polygon (width und depth sind dann nur Anzeige).
-      * Die Abtriebsachse verlaeuft parallel zu y bei x = shaft_x und tritt an der
-        +y Seite aus. Das Zahnrad sitzt gear_gap hinter der obersten Gehaeusekante.
-      * Die Gewindestange steht senkrecht im Abstand center_distance zur
-        Abtriebsachse (in +x), auf Hoehe der Zahnradmitte.
+    Without sketch (housing frame, motor angle 0 degrees, top view)
+      * Housing centred at (0, 0). A rectangle width x depth or, with ``outline``, a convex
+        polygon (width and depth are then only shown).
+      * The output shaft runs parallel to y at x = shaft_x and leaves at the +y side. The gear
+        sits gear_gap behind the topmost housing edge.
+      * The threaded rod stands vertically at center_distance from the output shaft (in +x),
+        at the height of the gear centre.
 
-    Mit Skizze (``sketch``, Stangenrahmen)
-      * Ursprung ist die Stangenachse, das Zahnrad liegt bei (-center_distance, 0).
-      * width, depth, shaft_x, gear_gap und outline werden ignoriert.
+    With sketch (``sketch``, rod frame)
+      * The origin is the rod axis, the gear lies at (-center_distance, 0).
+      * width, depth, shaft_x, gear_gap and outline are ignored.
     """
 
     width: float = 12.0
@@ -122,14 +121,14 @@ class MotorSpec:
 
     @property
     def gear_center_y(self) -> float:
-        """y der Zahnradmitte im Gehaeusesystem (hinter der obersten Kante der Kontur)."""
+        """y of the gear centre in the housing frame (behind the topmost edge of the outline)."""
         top = max(p[1] for p in self.outline) if self.outline else self.depth / 2.0
         return top + self.gear_gap + self.gear_width / 2.0
 
     def center_distances(self) -> list[float]:
-        """Zulaessige Achsabstaende, aufsteigend. Ohne Bereich nur der Nominalwert.
+        """Permitted centre distances, ascending. Without a range only the nominal value.
 
-        Der Nominalwert ist immer enthalten (die Validierung stellt sicher, dass er im Bereich liegt)."""
+        The nominal value is always included (validation ensures it lies within the range)."""
         lo, hi = self.center_distance_min, self.center_distance_max
         steps = max(1, self.center_distance_steps)
         if lo is None or hi is None or steps == 1 or hi <= lo:
@@ -140,17 +139,17 @@ class MotorSpec:
         return sorted(values)
 
     def rod_local(self, cd: Optional[float] = None) -> tuple[float, float]:
-        """Position der Gewindestange im Gehaeusesystem (nur ohne Skizze sinnvoll)."""
+        """Position of the threaded rod in the housing frame (only meaningful without sketch)."""
         return (self.shaft_x + (self.center_distance if cd is None else cd), self.gear_center_y)
 
 
 @dataclass
 class StackSpec:
-    """Ebenenaufbau. Z=0 ist die Oberseite von G0, nach unten negativ.
+    """Layer stack. z = 0 is the top face of G0, negative below.
 
-    mode "uniform"   gleicher Abstand uniform_spacing zwischen allen Ebenen (inkl. G0)
-    mode "gaps"      gaps[i] ist der Abstand der Oberseiten von G(i) zu G(i+1)
-    mode "distances" distances[i] ist der Abstand der Oberseite von G(i+1) zu G0
+    mode "uniform"   equal distance uniform_spacing between all layers (including G0)
+    mode "gaps"      gaps[i] is the distance between the top faces of G(i) and G(i+1)
+    mode "distances" distances[i] is the distance of the top face of G(i+1) to G0
     """
 
     n_motor_planes: int = 3
@@ -160,14 +159,14 @@ class StackSpec:
     distances: list[float] = field(default_factory=list)
     thickness: float = 1.6
     g0_thickness: float = 6.0
-    thicknesses: Optional[list[float]] = None  # Dicke je Motorebene (ueberschreibt thickness)
+    thicknesses: Optional[list[float]] = None  # thickness per motor layer (overrides thickness)
     allowed_planes: Optional[list[int]] = None
     mount_zones: dict[str, list[list[float]]] = field(default_factory=dict)
     max_per_plane: dict[str, int] = field(default_factory=dict)
     plane_angles: dict[str, list[float]] = field(default_factory=dict)
 
     def plane_tops(self) -> list[float]:
-        """Z der Oberseiten von G0 bis Gn (G0 bei 0, darunter negativ)."""
+        """z of the top faces of G0 to Gn (G0 at 0, negative below)."""
         n = self.n_motor_planes
         tops = [0.0]
         if self.mode == "uniform":
@@ -180,11 +179,11 @@ class StackSpec:
         elif self.mode == "distances":
             tops += [-d for d in self.distances[:n]]
         else:
-            raise ConfigError(f"stack.mode. Unbekannter Modus '{self.mode}'")
+            raise ConfigError(tr("config.unknown_stack_mode", mode=self.mode))
         return tops
 
     def plane_thickness(self, index: int) -> float:
-        """Dicke der Ebene G<index> (0 = G0)."""
+        """Thickness of layer G<index> (0 = G0)."""
         if index == 0:
             return self.g0_thickness
         if self.thicknesses is not None:
@@ -216,11 +215,10 @@ class BoundsSpec:
 
 @dataclass
 class ObstacleSpec:
-    """Festes Hindernis (Prisma). Ohne z0/z1 reicht es ueber alle Ebenen.
+    """Fixed obstacle (prism). Without z0 and z1 it reaches through all layers.
 
-    Ist plane gesetzt, gilt es nur auf dieser Motorebene (Sperrzone, z.B. Loch oder Bauteil
-    in der Platine), die Z Spanne ergibt sich dann aus der Ebene und der Motorhoehe.
-    Der Winkel ``angle`` ist in Grad.
+    If plane is set, it only applies to this motor layer (keep out zone, for example a hole or a part on
+    the board), its z range then follows from the layer and the motor height. ``angle`` is in degrees.
     """
 
     shape: str = "rect"
@@ -238,9 +236,9 @@ class ObstacleSpec:
 
 @dataclass
 class WeightsSpec:
-    """Prioritaeten der Optimierungsziele (relative Gewichte, werden normiert).
+    """Priorities of the optimization goals (relative weights, normalized).
 
-    Jedes Feld entspricht einem Eintrag in ``scoring.OBJECTIVES``."""
+    Every field corresponds to an entry in ``scoring.OBJECTIVES``."""
 
     count: float = 10.0
     area: float = 8.0
@@ -253,7 +251,7 @@ class WeightsSpec:
 
 @dataclass
 class SearchSpec:
-    """Steuerung der Suche."""
+    """Control of the search."""
 
     weights: WeightsSpec = field(default_factory=WeightsSpec)
     optimizer: str = "pattern_greedy"
@@ -279,11 +277,11 @@ class SearchSpec:
 
 
 # ---------------------------------------------------------------------------
-# 2. Projekt
+# 2. Project
 # ---------------------------------------------------------------------------
 @dataclass
 class Project:
-    name: str = "Unbenannt"
+    name: str = "Blindsight"
     target_count: int = 12
     clearance: float = 1.0
     tolerance: float = 0.05
@@ -296,10 +294,10 @@ class Project:
 
     @property
     def required_gap(self) -> float:
-        """Wirksamer Mindestabstand aller Bauteile."""
+        """Effective minimum distance of all parts."""
         return self.clearance + self.tolerance
 
-    # -- (De)Serialisierung ------------------------------------------------
+    # -- (De)serialization ---------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
 
@@ -308,7 +306,7 @@ class Project:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Project":
-        """Liest und validiert ein Projekt. Wirft ConfigError mit allen gefundenen Problemen."""
+        """Read and validate a project. Raises ConfigError with all problems found."""
         errs: list[str] = []
         proj = _build(cls, data, "", errs)
         if errs:
@@ -321,21 +319,21 @@ class Project:
         try:
             return cls.from_dict(json.loads(text))
         except json.JSONDecodeError as exc:
-            raise ConfigError(f"Ungültiges JSON. {exc}") from exc
+            raise ConfigError(tr("config.invalid_json", error=str(exc))) from exc
         except RecursionError:
-            raise ConfigError("JSON zu tief verschachtelt") from None
+            raise ConfigError(tr("config.json_too_deep")) from None
 
     @classmethod
     def load(cls, path: str) -> "Project":
         with open(path, encoding="utf-8") as fh:
             return cls.from_json(fh.read())
 
-    # -- Validierung -------------------------------------------------------
+    # -- Validation ------------------------------------------------------------
     def validate(self) -> None:
-        """Prueft erst jedes Feld einzeln (FIELD_META), dann die Zusammenhaenge.
+        """Check every field on its own (FIELD_META) first, then the relations between fields.
 
-        Die Zusammenhangspruefungen setzen gueltige Einzelwerte voraus und laufen daher nur,
-        wenn die Feldpruefung fehlerfrei war."""
+        The relation checks assume valid single values and therefore only run when the field
+        checks found no problem."""
         errs: list[str] = []
         _validate_fields(self, errs)
         if errs:
@@ -345,28 +343,28 @@ class Project:
         if errs:
             raise ConfigError(errs)
 
-    # -- Winkel ------------------------------------------------------------
+    # -- Angles ----------------------------------------------------------------
     def allowed_angle_list(self) -> list[float]:
-        """Zulaessige Motorwinkel in Grad, in [0, 360), aufsteigend und ohne Duplikate."""
+        """Permitted motor angles in degrees, in [0, 360), ascending and without duplicates."""
         search = self.search
         if search.allowed_angles is not None:
             angles = {normalize_angle_deg(a) for a in search.allowed_angles}
         else:
             if search.angle_step <= 0:
-                raise ConfigError("search.angle_step. Muss positiv sein")
+                raise ConfigError(tr("config.angle_step_positive"))
             if (search.angle_max - search.angle_min) / search.angle_step > MAX_ANGLE_COUNT:
-                raise ConfigError(f"search.angle_step. Zu klein, ergibt über {MAX_ANGLE_COUNT} Winkel")
+                raise ConfigError(tr("config.angle_step_small", count=MAX_ANGLE_COUNT))
             angles = set()
             a = search.angle_min
             while a < search.angle_max - EPS:
                 angles.add(normalize_angle_deg(a))
                 a += search.angle_step
         if not angles:
-            raise ConfigError("search.allowed_angles. Keine zulässigen Motorwinkel")
+            raise ConfigError(tr("config.no_angles"))
         return sorted(angles)
 
     def angles_for_plane(self, plane: int) -> list[float]:
-        """Zulaessige Winkel einer Ebene (globale Liste, durch plane_angles ersetzt)."""
+        """Permitted angles of a layer (the global list, replaced by plane_angles)."""
         own = self.stack.plane_angles.get(str(plane))
         if own:
             return sorted({normalize_angle_deg(a) for a in own})
@@ -376,18 +374,15 @@ class Project:
 def _check_motor(proj: Project, errs: list[str]) -> None:
     motor = proj.motor
     if motor.axis_height > motor.height:
-        errs.append("motor.axis_height. Die Abtriebsachse liegt außerhalb der Motorhöhe")
+        errs.append(tr("config.axis_outside"))
     lo, hi = motor.center_distance_min, motor.center_distance_max
     if (lo is None) != (hi is None):
-        errs.append("motor.center_distance_min. Achsabstand min und max müssen zusammen angegeben werden")
+        errs.append(tr("config.cd_together"))
     elif lo is not None and hi is not None:
         if hi < lo:
-            errs.append("motor.center_distance_max. Muss >= center_distance_min sein")
+            errs.append(tr("config.cd_max_below_min"))
         elif not lo - EPS <= motor.center_distance <= hi + EPS:
-            errs.append(
-                f"motor.center_distance. Der Achsabstand {motor.center_distance:g} liegt außerhalb des Bereichs "
-                f"{lo:g} bis {hi:g}"
-            )
+            errs.append(tr("config.cd_outside", cd=motor.center_distance, lo=lo, hi=hi))
     if motor.sketch is not None:
         _, sketch_errors = check_sketch_motor(motor)
         errs.extend(sketch_errors)
@@ -401,63 +396,60 @@ def _check_stack(proj: Project, errs: list[str]) -> None:
     before = len(errs)
     if stack.mode == "gaps":
         if len(stack.gaps) < n:
-            errs.append(f"stack.gaps. Modus 'gaps' braucht {n} Abstände (G0-G1, G1-G2, ...)")
+            errs.append(tr("config.gaps_count", n=n))
         elif any(g <= 0 for g in stack.gaps[:n]):
-            errs.append("stack.gaps. Alle Ebenenabstände müssen positiv sein")
+            errs.append(tr("config.gaps_positive"))
     elif stack.mode == "distances":
         dist = stack.distances[:n]
         if len(dist) < n:
-            errs.append(f"stack.distances. Modus 'distances' braucht {n} Abstände zu G0")
+            errs.append(tr("config.distances_count", n=n))
         elif any(x <= 0 for x in dist) or any(dist[i] >= dist[i + 1] for i in range(len(dist) - 1)):
-            errs.append("stack.distances. Abstände zu G0 müssen positiv und streng aufsteigend sein")
+            errs.append(tr("config.distances_order"))
     if stack.thicknesses is not None:
         if len(stack.thicknesses) < n:
-            errs.append(f"stack.thicknesses. {n} Dicken erwartet (eine je Motorebene)")
+            errs.append(tr("config.thicknesses_count", n=n))
         elif any(t <= 0 for t in stack.thicknesses):
-            errs.append("stack.thicknesses. Alle Dicken müssen positiv sein")
+            errs.append(tr("config.thicknesses_positive"))
     if len(errs) == before:
         errs.extend(plane_overlap_errors(stack))
     if stack.allowed_planes is not None:
         bad = [p for p in stack.allowed_planes if not 1 <= p <= n]
         if bad:
-            errs.append(f"stack.allowed_planes. Ebenen {bad} existieren nicht (1..{n})")
+            errs.append(tr("config.allowed_unknown", planes=bad, n=n))
         if not stack.allowed_planes:
-            errs.append("stack.allowed_planes. Darf nicht leer sein (None = alle Ebenen)")
+            errs.append(tr("config.allowed_empty"))
     for key, zones in stack.mount_zones.items():
         _check_plane_key("stack.mount_zones", key, n, errs)
         for zone in zones:
             if len(zone) != 4 or zone[2] <= zone[0] or zone[3] <= zone[1]:
-                errs.append(f"stack.mount_zones[{key}]. Bereich muss [xmin, ymin, xmax, ymax] mit xmax>xmin, ymax>ymin sein")
+                errs.append(tr("config.zone_shape", key=key))
     for key, cap in stack.max_per_plane.items():
         _check_plane_key("stack.max_per_plane", key, n, errs)
         if cap < 0:
-            errs.append(f"stack.max_per_plane[{key}]. Darf nicht negativ sein")
+            errs.append(tr("config.capacity_negative", key=key))
     for key, angles in stack.plane_angles.items():
         _check_plane_key("stack.plane_angles", key, n, errs)
         if not angles:
-            errs.append(f"stack.plane_angles[{key}]. Darf nicht leer sein")
+            errs.append(tr("config.plane_angles_empty", key=key))
 
 
-def plane_overlap_errors(stack: StackSpec) -> list[str]:
-    """Meldungen, wenn eine Ebene in die naechste hineinragt (Abstand kleiner als die Plattendicke)."""
+def plane_overlap_errors(stack: StackSpec) -> list[LocalText]:
+    """Messages for a layer reaching into the next one (distance smaller than the board thickness)."""
     tops = stack.plane_tops()
     out = []
     for i in range(len(tops) - 1):
         bottom = tops[i] - stack.plane_thickness(i)
         if tops[i + 1] >= bottom:
-            out.append(
-                f"stack. Ebenen G{i} und G{i + 1} überlappen. Abstand {tops[i] - tops[i + 1]:.2f} mm "
-                f"ist kleiner als die Dicke von G{i} ({stack.plane_thickness(i):.2f} mm)"
-            )
+            out.append(tr("config.planes_overlap", a=i, b=i + 1, distance=tops[i] - tops[i + 1], thickness=stack.plane_thickness(i)))
     return out
 
 
 def _check_bounds(proj: Project, errs: list[str]) -> None:
     bounds = proj.bounds
     if bounds.width <= 0 or bounds.height <= 0:
-        errs.append("bounds. Bauraum hat keine positive Fläche (Breite und Höhe größer 0)")
+        errs.append(tr("config.bounds_area"))
     elif 2 * bounds.edge_margin >= min(bounds.width, bounds.height):
-        errs.append("bounds.edge_margin. Randabstand ist größer als der halbe Bauraum")
+        errs.append(tr("config.edge_margin"))
 
 
 def _check_obstacles(proj: Project, errs: list[str]) -> None:
@@ -465,30 +457,30 @@ def _check_obstacles(proj: Project, errs: list[str]) -> None:
     for i, obstacle in enumerate(proj.obstacles):
         tag = f"obstacles[{i}]"
         if obstacle.shape not in OBSTACLE_SHAPES:
-            errs.append(f"{tag}.shape. Muss 'rect' oder 'circle' sein")
+            errs.append(tr("config.obstacle_shape", tag=tag))
         if obstacle.z1 < obstacle.z0:
-            errs.append(f"{tag}. z1 muss >= z0 sein")
+            errs.append(tr("config.obstacle_z", tag=tag))
         if obstacle.shape == "rect" and (obstacle.w <= 0 or obstacle.h <= 0):
-            errs.append(f"{tag}. Breite und Höhe müssen positiv sein")
+            errs.append(tr("config.obstacle_size", tag=tag))
         if obstacle.shape == "circle" and obstacle.r <= 0:
-            errs.append(f"{tag}.r. Radius muss positiv sein")
+            errs.append(tr("config.obstacle_radius", tag=tag))
         if obstacle.plane is not None and not 1 <= obstacle.plane <= n:
-            errs.append(f"{tag}.plane. Ebene {obstacle.plane} existiert nicht (1..{n})")
+            errs.append(tr("config.obstacle_plane", tag=tag, plane=obstacle.plane, n=n))
 
 
 def _check_search(proj: Project, errs: list[str]) -> None:
     search = proj.search
     for pattern in search.patterns:
         if pattern not in PATTERNS:
-            errs.append(f"search.patterns. Unbekanntes Muster '{pattern}' ({', '.join(PATTERNS)})")
+            errs.append(tr("config.unknown_pattern", pattern=pattern, known=", ".join(PATTERNS)))
     if not search.patterns:
-        errs.append("search.patterns. Mindestens ein Muster ist nötig")
+        errs.append(tr("config.no_pattern"))
     if len(search.patterns) != len(set(search.patterns)):
-        errs.append("search.patterns. Muster doppelt angegeben")
+        errs.append(tr("config.duplicate_pattern"))
     if search.angle_max <= search.angle_min:
-        errs.append("search.angle_max. Muss größer als angle_min sein")
+        errs.append(tr("config.angle_range"))
     if sum(search.weights.as_dict().values()) <= 0:
-        errs.append("search.weights. Nicht alle Gewichte dürfen 0 sein")
+        errs.append(tr("config.weights_zero"))
     try:
         proj.allowed_angle_list()
     except ConfigError as exc:
@@ -497,111 +489,114 @@ def _check_search(proj: Project, errs: list[str]) -> None:
 
 def _check_plane_key(label: str, key: str, n: int, errs: list[str]) -> None:
     if not (key.isdigit() and 1 <= int(key) <= n):
-        errs.append(f"{label}. Schlüssel '{key}' ist keine Motorebene (1..{n})")
+        errs.append(tr("config.plane_key", label=label, key=key, n=n))
 
 
 def _check_outline(outline: list[list[float]], errs: list[str]) -> None:
     if len(outline) < 3 or any(len(p) != 2 for p in outline):
-        errs.append("motor.outline. Mindestens 3 Punkte [x, y] nötig")
+        errs.append(tr("config.outline_points"))
         return
     area = signed_area(outline)
     if abs(area) < EPS_AREA:
-        errs.append("motor.outline. Kontur hat keine Fläche")
+        errs.append(tr("config.outline_area"))
         return
     ccw = outline if area > 0 else list(reversed(outline))
     if not is_convex_ccw(ccw):
-        errs.append("motor.outline. Kontur muss konvex sein (nicht konvexe Motoren bitte als Hülle angeben)")
+        errs.append(tr("config.outline_convex"))
 
 
 # ---------------------------------------------------------------------------
-# 3. Feldbeschreibung. Quelle fuer Validierung, UI Formulare und Doku.
-#   kind  len (mm, in der UI umrechenbar), lenlist (Liste von Laengen in mm), num, int,
-#         text, enum, list (Zahlenliste ohne Einheit), listint, liststr
+# 3. Field description. Source of validation, UI forms and documentation.
+#   kind  len (mm), lenlist (list of lengths in mm), num, int, text, enum,
+#         list (list of numbers without unit), listint, liststr
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Meta:
-    """Beschreibung eines Konfigurationsfeldes fuer Validierung, UI und Doku."""
+    """Description of a configuration field for validation, UI and documentation."""
 
     path: str
-    label: str
-    tip: str
     kind: str
     lo: Optional[float] = None
     hi: Optional[float] = None
-    strict_lo: bool = False  # True. Wert muss > lo sein
-    options: Optional[tuple[tuple[str, str], ...]] = None
+    strict_lo: bool = False  # True. The value must be > lo
+    options: Optional[tuple[str, ...]] = None  # permitted values of an enum
     group: str = ""
-    optional: bool = False  # None erlaubt
+    optional: bool = False  # None allowed
+
+    @property
+    def label(self) -> LocalText:
+        return tr(f"field.{self.path}.label")
+
+    @property
+    def tip(self) -> LocalText:
+        return tr(f"field.{self.path}.tip")
+
+    def option_label(self, value: str) -> LocalText:
+        return tr(f"option.{self.path}.{value}")
 
 
 FIELD_META: list[Meta] = [
-    Meta("name", "Name", "Bezeichnung des Projekts", "text", group="general"),
-    Meta("target_count", "Gewünschte Anzahl Stangen", "So viele Gewindestangen mit Motoren sollen platziert werden", "int", 1, 100000, group="general"),
-    Meta("clearance", "Sicherheitsabstand", "Mindestabstand zwischen allen fremden Bauteilen", "len", 0, 1000, group="general"),
-    Meta("tolerance", "Toleranz", "Wird zum Sicherheitsabstand addiert (Fertigung, Rundung). Wirksamer Abstand = Sicherheitsabstand + Toleranz", "len", 0, 1000, group="general"),
-    Meta("rod.diameter", "Durchmesser", "Außendurchmesser des Gewindes", "len", 0, 1000, True, group="rod"),
-    Meta("rod.stroke", "Maximaler Hub über G0", "So weit muss jede Stange oberhalb von G0 ausfahren können, unabhängig von der Motorebene", "len", 0, 100000, True, group="rod"),
-    Meta("rod.engage_below", "Gewinde unter Zahnradachse (ausgefahren)", "Mindestgewinde unter der Zahnradachse bei maximalem Ausfahren", "len", 0, 100000, group="rod"),
-    Meta("rod.engage_above", "Gewinde über Zahnradachse (eingefahren)", "Mindestgewinde über der Zahnradachse bei vollem Einfahren", "len", 0, 100000, group="rod"),
-    Meta("rod.length_tolerance", "Längenzuschlag", "Zusätzlicher Sicherheitszuschlag der Stangenlänge", "len", 0, 100000, group="rod"),
-    Meta("rod.retract_depth", "Spitze eingefahren unter G0", "Tiefe der Stangenspitze unter G0 bei vollem Einfahren (0 = bündig)", "len", 0, 100000, group="rod"),
-    Meta("rod.hole_clearance", "Radiales Lochspiel", "Spiel der Durchgangslöcher in den Ebenen (je Seite)", "len", 0, 1000, group="rod"),
-    Meta("motor.width", "Breite (x)", "Gehäusebreite quer zur Welle", "len", 0, 10000, True, group="motor"),
-    Meta("motor.depth", "Tiefe (y, Wellenrichtung)", "Gehäusetiefe entlang der Welle", "len", 0, 10000, True, group="motor"),
-    Meta("motor.height", "Höhe (z)", "Gehäusehöhe senkrecht zur Ebene", "len", 0, 10000, True, group="motor"),
-    Meta("motor.shaft_x", "Abtriebsachse, x Versatz", "Seitlicher Versatz der Abtriebsachse zur Gehäusemitte", "len", -10000, 10000, group="motor"),
-    Meta("motor.axis_height", "Achshöhe über Montagefläche", "Höhe der Abtriebsachse über der Montagefläche", "len", 0, 10000, group="motor"),
-    Meta("motor.gear_diameter", "Zahnrad Durchmesser", "Außendurchmesser des Antriebszahnrads", "len", 0, 10000, True, group="motor"),
-    Meta("motor.gear_width", "Zahnrad Breite", "Axiale Breite des Zahnrads", "len", 0, 10000, True, group="motor"),
-    Meta("motor.gear_gap", "Abstand Gehäuse zu Zahnrad", "Axialer Abstand zwischen Gehäusekante und Zahnrad", "len", 0, 10000, group="motor"),
-    Meta("motor.center_distance", "Achsabstand Zahnrad zu Stange", "Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur über diesen Abstand modelliert", "len", 0, 10000, group="motor"),
-    Meta("motor.center_distance_min", "Achsabstand min (optional)", "Untergrenze, wenn der Optimierer den Achsabstand variieren darf", "len", 0, 10000, group="motor", optional=True),
-    Meta("motor.center_distance_max", "Achsabstand max (optional)", "Obergrenze, wenn der Optimierer den Achsabstand variieren darf", "len", 0, 10000, group="motor", optional=True),
-    Meta("motor.center_distance_steps", "Achsabstand Stufen", "Anzahl der Stufen zwischen min und max (1 = nur nominal)", "int", 1, 50, group="motor"),
-    Meta("motor.own_clearance", "Eigenabstand Gehäuse zur Stange", "Mindestabstand des Gehäuses zur eigenen Stange", "len", 0, 1000, group="motor"),
-    Meta("motor.mount", "Montage", "Motor steht auf der Ebene oder hängt darunter", "enum", group="motor",
-         options=(("top", "Motor steht auf der Ebene"), ("bottom", "Motor hängt unter der Ebene"))),
-    Meta("stack.n_motor_planes", "Anzahl Motorebenen", "Anzahl der Ebenen G1 bis Gn, keine feste Obergrenze", "int", 1, 1000, group="stack"),
-    Meta("stack.mode", "Abstandsmodus", "Wie die Ebenenhöhen angegeben werden", "enum", group="stack",
-         options=(("uniform", "Einheitlicher Abstand"), ("gaps", "Einzelabstände G(i) zu G(i+1)"), ("distances", "Abstand jeder Ebene zu G0"))),
-    Meta("stack.uniform_spacing", "Einheitlicher Ebenenabstand", "Abstand zwischen allen Ebenen (Modus uniform)", "len", 0, 100000, True, group="stack"),
-    Meta("stack.gaps", "Einzelabstände (Liste)", "Abstände G0-G1, G1-G2, ... (Modus gaps)", "lenlist", group="stack"),
-    Meta("stack.distances", "Abstände zu G0 (Liste)", "Abstand jeder Motorebene zu G0, aufsteigend (Modus distances)", "lenlist", group="stack"),
-    Meta("stack.thickness", "Dicke Motorebenen", "Plattendicke der Ebenen G1 bis Gn", "len", 0, 1000, True, group="stack"),
-    Meta("stack.g0_thickness", "Dicke G0", "Plattendicke der oberen Referenzebene", "len", 0, 1000, True, group="stack"),
-    Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke für jede Motorebene, überschreibt die gemeinsame Dicke", "lenlist", group="stack", optional=True),
-    Meta("stack.allowed_planes", "Erlaubte Motorebenen (Liste, leer = alle)", "Nur diese Ebenen dürfen Motoren tragen", "listint", group="stack", optional=True),
-    Meta("bounds.width", "Breite (x)", "Ausdehnung des Bauraums in x ab dem Ursprung unten links", "len", 0, 1e6, True, group="bounds"),
-    Meta("bounds.height", "Höhe (y)", "Ausdehnung des Bauraums in y ab dem Ursprung unten links", "len", 0, 1e6, True, group="bounds"),
-    Meta("bounds.edge_margin", "Randabstand", "Zusätzlicher Abstand aller Bauteile zum Rand", "len", 0, 1e6, group="bounds"),
-    Meta("bounds.parts_in_bounds", "Im Bauraum müssen liegen", "Alle Bauteile oder nur die Stangen", "enum", group="bounds",
-         options=(("all", "alle Bauteile"), ("rods", "nur Stangen"))),
-    Meta("search.optimizer", "Optimierer", "Suchstrategie", "enum", group="search",
-         options=(("pattern_greedy", "Muster und lokale Suche"), ("anneal_free", "Freie Verteilung (Annealing)"), ("exhaustive_small", "Exakt auf Raster (kleine Aufgaben)"),
-                  ("periodic_tile", "Wiederholendes Muster (Kachel)"))),
-    Meta("search.layout_goal", "Anordnungsziel", "compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum", "enum", group="search",
-         options=(("compact", "Kompakt (kleine Grundfläche)"), ("spread", "Verteilt über den Bauraum"))),
-    Meta("search.patterns", "Muster (square, hex_x, hex_y)", "Verteilungsstruktur der Kandidaten", "liststr", group="search"),
-    Meta("search.fixed_pitch", "Feste Teilung (optional)", "Nur diese Rasterteilung verwenden statt sie zu suchen", "len", 0, 100000, True, group="search", optional=True),
-    Meta("search.angle_step", "Winkelschritt (Grad)", "Raster der zulässigen Motorwinkel", "num", 0, 360, True, group="search"),
-    Meta("search.angle_min", "Winkel von (Grad)", "Kleinster Motorwinkel", "num", -3600, 3600, group="search"),
-    Meta("search.angle_max", "Winkel bis (Grad, exklusiv)", "360 = voller Kreis", "num", -3600, 3600, group="search"),
-    Meta("search.allowed_angles", "Nur diese Winkel (Liste, leer = Raster)", "Explizite Liste erlaubter Motorwinkel", "list", group="search", optional=True),
-    Meta("search.time_limit_s", "Zeitlimit (s)", "Maximale Rechenzeit", "num", 0, 86400, True, group="search"),
-    Meta("search.max_candidates", "Max. Kandidaten", "Maximale Anzahl geprüften Platzierungen", "int", 1, 10**12, group="search"),
-    Meta("search.seed", "Seed", "Zufallsstartwert für reproduzierbare Läufe", "int", 0, 2**31 - 1, group="search"),
-    Meta("search.top_k", "Anzahl Lösungen", "Wie viele beste Lösungen behalten werden", "int", 1, 50, group="search"),
-    Meta("search.refine_fraction", "Anteil lokale Suche", "Zeitanteil der Verfeinerung (0 bis 0.9)", "num", 0, 0.9, group="search"),
-    Meta("search.stagnation_s", "Stagnation (s, optional)", "Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert", "num", 0, 86400, True, group="search", optional=True),
-    Meta("search.tile_rods", "Schrauben je Kachel", "Kachelmuster. So viele Schrauben enthält eine Kachel, die sich über den Bauraum wiederholt (Ebene und Motorwinkel wiederholen sich mit)", "int", 1, 8, group="search"),
-    Meta("search.tile_width", "Kachelbreite (optional)", "Kachelmuster. Breite der Kachel in x, leer heißt kleinste passende Breite suchen", "len", 0, 1e5, True, group="search", optional=True),
-    Meta("search.tile_height", "Kachelhöhe (optional)", "Kachelmuster. Höhe der Kachel in y, leer heißt kleinste passende Höhe suchen", "len", 0, 1e5, True, group="search", optional=True),
-    Meta("search.tile_step", "Kachelraster", "Kachelmuster. Raster der Kachelgrößen und Schraubenabstände", "len", 0, 100, True, group="search"),
-    Meta("search.workers", "Parallele Läufe", "Anzahl Prozesse für unabhängige Seeds (1 = ohne Parallelisierung)", "int", 1, 64, group="search"),
-    Meta("search.weights.count", "Anzahl Stangen", "Gewicht des Ziels Anzahl", "num", 0, 1000, group="weights"),
-    Meta("search.weights.area", "Kleine Grundfläche", "Gewicht des Ziels Grundfläche", "num", 0, 1000, group="weights"),
-    Meta("search.weights.uniformity", "Gleichmäßige Verteilung", "Gewicht der gleichmäßigen Nachbarabstände", "num", 0, 1000, group="weights"),
-    Meta("search.weights.regularity", "Regelmäßiges Muster", "Gewicht der Quadrat oder Hexagonalordnung", "num", 0, 1000, group="weights"),
+    Meta("name", "text", group="general"),
+    Meta("target_count", "int", 1, 100000, group="general"),
+    Meta("clearance", "len", 0, 1000, group="general"),
+    Meta("tolerance", "len", 0, 1000, group="general"),
+    Meta("rod.diameter", "len", 0, 1000, True, group="rod"),
+    Meta("rod.stroke", "len", 0, 100000, True, group="rod"),
+    Meta("rod.engage_below", "len", 0, 100000, group="rod"),
+    Meta("rod.engage_above", "len", 0, 100000, group="rod"),
+    Meta("rod.length_tolerance", "len", 0, 100000, group="rod"),
+    Meta("rod.retract_depth", "len", 0, 100000, group="rod"),
+    Meta("rod.hole_clearance", "len", 0, 1000, group="rod"),
+    Meta("motor.width", "len", 0, 10000, True, group="motor"),
+    Meta("motor.depth", "len", 0, 10000, True, group="motor"),
+    Meta("motor.height", "len", 0, 10000, True, group="motor"),
+    Meta("motor.shaft_x", "len", -10000, 10000, group="motor"),
+    Meta("motor.axis_height", "len", 0, 10000, group="motor"),
+    Meta("motor.gear_diameter", "len", 0, 10000, True, group="motor"),
+    Meta("motor.gear_width", "len", 0, 10000, True, group="motor"),
+    Meta("motor.gear_gap", "len", 0, 10000, group="motor"),
+    Meta("motor.center_distance", "len", 0, 10000, group="motor"),
+    Meta("motor.center_distance_min", "len", 0, 10000, group="motor", optional=True),
+    Meta("motor.center_distance_max", "len", 0, 10000, group="motor", optional=True),
+    Meta("motor.center_distance_steps", "int", 1, 50, group="motor"),
+    Meta("motor.own_clearance", "len", 0, 1000, group="motor"),
+    Meta("motor.mount", "enum", options=MOUNT_MODES, group="motor"),
+    Meta("stack.n_motor_planes", "int", 1, 1000, group="stack"),
+    Meta("stack.mode", "enum", options=STACK_MODES, group="stack"),
+    Meta("stack.uniform_spacing", "len", 0, 100000, True, group="stack"),
+    Meta("stack.gaps", "lenlist", group="stack"),
+    Meta("stack.distances", "lenlist", group="stack"),
+    Meta("stack.thickness", "len", 0, 1000, True, group="stack"),
+    Meta("stack.g0_thickness", "len", 0, 1000, True, group="stack"),
+    Meta("stack.thicknesses", "lenlist", group="stack", optional=True),
+    Meta("stack.allowed_planes", "listint", group="stack", optional=True),
+    Meta("bounds.width", "len", 0, 1e6, True, group="bounds"),
+    Meta("bounds.height", "len", 0, 1e6, True, group="bounds"),
+    Meta("bounds.edge_margin", "len", 0, 1e6, group="bounds"),
+    Meta("bounds.parts_in_bounds", "enum", options=("all", "rods"), group="bounds"),
+    Meta("search.optimizer", "enum", options=("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile"), group="search"),
+    Meta("search.layout_goal", "enum", options=("compact", "spread"), group="search"),
+    Meta("search.patterns", "liststr", group="search"),
+    Meta("search.fixed_pitch", "len", 0, 100000, True, group="search", optional=True),
+    Meta("search.angle_step", "num", 0, 360, True, group="search"),
+    Meta("search.angle_min", "num", -3600, 3600, group="search"),
+    Meta("search.angle_max", "num", -3600, 3600, group="search"),
+    Meta("search.allowed_angles", "list", group="search", optional=True),
+    Meta("search.time_limit_s", "num", 0, 86400, True, group="search"),
+    Meta("search.max_candidates", "int", 1, 10**12, group="search"),
+    Meta("search.seed", "int", 0, 2**31 - 1, group="search"),
+    Meta("search.top_k", "int", 1, 50, group="search"),
+    Meta("search.refine_fraction", "num", 0, 0.9, group="search"),
+    Meta("search.stagnation_s", "num", 0, 86400, True, group="search", optional=True),
+    Meta("search.tile_rods", "int", 1, 8, group="search"),
+    Meta("search.tile_width", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.tile_height", "len", 0, 1e5, True, group="search", optional=True),
+    Meta("search.tile_step", "len", 0, 100, True, group="search"),
+    Meta("search.workers", "int", 1, 64, group="search"),
+    Meta("search.weights.count", "num", 0, 1000, group="weights"),
+    Meta("search.weights.area", "num", 0, 1000, group="weights"),
+    Meta("search.weights.uniformity", "num", 0, 1000, group="weights"),
+    Meta("search.weights.regularity", "num", 0, 1000, group="weights"),
 ]
 META_BY_PATH = {m.path: m for m in FIELD_META}
 NUMERIC_KINDS = ("len", "num", "int")
@@ -615,65 +610,65 @@ def _get(obj: Any, path: str) -> Any:
 
 
 def _validate_fields(proj: Project, errs: list[str]) -> None:
-    """Prueft jedes Feld aus FIELD_META einzeln plus die Zahlen in Listen ohne eigene Meta."""
+    """Check every FIELD_META field on its own, plus the numbers in lists without own meta."""
     for meta in FIELD_META:
         value = _get(proj, meta.path)
         if value is None:
             if not meta.optional:
-                errs.append(f"{meta.path}. Wert fehlt")
+                errs.append(tr("value.missing", path=meta.path))
             continue
         if meta.kind in NUMERIC_KINDS:
             _check_number(meta, value, errs)
         elif meta.kind == "enum":
-            allowed = [option[0] for option in (meta.options or ())]
+            allowed = list(meta.options or ())
             if value not in allowed:
-                errs.append(f"{meta.path}. Unzulässiger Wert '{value}'. Erlaubt. {allowed}")
+                errs.append(tr("value.enum", path=meta.path, value=value, allowed=allowed))
         elif meta.kind in NUMBER_LIST_KINDS:
             if not all(is_finite_number(x) for x in value):
-                errs.append(f"{meta.path}. Alle Einträge müssen endliche Zahlen sein")
+                errs.append(tr("value.list_numbers", path=meta.path))
     for i, obstacle in enumerate(proj.obstacles):
         for name in ("x", "y", "w", "h", "r", "angle", "z0", "z1"):
             if not is_finite_number(getattr(obstacle, name)):
-                errs.append(f"obstacles[{i}].{name}. Muss eine endliche Zahl sein")
+                errs.append(tr("value.finite", path=f"obstacles[{i}].{name}"))
     for key, zones in proj.stack.mount_zones.items():
         if not all(is_finite_number(c) for zone in zones for c in zone):
-            errs.append(f"stack.mount_zones[{key}]. Koordinaten müssen endliche Zahlen sein")
+            errs.append(tr("value.coordinates", path=f"stack.mount_zones[{key}]"))
     if proj.motor.outline is not None:
         if not all(is_finite_number(c) for p in proj.motor.outline for c in p):
-            errs.append("motor.outline. Koordinaten müssen endliche Zahlen sein")
+            errs.append(tr("value.coordinates", path="motor.outline"))
 
 
 def _check_number(meta: Meta, value: Any, errs: list[str]) -> None:
     if not is_finite_number(value):
-        errs.append(f"{meta.path}. Muss eine endliche Zahl sein")
+        errs.append(tr("value.finite", path=meta.path))
         return
     if meta.lo is not None:
-        too_small = value <= meta.lo if meta.strict_lo else value < meta.lo
-        if too_small:
-            relation = "größer als" if meta.strict_lo else "mindestens"
-            errs.append(f"{meta.path}. Muss {relation} {meta.lo:g} sein (ist {value:g})")
+        if meta.strict_lo and value <= meta.lo:
+            errs.append(tr("value.greater", path=meta.path, lo=meta.lo, value=value))
+        elif not meta.strict_lo and value < meta.lo:
+            errs.append(tr("value.at_least", path=meta.path, lo=meta.lo, value=value))
     if meta.hi is not None and value > meta.hi:
-        errs.append(f"{meta.path}. Darf höchstens {meta.hi:g} sein (ist {value:g})")
+        errs.append(tr("value.at_most", path=meta.path, hi=meta.hi, value=value))
 
 
-_isnum = is_finite_number  # Name aus frueheren Versionen
+_isnum = is_finite_number  # name from earlier versions
 
 
 # ---------------------------------------------------------------------------
-# 4. Typgetriebenes Einlesen. Prueft Typen und wandelt ganzzahlige Floats in int um.
+# 4. Type driven reading. Checks types and converts integral floats to int.
 # ---------------------------------------------------------------------------
-_BAD = object()  # Markierung fuer einen ungueltigen Wert (die Fehlermeldung steht schon in errs)
+_BAD = object()  # marker of an invalid value (the message is already in errs)
 
 
 def _build(cls, data: Any, path: str, errs: list[str]):
-    """Baut eine Dataclass aus einem Dictionary. Ungueltige Felder behalten ihren Standardwert."""
+    """Build a dataclass from a dictionary. Invalid fields keep their default."""
     if not isinstance(data, dict):
-        errs.append(f"{path.rstrip('.') or cls.__name__}. Objekt erwartet")
+        errs.append(tr("value.object", path=path.rstrip(".") or cls.__name__))
         return cls()
     hints = typing.get_type_hints(cls)
     names = {f.name for f in dataclasses.fields(cls)}
     for key in sorted(set(data) - names, key=str):
-        errs.append(f"{path}{key}. Unbekanntes Feld in {cls.__name__}")
+        errs.append(tr("value.unknown_field", path=f"{path}{key}", cls=cls.__name__))
     kwargs: dict[str, Any] = {}
     for key, raw in data.items():
         if key in names:
@@ -684,10 +679,10 @@ def _build(cls, data: Any, path: str, errs: list[str]):
 
 
 def _coerce(value: Any, hint: Any, path: str, errs: list[str]):
-    """Prueft value gegen die Typangabe hint. Gibt den (umgewandelten) Wert oder _BAD zurueck."""
+    """Check value against the type hint. Returns the (converted) value or _BAD."""
     origin = typing.get_origin(hint)
     args = typing.get_args(hint)
-    if origin in (typing.Union, types.UnionType):  # Optional[X] oder X | None
+    if origin in (typing.Union, types.UnionType):  # Optional[X] or X | None
         if value is None:
             return None
         inner = [a for a in args if a is not type(None)][0]
@@ -696,40 +691,40 @@ def _coerce(value: Any, hint: Any, path: str, errs: list[str]):
         return _build(hint, value, path + ".", errs)
     if hint is bool:
         if not isinstance(value, bool):
-            errs.append(f"{path}. Muss true oder false sein")
+            errs.append(tr("value.bool", path=path))
             return _BAD
         return value
     if hint is float:
         if not is_finite_number(value):
-            errs.append(f"{path}. Muss eine endliche Zahl sein")
+            errs.append(tr("value.finite", path=path))
             return _BAD
         return float(value)
     if hint is int:
         if not is_finite_number(value) or int(value) != value:
-            errs.append(f"{path}. Muss eine ganze Zahl sein")
+            errs.append(tr("value.integer", path=path))
             return _BAD
         return int(value)
     if hint is str:
         if not isinstance(value, str):
-            errs.append(f"{path}. Muss Text sein")
+            errs.append(tr("value.text", path=path))
             return _BAD
         return value
     if origin is list:
         if not isinstance(value, list):
-            errs.append(f"{path}. Liste erwartet")
+            errs.append(tr("value.list", path=path))
             return _BAD
         items = [_coerce(v, args[0], f"{path}[{i}]", errs) for i, v in enumerate(value)]
         return [v for v in items if v is not _BAD]
     if origin is dict:
         if not isinstance(value, dict):
-            errs.append(f"{path}. Objekt erwartet")
+            errs.append(tr("value.object", path=path))
             return _BAD
         return {str(k): _coerce(v, args[1], f"{path}[{k}]", errs) for k, v in value.items()}
     return value
 
 
 def motor_from_dict(data: Any) -> MotorSpec:
-    """Liest eine MotorSpec aus einem Dictionary (Typpruefung wie bei Project.from_dict, ohne Projektvalidierung)."""
+    """Read a MotorSpec from a dictionary (type checks as in Project.from_dict, without project validation)."""
     errs: list[str] = []
     motor = _build(MotorSpec, data, "motor.", errs)
     if errs:
@@ -738,12 +733,12 @@ def motor_from_dict(data: Any) -> MotorSpec:
 
 
 def schema() -> dict[str, Any]:
-    """Beschreibung aller Felder fuer die UI (JSON serialisierbar)."""
+    """Description of all fields for the UI (labels in the current language)."""
     return {
         "fields": [
             {
                 "path": m.path, "label": m.label, "tip": m.tip, "kind": m.kind, "lo": m.lo, "hi": m.hi,
-                "strict_lo": m.strict_lo, "options": [list(o) for o in m.options] if m.options else None,
+                "strict_lo": m.strict_lo, "options": [[o, m.option_label(o)] for o in m.options] if m.options else None,
                 "group": m.group, "optional": m.optional,
             }
             for m in FIELD_META

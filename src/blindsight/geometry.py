@@ -1,15 +1,14 @@
-"""2D und 2.5D Geometrie ohne externe Abhaengigkeiten.
+"""2D and 2.5D geometry without external dependencies.
 
-Alle Bauteile werden als Prismen dargestellt. Ein Prisma besteht aus einem
-konvexen 2D Grundriss (Kreis oder konvexes Polygon) und einem Z Intervall.
-Die Abstandsberechnung liefert den echten euklidischen Mindestabstand im Raum
-(nicht nur Mittelpunktabstaende).
+All parts are represented as prisms. A prism consists of a convex 2D footprint (circle or convex
+polygon) and a z interval. The distance computation returns the true Euclidean minimum distance in
+space (not just centre distances).
 
-Konventionen
-  * Laengen in mm, Winkel in Radiant (Parameter heissen ``angle_rad``).
-  * Polygone sind gegen den Uhrzeigersinn orientiert (positive Flaeche).
-  * Die Hilfen hier werden auch von Konfiguration und Skizze genutzt, damit es
-    jede Formel (Flaeche, Huelle, Konvexitaet, SAT) nur einmal gibt.
+Conventions
+  * Lengths in mm, angles in radians (parameters are called ``angle_rad``).
+  * Polygons are oriented counter clockwise (positive area).
+  * The helpers here are also used by the configuration and the sketch, so every formula
+    (area, hull, convexity, SAT) exists only once.
 """
 
 from __future__ import annotations
@@ -21,15 +20,14 @@ from typing import Sequence
 Point = tuple[float, float]
 BBox = tuple[float, float, float, float]  # (xmin, ymin, xmax, ymax)
 
-CIRCLE_OUTLINE_SEGMENTS = 48  # Naeherung eines Kreises fuer Darstellung und Export
+CIRCLE_OUTLINE_SEGMENTS = 48  # polygon approximation of a circle for display and export
 
 
 class Footprint:
-    """Konvexer 2D Grundriss.
+    """Convex 2D footprint.
 
-    kind ist ``"c"`` (Kreis mit Mittelpunkt cx, cy und Radius r) oder ``"p"``
-    (Polygon, Eckpunkte in ``pts`` gegen den Uhrzeigersinn, cx, cy = Eckenmittel).
-    ``bbox`` ist bei beiden Arten exakt.
+    kind is ``"c"`` (circle with centre cx, cy and radius r) or ``"p"`` (polygon, corners in
+    ``pts`` counter clockwise, cx, cy = mean of the corners). ``bbox`` is exact for both kinds.
     """
 
     __slots__ = ("kind", "pts", "cx", "cy", "r", "bbox")
@@ -50,15 +48,15 @@ class Footprint:
     @staticmethod
     def circle(cx: float, cy: float, r: float) -> "Footprint":
         if r < 0:
-            raise ValueError("Radius darf nicht negativ sein")
+            raise ValueError("radius must not be negative")
         return Footprint("c", (), cx, cy, r)
 
     @staticmethod
     def polygon(pts: Sequence[Point]) -> "Footprint":
-        """Polygon aus Eckpunkten. Im Uhrzeigersinn uebergebene Punkte werden umgedreht."""
+        """Polygon from corner points. Points given clockwise are reversed."""
         pts = tuple((float(x), float(y)) for x, y in pts)
         if len(pts) < 3:
-            raise ValueError("Polygon braucht mindestens 3 Punkte")
+            raise ValueError("a polygon needs at least 3 points")
         if signed_area(pts) < 0:
             pts = tuple(reversed(pts))
         cx = sum(p[0] for p in pts) / len(pts)
@@ -67,11 +65,11 @@ class Footprint:
 
     @staticmethod
     def rect(cx: float, cy: float, w: float, d: float, angle_rad: float = 0.0) -> "Footprint":
-        """Um (cx, cy) zentriertes Rechteck w (x) mal d (y), gedreht um angle_rad."""
+        """Rectangle w (x) by d (y) centred at (cx, cy), rotated by angle_rad."""
         return Footprint.polygon(rect_corners(cx, cy, w, d, angle_rad))
 
     def outline(self) -> list[Point]:
-        """Punkte der Kontur (ein Kreis wird als Vieleck angenaehert, nur fuer Darstellung)."""
+        """Points of the outline (a circle is approximated by a polygon, for display only)."""
         if self.kind == "c":
             n = CIRCLE_OUTLINE_SEGMENTS
             return [
@@ -82,15 +80,15 @@ class Footprint:
 
 
 # ---------------------------------------------------------------------------
-# Grundformeln
+# Basic formulas
 # ---------------------------------------------------------------------------
 def cross(o: Sequence[float], a: Sequence[float], b: Sequence[float]) -> float:
-    """z Komponente von (a - o) x (b - o). Positiv, wenn o, a, b gegen den Uhrzeigersinn liegen."""
+    """z component of (a - o) x (b - o). Positive when o, a, b are counter clockwise."""
     return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
 
 
 def signed_area(pts: Sequence[Sequence[float]]) -> float:
-    """Vorzeichenbehaftete Flaeche (Gausssche Trapezformel). Positiv gegen den Uhrzeigersinn."""
+    """Signed area (shoelace formula). Positive for counter clockwise polygons."""
     area = 0.0
     n = len(pts)
     for i in range(n):
@@ -100,28 +98,28 @@ def signed_area(pts: Sequence[Sequence[float]]) -> float:
     return area / 2.0
 
 
-_signed_area = signed_area  # Name aus frueheren Versionen
+_signed_area = signed_area  # name from earlier versions
 
 
 def polygon_area(pts: Sequence[Point]) -> float:
-    """Betrag der Flaeche (0 fuer weniger als 3 Punkte)."""
+    """Absolute area (0 for fewer than 3 points)."""
     return abs(signed_area(pts)) if len(pts) >= 3 else 0.0
 
 
 def rotate(x: float, y: float, angle_rad: float) -> Point:
-    """Dreht den Vektor (x, y) um den Ursprung (gegen den Uhrzeigersinn)."""
+    """Rotate the vector (x, y) about the origin (counter clockwise)."""
     c, s = math.cos(angle_rad), math.sin(angle_rad)
     return (x * c - y * s, x * s + y * c)
 
 
 def rotate_point(px: float, py: float, ox: float, oy: float, angle_rad: float) -> Point:
-    """Dreht (px, py) um den Punkt (ox, oy) um angle_rad (gegen den Uhrzeigersinn)."""
+    """Rotate (px, py) about the point (ox, oy) by angle_rad (counter clockwise)."""
     dx, dy = rotate(px - ox, py - oy, angle_rad)
     return (ox + dx, oy + dy)
 
 
 def rect_corners(cx: float, cy: float, w: float, d: float, angle_rad: float = 0.0) -> list[Point]:
-    """Ecken eines um (cx, cy) zentrierten, gedrehten Rechtecks (gegen den Uhrzeigersinn)."""
+    """Corners of a rotated rectangle centred at (cx, cy) (counter clockwise)."""
     hw, hd = w / 2.0, d / 2.0
     out = []
     for lx, ly in ((-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd)):
@@ -131,7 +129,7 @@ def rect_corners(cx: float, cy: float, w: float, d: float, angle_rad: float = 0.
 
 
 def convex_hull_indices(points: Sequence[Sequence[float]]) -> list[int]:
-    """Indizes der konvexen Huelle (Monotone Chain), gegen den Uhrzeigersinn, ohne kollineare Punkte."""
+    """Indices of the convex hull (monotone chain), counter clockwise, without collinear points."""
     order = sorted(range(len(points)), key=lambda i: (points[i][0], points[i][1]))
     if len(order) <= 2:
         return order
@@ -150,7 +148,7 @@ def convex_hull_indices(points: Sequence[Sequence[float]]) -> list[int]:
 
 
 def convex_hull(points: Sequence[Point]) -> list[Point]:
-    """Konvexe Huelle als Punktliste (doppelte Punkte werden vorher entfernt)."""
+    """Convex hull as a list of points (duplicate points are removed first)."""
     pts = sorted(set((float(x), float(y)) for x, y in points))
     if len(pts) <= 2:
         return pts
@@ -158,9 +156,9 @@ def convex_hull(points: Sequence[Point]) -> list[Point]:
 
 
 def is_convex_ccw(pts: Sequence[Sequence[float]], rel_tol: float = 1e-9) -> bool:
-    """True, wenn das (gegen den Uhrzeigersinn orientierte) Polygon an keiner Ecke nach rechts abknickt.
+    """True if the (counter clockwise) polygon does not turn right at any corner.
 
-    Die Toleranz ist relativ zum Produkt der Kantenlaengen, kollineare Punkte sind erlaubt."""
+    The tolerance is relative to the product of the edge lengths, collinear points are allowed."""
     n = len(pts)
     for i in range(n):
         a, b, c = pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
@@ -173,7 +171,7 @@ def is_convex_ccw(pts: Sequence[Sequence[float]], rel_tol: float = 1e-9) -> bool
 
 
 # ---------------------------------------------------------------------------
-# Abstandsberechnung
+# Distance computation
 # ---------------------------------------------------------------------------
 def _point_segment_distance(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
     dx, dy = bx - ax, by - ay
@@ -186,7 +184,7 @@ def _point_segment_distance(px: float, py: float, ax: float, ay: float, bx: floa
 
 
 def point_in_convex(px: float, py: float, pts: Sequence[Point]) -> bool:
-    """True, wenn der Punkt im (oder auf dem Rand des) konvexen Polygon liegt."""
+    """True if the point lies inside (or on the boundary of) the convex polygon."""
     n = len(pts)
     for i in range(n):
         x1, y1 = pts[i]
@@ -197,7 +195,7 @@ def point_in_convex(px: float, py: float, pts: Sequence[Point]) -> bool:
 
 
 def point_polygon_distance(px: float, py: float, pts: Sequence[Point]) -> float:
-    """Abstand eines Punktes zu einem konvexen Polygon (0 innerhalb)."""
+    """Distance of a point to a convex polygon (0 inside)."""
     if point_in_convex(px, py, pts):
         return 0.0
     n = len(pts)
@@ -205,9 +203,9 @@ def point_polygon_distance(px: float, py: float, pts: Sequence[Point]) -> float:
 
 
 def sat_penetration(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) -> float:
-    """Kleinste Ueberlappung der Projektionen zweier konvexer Polygone (Satz der trennenden Achsen).
+    """Smallest overlap of the projections of two convex polygons (separating axis theorem).
 
-    0 oder negativ heisst getrennt oder nur beruehrend, positiv ist die Eindringtiefe in mm."""
+    0 or negative means separated or only touching, positive is the penetration depth in mm."""
     best = math.inf
     for poly in (a, b):
         n = len(poly)
@@ -229,7 +227,7 @@ def sat_penetration(a: Sequence[Sequence[float]], b: Sequence[Sequence[float]]) 
 
 
 def polygon_distance(a: Sequence[Point], b: Sequence[Point]) -> float:
-    """Exakter Mindestabstand zweier konvexer Polygone (0 bei Ueberlappung oder Beruehrung)."""
+    """Exact minimum distance of two convex polygons (0 when overlapping or touching)."""
     if sat_penetration(a, b) >= 0:
         return 0.0
     best = math.inf
@@ -242,14 +240,14 @@ def polygon_distance(a: Sequence[Point], b: Sequence[Point]) -> float:
 
 
 def bbox_gap(a: BBox, b: BBox) -> float:
-    """Untere Schranke des Abstands zweier Grundrisse aus den Bounding Boxen."""
+    """Lower bound of the distance of two footprints from their bounding boxes."""
     dx = max(a[0] - b[2], b[0] - a[2], 0.0)
     dy = max(a[1] - b[3], b[1] - a[3], 0.0)
     return math.hypot(dx, dy)
 
 
 def footprint_distance(first: Footprint, second: Footprint) -> float:
-    """Exakter 2D Mindestabstand zweier Grundrisse (0 bei Ueberlappung)."""
+    """Exact 2D minimum distance of two footprints (0 when overlapping)."""
     if first.kind == "c" and second.kind == "c":
         return max(0.0, math.hypot(first.cx - second.cx, first.cy - second.cy) - first.r - second.r)
     if first.kind == "c":
@@ -261,7 +259,7 @@ def footprint_distance(first: Footprint, second: Footprint) -> float:
 
 @dataclass(frozen=True)
 class Prism:
-    """Extrudierter Grundriss mit Z Intervall [z0, z1]."""
+    """Extruded footprint with the z interval [z0, z1]."""
 
     fp: Footprint
     z0: float
@@ -269,20 +267,20 @@ class Prism:
 
     def __post_init__(self):
         if self.z1 < self.z0:
-            raise ValueError("z1 muss >= z0 sein")
+            raise ValueError("z1 must be >= z0")
 
 
 def z_gap(z0a: float, z1a: float, z0b: float, z1b: float) -> float:
-    """Vertikaler Abstand zweier Intervalle (negativ bei Ueberlappung)."""
+    """Vertical distance of two intervals (negative when overlapping)."""
     return max(z0a - z1b, z0b - z1a)
 
 
 def prism_distance(a: Prism, b: Prism, cutoff: float = math.inf) -> float:
-    """Euklidischer Mindestabstand zweier Prismen im Raum.
+    """Euclidean minimum distance of two prisms in space.
 
-    Ist eine guenstige untere Schranke (Z Abstand, Bounding Box) bereits >= cutoff, wird
-    diese Schranke zurueckgegeben und die exakte Rechnung gespart. Ergebnisse >= cutoff sind
-    daher nur untere Schranken, Ergebnisse < cutoff sind exakt.
+    If a cheap lower bound (z distance, bounding box) is already >= cutoff, that bound is returned
+    and the exact computation is skipped. Results >= cutoff are therefore only lower bounds,
+    results < cutoff are exact.
     """
     zg = max(z_gap(a.z0, a.z1, b.z0, b.z1), 0.0)
     if zg >= cutoff:

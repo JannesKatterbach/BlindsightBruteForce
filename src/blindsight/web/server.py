@@ -1,14 +1,18 @@
-"""Lokale Web Anwendung (nur Standardbibliothek).
+"""Local web application (standard library only).
 
-Start. ``python -m blindsight`` (oder ``blindsight``) und im Browser http://127.0.0.1:8765 oeffnen.
-Die Oberflaeche ist eine reine Darstellung. Alle Berechnungen laufen im Python Kern.
+Start. ``python -m blindsight`` (or ``blindsight``) and open http://127.0.0.1:8765 in the browser.
+The UI only displays. All computations run in the Python core.
 
-Aufbau
-  App          fachliche Endpunkte, unabhaengig von HTTP (``dispatch`` liefert eine Response)
-  ROUTES       Tabelle (Methode, Pfad, Handler). Ein neuer Endpunkt ist ein Eintrag plus Methode
-  make_handler HTTP Anbindung mit Host und Origin Pruefung, Groessenlimit und Content Type Pruefung
+Structure
+  App          endpoints, independent of HTTP (``dispatch`` returns a Response)
+  ROUTES       table (method, path, handler). A new endpoint is an entry plus a method
+  make_handler HTTP binding with host and origin check, size limit and content type check
 
-Fehlerantworten haben immer die Form {"error": erste Meldung, "errors": [alle Meldungen]}.
+Language. Every request is answered in the language from the header ``X-Language``, otherwise the query
+parameter ``lang`` (for downloads via links), otherwise ``Accept-Language``, otherwise German. All
+texts of a response (also results of earlier runs) are rendered in that language.
+
+Error responses always have the form {"error": first message, "errors": [all messages]}.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from .. import sketch as sk
 from ..analysis import analyze
 from ..config import ConfigError, Project, motor_from_dict, schema
 from ..export import EXPORTERS, build_geometry, exporter_schema
+from ..i18n import LANGUAGE_NAMES, LANGUAGES, LocalText, current_language, localize, negotiate, normalize_language, tr, use_language
 from ..layout import Placement
 from ..model import Model
 from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
@@ -42,7 +47,7 @@ MAX_PLACEMENTS = 5000
 DEFAULT_PORT = 8765
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 JSON_TYPE = "application/json; charset=utf-8"
-# Feste MIME Typen fuer statische Dateien (mit nosniff darf der Browser nicht raten)
+# Fixed MIME types of static files (with nosniff the browser must not guess)
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -52,15 +57,15 @@ STATIC_TYPES = {
     ".png": "image/png",
     ".ico": "image/x-icon",
 }
-# Content Types, die ein Browser ohne Vorabfrage (CORS Preflight) seitenuebergreifend senden darf.
-# POST mit diesen Typen wird abgewiesen, die UI sendet application/json.
+# Content types a browser may send cross site without a preflight request (CORS preflight).
+# POST with these types is rejected, the UI sends application/json.
 SIMPLE_CONTENT_TYPES = ("application/x-www-form-urlencoded", "multipart/form-data", "text/plain")
 
 __all__ = ["App", "Response", "analyze", "make_handler", "serve", "main"]
 
 
 # ---------------------------------------------------------------------------
-# Antworten und Anfragen
+# Responses and requests
 # ---------------------------------------------------------------------------
 @dataclass
 class Response:
@@ -74,7 +79,8 @@ class Response:
 
 
 def json_response(obj: Any, code: int = 200) -> Response:
-    """JSON Antwort. NaN und Unendlich sind kein gueltiges JSON und werden als Fehler behandelt."""
+    """JSON response in the current language. NaN and infinity are not valid JSON and count as errors."""
+    obj = localize(obj, current_language())
     return Response(code, json.dumps(obj, ensure_ascii=False, allow_nan=False).encode())
 
 
@@ -84,21 +90,21 @@ def error_response(code: int, errors: list[str] | str) -> Response:
 
 
 class BadRequest(ValueError):
-    """Ungueltige Anfrage (400)."""
+    """Invalid request (400)."""
 
 
 def _reject_constant(name: str) -> Any:
-    raise BadRequest(f"{name} ist kein gültiger Zahlenwert")
+    raise BadRequest(tr("server.invalid_number", name=name))
 
 
 def parse_json(body: bytes) -> Any:
-    """JSON aus dem Anfragekoerper. NaN, Infinity und zu tiefe Schachtelung fuehren zu BadRequest."""
+    """JSON from the request body. NaN, Infinity and too deep nesting raise BadRequest."""
     try:
         return json.loads(body or b"{}", parse_constant=_reject_constant)
     except RecursionError:
-        raise BadRequest("JSON ist zu tief verschachtelt") from None
+        raise BadRequest(tr("server.json_too_deep")) from None
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise BadRequest(f"Kein gültiges JSON. {exc}") from None
+        raise BadRequest(tr("server.invalid_json", error=str(exc))) from None
 
 
 @dataclass
@@ -107,7 +113,7 @@ class Request:
     path: str
     query: dict[str, list[str]]
     body: bytes
-    tail: str = ""  # Pfadrest nach einem Praefix (z.B. Job Id)
+    tail: str = ""  # rest of the path after a prefix (e.g. job id)
 
     @property
     def data(self) -> Any:
@@ -116,19 +122,19 @@ class Request:
     def dict_data(self) -> dict:
         data = self.data
         if not isinstance(data, dict):
-            raise BadRequest("Objekt erwartet")
+            raise BadRequest(tr("server.object_expected"))
         return data
 
     def int_query(self, name: str, default: int = 0) -> int:
         try:
             return int(self.query.get(name, [str(default)])[0])
         except ValueError:
-            raise BadRequest(f"{name} muss eine ganze Zahl sein") from None
+            raise BadRequest(tr("server.query_integer", name=name)) from None
 
 
-def _int(v: Any, name: str = "Wert") -> int:
+def _int(v: Any, name: str) -> int:
     if isinstance(v, bool) or not isinstance(v, int):
-        raise BadRequest(f"{name}. Ganze Zahl erwartet")
+        raise BadRequest(tr("server.integer_expected", name=name))
     return v
 
 
@@ -140,29 +146,45 @@ def _examples_dir() -> Optional[Path]:
 
 
 def _host_name(host: str) -> str:
-    """Hostname ohne Port und ohne eckige Klammern (IPv6), klein geschrieben."""
+    """Host name without port and square brackets (IPv6), lower case."""
     host = host.strip().lower()
     if host.startswith("["):
         return host[1:].split("]", 1)[0]
-    if host.count(":") == 1:  # Name oder IPv4 mit Port
+    if host.count(":") == 1:  # name or IPv4 with port
         return host.rsplit(":", 1)[0]
-    return host  # ohne Port oder nackte IPv6 Adresse
+    return host  # without port or bare IPv6 address
 
 
 def _url_host(host: str) -> str:
-    """Host fuer eine URL (IPv6 in eckigen Klammern)."""
+    """Host for a URL (IPv6 in square brackets)."""
     return f"[{host}]" if ":" in host else host
 
 
 # ---------------------------------------------------------------------------
-# Anwendung
+# Application
 # ---------------------------------------------------------------------------
 Handler = Callable[["App", Request], Response]
-ROUTES: list[tuple[str, str, bool, str]] = []  # (Methode, Pfad oder Praefix, ist Praefix, Methodenname)
+ROUTES: list[tuple[str, str, bool, str]] = []  # (method, path or prefix, is prefix, method name)
+
+
+def request_language(headers: Optional[dict], query: dict) -> str:
+    """Language of a request. X-Language, then ?lang=, then Accept-Language, then the default."""
+    headers = {k.lower(): v for k, v in (headers or {}).items()}
+    explicit = headers.get("x-language") or (query.get("lang") or [None])[0]
+    if explicit:
+        return normalize_language(explicit)
+    return negotiate(headers.get("accept-language"))
+
+
+def _message(exc: Exception) -> Any:
+    """Message of an exception, keeping a LocalText so it can be rendered in the request language."""
+    if len(exc.args) == 1 and isinstance(exc.args[0], LocalText):
+        return exc.args[0]
+    return str(exc)
 
 
 def route(method: str, path: str, prefix: bool = False):
-    """Dekorator fuer App Methoden. Traegt den Endpunkt in ROUTES ein."""
+    """Decorator for App methods. Registers the endpoint in ROUTES."""
     def decorate(fn):
         ROUTES.append((method, path, prefix, fn.__name__))
         return fn
@@ -172,15 +194,15 @@ def route(method: str, path: str, prefix: bool = False):
 class App:
     def __init__(self, allowed_hosts: set[str] | None = None) -> None:
         self.jobs = JobManager()
-        # None = nur Loopback Namen. Eintraege ohne Port, IPv6 ohne Klammern
+        # None = loopback names only. Entries without port, IPv6 without brackets
         self.allowed_hosts = {_host_name(h) for h in allowed_hosts} if allowed_hosts else None
 
-    # -- Sicherheit ------------------------------------------------------------
+    # -- Security ------------------------------------------------------------
     def host_ok(self, host: str | None, origin: str | None) -> bool:
-        """Schutz gegen DNS Rebinding und fremde Webseiten, die lokale Dienste ansprechen.
+        """Protection against DNS rebinding and foreign web pages that address local services.
 
-        Host muss ein erlaubter Name sein. Ein Origin muss ebenfalls erlaubt sein. Origin "null"
-        (Sandbox, file://) wird abgewiesen, weil sich dahinter jede Seite verbergen kann."""
+        Host must be an allowed name. An origin must be allowed as well. Origin "null" (sandbox,
+        file://) is rejected because any page can hide behind it."""
         allowed = self.allowed_hosts or LOOPBACK_HOSTS
         if host is None or _host_name(host) not in allowed:
             return False
@@ -191,9 +213,13 @@ class App:
                 return False
         return True
 
-    # -- Verteilung --------------------------------------------------------------
-    def dispatch(self, method: str, path: str, query: dict, body: bytes) -> Response:
-        """Sucht den Endpunkt in ROUTES und fuehrt ihn aus. Fehler werden zu 4xx oder 500."""
+    # -- Dispatch --------------------------------------------------------------
+    def dispatch(self, method: str, path: str, query: dict, body: bytes, headers: Optional[dict] = None) -> Response:
+        """Find the endpoint in ROUTES and run it in the request language. Errors become 4xx or 500."""
+        with use_language(request_language(headers, query)):
+            return self._dispatch(method, path, query, body)
+
+    def _dispatch(self, method: str, path: str, query: dict, body: bytes) -> Response:
         try:
             for r_method, r_path, prefix, name in ROUTES:
                 if r_method != method:
@@ -202,26 +228,25 @@ class App:
                     return getattr(self, name)(Request(method, path, query, body, path[len(r_path):]))
                 if not prefix and path == r_path:
                     return getattr(self, name)(Request(method, path, query, body))
-            return error_response(404, "nicht gefunden")
+            return error_response(404, tr("server.not_found"))
         except ConfigError as exc:
             return error_response(400, exc.errors)
         except SvgImportError as exc:
-            return error_response(400, str(exc))
+            return error_response(400, _message(exc))
         except JobNotFound as exc:
-            return error_response(404, str(exc))
-        except BadRequest as exc:
-            return error_response(400, f"Ungültige Anfrage. {exc}")
-        except ValueError as exc:  # Pruefungen im Kern (Placement, Skizze, Export) melden ValueError
-            return error_response(400, f"Ungültige Anfrage. {exc}")
-        except Exception as exc:  # Programmfehler. Der Server bleibt erreichbar
+            return error_response(404, exc.message)
+        except ValueError as exc:  # checks in the core (placement, sketch, export) raise ValueError
+            return error_response(400, tr("server.bad_request", error=_message(exc)))
+        except Exception as exc:  # programming error. The server stays reachable
             traceback.print_exc()
-            return error_response(500, f"Interner Fehler. {type(exc).__name__}: {exc}")
+            return error_response(500, tr("server.internal_error", error=f"{type(exc).__name__}: {exc}"))
 
-    def handle(self, method: str, path: str, query: dict, body: bytes) -> tuple[int, str, bytes]:
-        """Wie dispatch, als Tupel (Code, Content Type, Inhalt). Schnittstelle aus frueheren Versionen."""
-        return self.dispatch(method, path, query, body).as_tuple()
+    def handle(self, method: str, path: str, query: dict, body: bytes,
+               headers: Optional[dict] = None) -> tuple[int, str, bytes]:
+        """Like dispatch, as a tuple (code, content type, body)."""
+        return self.dispatch(method, path, query, body, headers).as_tuple()
 
-    # -- Statische Dateien und Stammdaten -------------------------------------------
+    # -- Static files and master data -------------------------------------------
     @route("GET", "/")
     @route("GET", "/index.html")
     def index(self, req: Request) -> Response:
@@ -231,7 +256,7 @@ class App:
     def static_file(self, req: Request) -> Response:
         f = (STATIC / req.tail).resolve()
         if STATIC.resolve() not in f.parents or not f.is_file():
-            return error_response(404, "nicht gefunden")
+            return error_response(404, tr("server.not_found"))
         return Response(200, f.read_bytes(), STATIC_TYPES.get(f.suffix.lower(), "application/octet-stream"))
 
     @route("GET", "/favicon.ico")
@@ -243,6 +268,8 @@ class App:
         out = schema()
         out["sketch_constraints"] = sk.constraint_schema()
         out["exporters"] = exporter_schema()
+        out["languages"] = [{"code": code, "name": LANGUAGE_NAMES[code]} for code in LANGUAGES]
+        out["language"] = current_language()
         return json_response(out)
 
     @route("GET", "/api/default")
@@ -259,13 +286,13 @@ class App:
         d = _examples_dir()
         f = d / (Path(req.tail).name + ".json") if d else None
         if not f or not f.is_file():
-            return error_response(404, "Beispiel nicht gefunden")
+            return error_response(404, tr("server.example_not_found"))
         try:
             return json_response(json.loads(f.read_text(encoding="utf-8")))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            return error_response(500, f"Beispiel nicht lesbar. {exc}")
+            return error_response(500, tr("server.example_unreadable", error=str(exc)))
 
-    # -- Laeufe ----------------------------------------------------------------------
+    # -- Runs ----------------------------------------------------------------------
     @route("POST", "/api/start")
     def start(self, req: Request) -> Response:
         job = self.jobs.start(Project.from_dict(req.data))
@@ -290,7 +317,7 @@ class App:
     def result(self, req: Request) -> Response:
         job = self.jobs.get(req.tail)
         if job.result is None:
-            return error_response(409, "Noch kein Ergebnis")
+            return error_response(409, tr("server.no_result"))
         out = {"result": job.result.as_dict(), "geometry": None}
         out["result"]["solutions"] = [
             {"score": s.score.as_dict(), "count": len(s.placements), **({"tile": s.tile} if s.tile else {})}
@@ -307,7 +334,7 @@ class App:
         job_id, _, name = req.tail.partition(".")
         job = self.jobs.get(job_id)
         if job.result is None or not job.result.solutions or name not in EXPORTERS:
-            return error_response(404, "Export nicht möglich")
+            return error_response(404, tr("server.export_impossible"))
         idx = self._solution_index(req, len(job.result.solutions))
         exporter = EXPORTERS[name]()
         response = self._export(exporter, build_geometry(job.model, job.result.solutions[idx].placements))
@@ -322,13 +349,13 @@ class App:
     def _export(exporter, geometry: dict) -> Response:
         return Response(200, exporter.export(geometry).encode(), exporter.mime + "; charset=utf-8")
 
-    # -- Anordnungen ohne Lauf ---------------------------------------------------------
+    # -- Arrangements without a run ---------------------------------------------------------
     def _layout_request(self, req: Request) -> tuple[dict, Project, Model, list[Placement]]:
         data = req.data
         if not isinstance(data, dict) or "project" not in data or not isinstance(data.get("placements"), list):
-            raise BadRequest("Erwartet {project, placements}")
+            raise BadRequest(tr("server.layout_expected"))
         if len(data["placements"]) > MAX_PLACEMENTS:
-            raise BadRequest(f"Zu viele Platzierungen (max {MAX_PLACEMENTS})")
+            raise BadRequest(tr("server.too_many_placements", max=MAX_PLACEMENTS))
         project = Project.from_dict(data["project"])
         n = project.stack.n_motor_planes
         placements = [Placement.from_dict(p, n) for p in data["placements"]]
@@ -346,7 +373,7 @@ class App:
         data, _, model, placements = self._layout_request(req)
         fmt = data.get("format", "svg")
         if fmt not in EXPORTERS:
-            raise BadRequest(f"Unbekanntes Exportformat {fmt}")
+            raise BadRequest(tr("server.unknown_format", format=fmt))
         return self._export(EXPORTERS[fmt](), build_geometry(model, placements))
 
     @route("POST", "/api/analyze")
@@ -360,16 +387,16 @@ class App:
         try:
             outline = outline_from_svg(data.get("svg", ""), data.get("mm_per_unit"))
         except ScaleRequired as exc:
-            return json_response({"scale_required": True, "message": str(exc)})
+            return json_response({"scale_required": True, "message": _message(exc)})
         out = {"width": outline.width, "depth": outline.depth, "outline": outline.outline,
                "convex": outline.was_convex, "notes": outline.notes}
-        if isinstance(data.get("motor"), dict):  # Skizze im Stangenrahmen passend zum aktuellen Motor
+        if isinstance(data.get("motor"), dict):  # sketch in the rod frame matching the current motor
             out["sketch"] = sk.sketch_from_outline(outline.outline, motor_from_dict(data["motor"]))
         return json_response(out)
 
     @route("POST", "/api/sketch/", prefix=True)
     def sketch_api(self, req: Request) -> Response:
-        """Endpunkte der Motor Skizze. Solver Ergebnisse (auch Widersprueche) sind normale Antworten mit ok=false."""
+        """Endpoints of the motor sketch. Solver results (also conflicts) are normal responses with ok=false."""
         op = req.tail
         data = req.dict_data()
         gear = self._gear_arg(data.get("gear"))
@@ -378,10 +405,10 @@ class App:
             sketch = sk.legacy_to_sketch(motor, with_constraints=data.get("constraints", True))
             return json_response(sk.solve(sketch, cd=motor.center_distance, gear=(motor.gear_diameter, motor.gear_width)).as_dict())
         if op not in ("solve", "hull", "insert", "delete"):
-            return error_response(404, "nicht gefunden")
+            return error_response(404, tr("server.not_found"))
         sketch = data.get("sketch")
         if not isinstance(sketch, dict):
-            raise BadRequest("sketch (Objekt mit points und constraints) erforderlich")
+            raise BadRequest(tr("server.sketch_required"))
         sketch = sk.sketch_dict(sketch)
         errors = sk.validate_structure(sketch)
         if errors:
@@ -405,7 +432,7 @@ class App:
         if gear is None:
             return None
         if not (isinstance(gear, list) and len(gear) == 2 and all(is_finite_number(v) for v in gear)):
-            raise BadRequest("gear muss [Durchmesser, Breite] sein")
+            raise BadRequest(tr("server.gear_format"))
         return float(gear[0]), float(gear[1])
 
     @staticmethod
@@ -421,21 +448,29 @@ def make_handler(app: App):
     class RequestHandler(BaseHTTPRequestHandler):
         def _serve(self, method: str) -> None:
             url = urlparse(self.path)
+            query = parse_qs(url.query)
+            headers = dict(self.headers.items())
+            with use_language(request_language(headers, query)):
+                problem = self._precheck(method)
+            if problem is not None:
+                self._send(problem)
+                return
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            self._send(app.dispatch(method, url.path, query, body, headers))
+
+        def _precheck(self, method: str) -> Optional[Response]:
+            """Host, content type and size checks before the body is read. None if all is fine."""
             if not app.host_ok(self.headers.get("Host"), self.headers.get("Origin")):
-                self._send(error_response(403, "Host oder Origin nicht erlaubt"))
-                return
+                return error_response(403, tr("server.host_forbidden"))
             if method == "POST" and self._simple_content_type():
-                self._send(error_response(415, "POST erwartet Content-Type application/json"))
-                return
+                return error_response(415, tr("server.json_content_type"))
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 length = -1
             if length < 0 or length > MAX_BODY:
-                self._send(error_response(413 if length > 0 else 400, "Ungültige oder zu große Anfrage"))
-                return
-            body = self.rfile.read(length) if length else b""
-            self._send(app.dispatch(method, url.path, parse_qs(url.query), body))
+                return error_response(413 if length > 0 else 400, tr("server.body_size"))
+            return None
 
         def _simple_content_type(self) -> bool:
             ctype = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
@@ -458,7 +493,7 @@ def make_handler(app: App):
         def do_POST(self):  # noqa: N802
             self._serve("POST")
 
-        def log_message(self, fmt, *args):  # ruhige Konsole
+        def log_message(self, fmt, *args):  # quiet console
             pass
 
     return RequestHandler
@@ -469,7 +504,7 @@ class _IPv6Server(ThreadingHTTPServer):
 
 
 def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT, open_browser: bool = True) -> ThreadingHTTPServer:
-    """Erzeugt den Server (noch ohne serve_forever). Fremde Hosts muessen ausdruecklich angegeben werden."""
+    """Create the server (without serve_forever yet). Foreign hosts must be given explicitly."""
     app = App(None if host.lower() in LOOPBACK_HOSTS else {host, "127.0.0.1", "localhost"})
     server_class = _IPv6Server if ":" in host else ThreadingHTTPServer
     server = server_class((host, port), make_handler(app))
@@ -482,17 +517,17 @@ def serve(host: str = "127.0.0.1", port: int = DEFAULT_PORT, open_browser: bool 
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Project Blindsight Web Oberfläche")
+    ap = argparse.ArgumentParser(description=str(tr("server.description")))
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
     server = serve(args.host, args.port, not args.no_browser)
-    print(f"Project Blindsight läuft auf http://{_url_host(args.host)}:{server.server_address[1]}  (Beenden mit Strg+C)")
+    print(tr("server.running", url=f"http://{_url_host(args.host)}:{server.server_address[1]}"))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nBeendet.")
+        print("\n" + tr("server.stopped"))
     finally:
         server.app.jobs.shutdown()  # type: ignore[attr-defined]
         server.server_close()

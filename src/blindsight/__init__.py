@@ -1,3 +1,3 @@
-"""Project Blindsight, geometrischer Optimierer fuer Motoren und Gewindestangen."""
+"""Project Blindsight, geometric optimizer for motors and threaded rods."""
 
-__version__ = "0.4.0"  # einzige Quelle der Versionsnummer (pyproject liest sie von hier)
+__version__ = "0.4.0"  # single source of the version number (pyproject reads it from here)

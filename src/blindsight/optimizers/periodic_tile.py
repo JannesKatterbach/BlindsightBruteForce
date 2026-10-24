@@ -25,6 +25,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Iterator, Optional
 
+from ..i18n import tr
 from ..layout import Counter, Layout, Placement
 from ..model import Model
 from ..patterns import ORDERS, order_points
@@ -216,8 +217,8 @@ class PeriodicTileOptimizer(Optimizer):
         target = model.project.target_count
         if target < rods:
             res.status = STATUS_INFEASIBLE
-            res.messages.append(f"Die Zielanzahl {target} ist kleiner als die Schrauben je Kachel ({rods}). Es werden nur ganze Kacheln platziert.")
-            res.optimality_note = "Nicht ausgeführt."
+            res.messages.append(tr("tile.target_too_small", target=target, rods=rods))
+            res.optimality_note = tr("exhaustive.not_run")
             res.elapsed = stop.elapsed
             return res
         search = TileSearch(model, counter, stop, random.Random(se.seed), progress)
@@ -260,7 +261,8 @@ class TileSearch(SearchBase):
         tile = Tile(shape, width, height, units, gap) if units else None
         if complete or tile:
             self._cache[key] = tile
-        self.report(f"Kachel {shape.rows} x {shape.cols}, {width:.2f} x {height:.2f} mm, {'gültig' if tile else 'ungültig'}")
+        self.report(tr("progress.tile_valid" if tile else "progress.tile_invalid", rows=shape.rows, cols=shape.cols,
+                       width=width, height=height))
         return tile
 
     def _snap(self, value: float) -> float:
@@ -311,7 +313,7 @@ class TileSearch(SearchBase):
 
     def find_tiles(self, halt: Halt) -> list[Tile]:
         """Smallest tile per sub grid shape, sorted by area per rod (then largest gap)."""
-        self.phase = "Kachel suchen"
+        self.phase = tr("phase.tile_search")
         tiles = []
         for shape in tile_shapes(self.rods):
             if halt():
@@ -354,7 +356,7 @@ class TileSearch(SearchBase):
 
     def place(self, tile: Tile) -> None:
         """Puts whole tiles into the build area and keeps the resulting layouts."""
-        self.phase = "Kacheln platzieren"
+        self.phase = tr("phase.tile_place")
         tiles_needed = self.target // self.rods
         if self.se.layout_goal == "spread":
             self._place_spread(tile, tiles_needed)
@@ -370,7 +372,7 @@ class TileSearch(SearchBase):
                     ordered = [centers[c] for c in order_points(list(centers), (cx, cy), order)]
                     placements, used = self._build(tile, ordered, tiles_needed)
                     self.consider(placements, tile.as_dict(used))
-            self.report(f"Kacheln platziert, Verschiebung {i + 1} von {PHASES}")
+            self.report(tr("progress.tiles_placed", i=i + 1, n=PHASES))
 
     def _grid_counts(self, tiles_needed: int, width: float, height: float) -> tuple[int, int]:
         """Columns and rows of tiles for an even spread (as close to the area's aspect as possible)."""
@@ -415,20 +417,15 @@ class TileSearch(SearchBase):
     def notes(self, tiles: list[Tile]) -> list[str]:
         out = []
         if not tiles:
-            out.append("Es wurde keine gültige Kachel gefunden. Größere Kachel, mehr Zeit oder ein gröberes Kachelraster versuchen.")
+            out.append(tr("tile.none_found"))
             return out
         best = tiles[0]
-        out.append(
-            f"Kachel mit {len(best.units)} Schrauben ({best.shape.rows} x {best.shape.cols}"
-            f"{', versetzte Reihen' if best.shape.offset else ''}), {best.width:.2f} x {best.height:.2f} mm."
-        )
+        out.append(tr("tile.summary_offset" if best.shape.offset else "tile.summary", rods=len(best.units),
+                      rows=best.shape.rows, cols=best.shape.cols, width=best.width, height=best.height))
         if self.se.tile_width is None or self.se.tile_height is None:
-            out.append("Die Kachelgröße ist die kleinste gefundene auf dem Kachelraster, nicht als kleinste bewiesen.")
+            out.append(tr("tile.not_proven"))
         remainder = self.target % self.rods
         if remainder:
             lower = self.target - remainder
-            out.append(
-                f"Die Zielanzahl {self.target} ist kein Vielfaches von {self.rods}. Es werden nur ganze Kacheln platziert "
-                f"(höchstens {lower} Schrauben, nächstes Vielfaches {lower + self.rods})."
-            )
+            out.append(tr("tile.not_multiple", target=self.target, rods=self.rods, lower=lower, next=lower + self.rods))
         return out

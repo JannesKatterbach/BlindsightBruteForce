@@ -1,19 +1,19 @@
-"""Bewertungsfunktion. Alle Teilziele liegen in [0, 1], 1 ist am besten.
+"""Scoring function. All objectives lie in [0, 1], 1 is best.
 
-Gesamtscore = gewichtetes Mittel (Gewichte aus WeightsSpec, normiert).
-  count        platzierte Anzahl relativ zur Zielanzahl
-  area         1 - genutzte Bounding Box / verfuegbarer Bauraum (Anteil freier Bauraum)
-  uniformity   1 - 2 * Variationskoeffizient der Nachbarabstaende
-  regularity   Ausrichtung der Nachbarn an ein Quadrat oder Hexagonalmuster
-               (Bond Orientational Order Parameter psi4 und psi6)
+Total score = weighted mean (weights from WeightsSpec, normalised).
+  count        placed number relative to the target number
+  area         1 - used bounding box / available build area (share of free build area)
+  uniformity   1 - 2 * coefficient of variation of the neighbour distances
+  regularity   alignment of the neighbours to a square or hexagonal pattern
+               (bond orientational order parameters psi4 and psi6)
 
-Gleichmaessigkeit gilt fuer eine einzelne Einheit als erfuellt (1.0). Regelmaessigkeit braucht
-mindestens 4 Nachbarn (psi4) und ist sonst 0, fuer jede Anzahl gleich. Frueher bekam eine einzelne
-Einheit 1.0 und zwei bis vier Einheiten 0, das liess Ergebnisse sprunghaft kippen. Ein neutraler
-Wert 1.0 haette dagegen kleine Anordnungen gegenueber vollstaendigen bevorzugt.
+Uniformity counts as satisfied (1.0) for a single unit. Regularity needs at least 4 neighbours (psi4)
+and is 0 otherwise, the same for every count. Earlier a single unit got 1.0 and two to four units 0,
+which made results flip abruptly. A neutral value of 1.0 on the other hand would have preferred small
+arrangements over complete ones.
 
-Erweitern. Ein neues Teilziel ist eine Funktion ``(LayoutStats) -> float`` in ``OBJECTIVES`` und
-ein gleichnamiges Feld in ``config.WeightsSpec`` (plus FIELD_META Eintrag fuer die UI).
+Extending. A new objective is a function ``(LayoutStats) -> float`` in ``OBJECTIVES`` and a field of
+the same name in ``config.WeightsSpec`` (plus a FIELD_META entry and catalog texts for the UI).
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ from .layout import Placement
 from .model import KIND_ROD, Model
 from .units import EPS, EPS_AREA
 
-UNIFORMITY_CV_FACTOR = 2.0  # Variationskoeffizient 0.5 ergibt Gleichmaessigkeit 0
-ORDER_NEIGHBORS = (4, 6)  # psi4 (Quadrat) und psi6 (Hexagon)
+UNIFORMITY_CV_FACTOR = 2.0  # a coefficient of variation of 0.5 gives uniformity 0
+ORDER_NEIGHBORS = (4, 6)  # psi4 (square) and psi6 (hexagon)
 
 
 @dataclass
@@ -46,7 +46,7 @@ class Score:
 
 @dataclass
 class LayoutStats:
-    """Kennzahlen eines Layouts, aus denen die Teilziele berechnet werden."""
+    """Metrics of a layout from which the objectives are computed."""
 
     count: int
     target: int
@@ -54,8 +54,8 @@ class LayoutStats:
     footprint: BBox
     footprint_area: float
     hull_area: float
-    nn_distances: list[float]  # Abstand jeder Stange zur naechsten
-    order: dict[int, Optional[float]]  # k -> mittleres psi_k oder None (zu wenige Nachbarn)
+    nn_distances: list[float]  # distance of every rod to the nearest one
+    order: dict[int, Optional[float]]  # k -> mean psi_k or None (too few neighbours)
 
     @property
     def mean_nn(self) -> float:
@@ -64,7 +64,7 @@ class LayoutStats:
 
     @property
     def nn_cv(self) -> float:
-        """Variationskoeffizient der Nachbarabstaende (0 bei weniger als zwei Abstaenden)."""
+        """Coefficient of variation of the neighbour distances (0 with fewer than two distances)."""
         nn = self.nn_distances
         if len(nn) < 2 or self.mean_nn <= 0:
             return 0.0
@@ -73,7 +73,7 @@ class LayoutStats:
 
 
 # ---------------------------------------------------------------------------
-# Teilziele
+# Objectives
 # ---------------------------------------------------------------------------
 def _count_term(s: LayoutStats) -> float:
     return min(1.0, s.count / max(1, s.target))
@@ -103,16 +103,16 @@ OBJECTIVES: dict[str, Callable[[LayoutStats], float]] = {
 
 
 # ---------------------------------------------------------------------------
-# Kennzahlen
+# Metrics
 # ---------------------------------------------------------------------------
 def footprint_bbox(model: Model, placements: list[Placement]) -> BBox:
-    """Bounding Box aller Bauteile aller Einheiten in der Draufsicht."""
+    """Bounding box of all parts of all units in top view."""
     boxes = [model.unit_bbox(pl.x, pl.y, pl.plane, pl.angle, pl.cd) for pl in placements]
     return (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
 
 
 def _hull_area(model: Model, placements: list[Placement]) -> float:
-    """Flaeche der konvexen Huelle aller Gehaeuse und Zahnraeder (Stangen als Mittelpunkt)."""
+    """Area of the convex hull of all housings and gears (rods as their centre)."""
     points = []
     for i, pl in enumerate(placements):
         for part in model.unit_parts(i, pl.x, pl.y, pl.plane, pl.angle, pl.cd):
@@ -121,7 +121,7 @@ def _hull_area(model: Model, placements: list[Placement]) -> float:
 
 
 def _neighbor_stats(points: list[tuple[float, float]]) -> tuple[list[float], dict[int, Optional[float]]]:
-    """Naechste Nachbarabstaende und mittlere Ordnungsparameter psi_k je k in ORDER_NEIGHBORS."""
+    """Nearest neighbour distances and mean order parameters psi_k per k in ORDER_NEIGHBORS."""
     nn: list[float] = []
     psi: dict[int, list[float]] = {k: [] for k in ORDER_NEIGHBORS}
     for i, (px, py) in enumerate(points):
@@ -161,7 +161,7 @@ def normalized_weights(weights: WeightsSpec) -> dict[str, float]:
 
 
 def evaluate(model: Model, placements: list[Placement], weights: WeightsSpec, target: int) -> Score:
-    """Bewertet ein Layout. Rueckgabe mit Gesamtwert, Teilzielen, normierten Gewichten und Kennzahlen."""
+    """Score a layout. Returns total, objectives, normalised weights and metrics."""
     wn = normalized_weights(weights)
     if not placements:
         return Score(0.0, {k: 0.0 for k in OBJECTIVES}, wn, {"count": 0})
@@ -192,14 +192,13 @@ def _metrics(stats: LayoutStats, placements: list[Placement]) -> dict[str, float
 
 
 def upper_bound_count(model: Model) -> int:
-    """Strenge obere Schranke der Stangenzahl (Ungleichung von Oler).
+    """Strict upper bound of the number of rods (Oler's inequality).
 
-    Je zwei Stangenachsen liegen mindestens d = Stangendurchmesser + Sicherheitsabstand auseinander
-    (alle Stangen ueberlappen in der Hoehe). Die Achsen liegen im Rechteck der zulaessigen
-    Mittelpunkte (Bauraum abzueglich Randabstand und Stangenradius) mit Flaeche A und Umfang P.
-    Fuer Punkte mit Mindestabstand d in einem konvexen Bereich gilt
+    Any two rod axes are at least d = rod diameter + safety clearance apart (all rods overlap in
+    height). The axes lie in the rectangle of permitted centres (build area minus edge margin and rod
+    radius) with area A and perimeter P. For points with minimum distance d in a convex region
         N <= 2 / sqrt(3) * A / d^2 + P / (2 d) + 1
-    Motoren werden ignoriert, die Schranke ist daher meist weit von der Realitaet entfernt.
+    Motors are ignored, so the bound is usually far from reality.
     """
     bounds = model.project.bounds
     rod_d = model.project.rod.diameter

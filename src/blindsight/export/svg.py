@@ -1,14 +1,14 @@
-"""Massstabsgetreuer SVG Export.
+"""True to scale SVG export.
 
-Eine SVG Einheit entspricht genau 1 mm (viewBox in mm, width und height in mm).
-Y wird gespiegelt (svg_y = ymax - y), damit die Ansicht wie ein normales Koordinatensystem
-mit Y nach oben aussieht. Der Ursprung der Zeichnung ist die untere linke Ecke des Bauraums.
+One SVG unit is exactly 1 mm (viewBox in mm, width and height in mm). Y is mirrored (svg_y = ymax - y)
+so that the view looks like a normal coordinate system with Y up. The origin of the drawing is the
+bottom left corner of the build area.
 
-Aufbau
-  <g id="top">         gemeinsame Draufsicht aller Einheiten (am Ursprung)
-  <g id="plane-1"> ...  je Motorebene ein Blatt (nach rechts versetzt), zeigt Motoren,
-                        Zahnraeder, Stangen und die Durchgangsloecher dieser Ebene
-Die Datei ist ein geometrisches Ergebnis und kein fertiges PCB Layout.
+Structure
+  <g id="top">         shared top view of all units (at the origin)
+  <g id="plane-1"> ...  one sheet per motor layer (shifted to the right), shows motors, gears, rods
+                        and the through holes of this layer
+The file is a geometric result and not a finished PCB layout.
 """
 
 from __future__ import annotations
@@ -17,11 +17,12 @@ import math
 from typing import Callable, Optional
 from xml.sax.saxutils import escape
 
+from ..i18n import tr
 from .base import rod_passes
 
 PLANE_COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f"]
-SHEET_GAP = 20.0  # mm zwischen den Blaettern
-DECIMALS = 4  # Nachkommastellen der Koordinaten
+SHEET_GAP = 20.0  # mm between the sheets
+DECIMALS = 4  # decimals of the coordinates
 
 
 def _color(plane: int) -> str:
@@ -29,16 +30,16 @@ def _color(plane: int) -> str:
 
 
 def _f(v: float) -> str:
-    """Zahl kompakt mit hoechstens DECIMALS Nachkommastellen (ohne -0 und ohne nachlaufende Nullen)."""
+    """Compact number with at most DECIMALS decimals (without -0 and trailing zeros)."""
     v = round(v, DECIMALS)
     if v == 0:
-        v = 0.0  # -0.0 wird zu 0
+        v = 0.0  # -0.0 becomes 0
     text = f"{v:.{DECIMALS}f}"
     return text.rstrip("0").rstrip(".")
 
 
 def _nearest_neighbor_pairs(units: list[dict]) -> list[tuple[dict, dict]]:
-    """Jede Einheit mit ihrem naechsten Nachbarn, jedes Paar nur einmal (auch wenn es gegenseitig ist)."""
+    """Every unit with its nearest neighbour, every pair only once (even if mutual)."""
     pairs: dict[tuple[int, int], tuple[dict, dict]] = {}
     for u in units:
         nearest = min((v for v in units if v is not u), key=lambda v: math.hypot(v["x"] - u["x"], v["y"] - u["y"]))
@@ -52,7 +53,6 @@ class SvgExporter:
     extension = "svg"
     filename = "blindsight.svg"
     mime = "image/svg+xml"
-    label = "SVG"
 
     def __init__(self, show_distances: bool = True, per_plane_sheets: bool = True):
         self.show_distances = show_distances
@@ -71,8 +71,7 @@ class SvgExporter:
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{_f(total_w)}mm" height="{_f(h)}mm" '
             f'viewBox="0 0 {_f(total_w)} {_f(h)}" data-unit="mm" data-scale="1 SVG unit = 1 mm">',
             f"<title>{escape(geometry['name'])}</title>",
-            f"<desc>Project Blindsight. Maßstab 1:1, Einheit mm. Ursprung links unten im Bauraum "
-            f"({_f(b['xmin'])}, {_f(b['ymin'])}). Geometrisches Ergebnis, kein fertiges PCB Layout.</desc>",
+            f"<desc>{escape(tr('svg.desc', x=_f(b['xmin']), y=_f(b['ymin'])))}</desc>",
         ]
         for idx, (gid, plane) in enumerate(sheets):
             dx = idx * (w + SHEET_GAP)
@@ -83,13 +82,9 @@ class SvgExporter:
         out.append("</svg>")
         return "\n".join(out)
 
-    @staticmethod
-    def _rod_passes(geometry: dict, u: dict, plane: int) -> bool:  # Name aus frueheren Versionen
-        return rod_passes(geometry, u, plane)
-
 
 class _Sheet:
-    """Ein Blatt. plane None ist die Draufsicht aller Ebenen, sonst die Ansicht einer Motorebene."""
+    """One sheet. plane None is the top view of all layers, otherwise the view of one motor layer."""
 
     def __init__(self, geometry: dict, plane: Optional[int], show_distances: bool):
         self.geometry = geometry
@@ -107,7 +102,7 @@ class _Sheet:
         return f'<polygon class="{cls}" points="{pts}" {extra}/>'
 
     def _shows_unit(self, u: dict) -> bool:
-        """Einheit erscheint auf dem Blatt (eigene Ebene oder ihre Stange durchquert die Ebene)."""
+        """The unit appears on the sheet (own layer or its rod passes through the layer)."""
         return self.plane is None or u["plane"] == self.plane or rod_passes(self.geometry, u, self.plane)
 
     def _frame(self) -> list[str]:
@@ -120,7 +115,7 @@ class _Sheet:
                 f'<rect class="edge-margin" x="{_f(margin)}" y="{_f(margin)}" width="{_f(w - 2 * margin)}" '
                 f'height="{_f(h - 2 * margin)}" fill="none" stroke="#888" stroke-width="0.15" stroke-dasharray="1 1"/>'
             )
-        title = "Draufsicht aller Ebenen" if self.plane is None else f"Ebene G{self.plane}"
+        title = tr("svg.top_title") if self.plane is None else tr("svg.plane_title", plane=self.plane)
         out.append(f'<text x="2" y="{_f(h - 2)}" font-size="4" fill="#333">{escape(title)}</text>')
         return out
 
@@ -129,7 +124,7 @@ class _Sheet:
                 for o in self.geometry["obstacles"]]
 
     def _motors(self) -> list[str]:
-        """Gehaeuse und Zahnraeder, auf Ebenenblaettern nur die Motoren dieser Ebene."""
+        """Housings and gears, on layer sheets only the motors of this layer."""
         out = []
         for u in self.geometry["units"]:
             if self.plane is not None and u["plane"] != self.plane:
@@ -171,7 +166,7 @@ class _Sheet:
         return out
 
     def _distances(self) -> list[str]:
-        """Abstand jeder Stange zu ihrer naechsten (nur Draufsicht)."""
+        """Distance of every rod to its nearest one (top view only)."""
         units = self.geometry["units"]
         if self.plane is not None or not self.show_distances or len(units) < 2:
             return []

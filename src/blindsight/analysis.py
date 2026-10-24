@@ -1,4 +1,4 @@
-"""Abgeleitete Groessen einer Konfiguration ohne Optimierung (fuer UI und Skripte)."""
+"""Derived values of a configuration without optimisation (for the UI and scripts)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from .model import Model
 
 
 def analyze(project: Project) -> dict:
-    """Ebenen mit Hoehen, Stangengeometrie und Problemen, dazu Einheitenradius und Sicherheitsabstand."""
+    """Layers with heights, rod geometry and problems, plus unit radius and safety clearance."""
     model = Model(project)
     planes = []
     for plane in model.stack.planes:

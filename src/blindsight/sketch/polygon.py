@@ -1,25 +1,21 @@
-"""Auswertung der Skizzenkontur. Masse, Gueltigkeit (Selbstschnitt, Konvexitaet) und Zahnrad Ueberlappung."""
+"""Evaluation of the sketch outline. Measures, validity (self intersection, convexity) and gear overlap."""
 
 from __future__ import annotations
 
 import math
 
 from ..geometry import cross, is_convex_ccw, sat_penetration, signed_area
+from ..i18n import tr
 from ..units import EPS_AREA
 from .constraints import EPS_LEN
 
-INTERSECT_TOL = 1e-12  # Orientierungstest beim Seitenschnitt (mm^2)
-WINDING_TOL = 1e-6  # Abweichung der Gesamtdrehung von 360 Grad (rad)
-GEAR_OVERLAP_TOL = 1e-6  # ab dieser Eindringtiefe (mm) ragt das Zahnrad ins Gehaeuse
-
-MSG_ZERO_SIDE = "Zwei Punkte liegen aufeinander (Seite der Länge 0)"
-MSG_NO_AREA = "Die Kontur hat keine Fläche oder ist im Uhrzeigersinn orientiert"
-MSG_SELF_INTERSECTION = "Die Kontur schneidet sich selbst"
-MSG_NOT_CONVEX = "Die Kontur ist nicht konvex (das Modell braucht ein konvexes Gehäuse, siehe Konvexe Hülle)"
+INTERSECT_TOL = 1e-12  # orientation test of the side intersection (mm^2)
+WINDING_TOL = 1e-6  # deviation of the total turn from 360 degrees (rad)
+GEAR_OVERLAP_TOL = 1e-6  # from this penetration depth (mm) on the gear reaches into the housing
 
 
 def _segments_cross(p1, p2, p3, p4) -> bool:
-    """True, wenn sich die Strecken p1p2 und p3p4 echt schneiden (Beruehren zaehlt nicht)."""
+    """True if the segments p1p2 and p3p4 properly intersect (touching does not count)."""
     def opposite(u: float, v: float) -> bool:
         return (u > INTERSECT_TOL and v < -INTERSECT_TOL) or (u < -INTERSECT_TOL and v > INTERSECT_TOL)
 
@@ -31,14 +27,14 @@ def _has_crossing_sides(pts: list) -> bool:
     for i in range(n):
         for j in range(i + 2, n):
             if i == 0 and j == n - 1:
-                continue  # benachbart ueber den Schluss der Kontur
+                continue  # neighbours across the closing of the outline
             if _segments_cross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n]):
                 return True
     return False
 
 
 def _total_turn(pts: list) -> float:
-    """Summe der Abbiegewinkel entlang der Kontur (2 pi fuer ein einfaches Polygon gegen den Uhrzeigersinn)."""
+    """Sum of the turning angles along the outline (2 pi for a simple counter clockwise polygon)."""
     n = len(pts)
     turn = 0.0
     for i in range(n):
@@ -55,52 +51,52 @@ def side_lengths(pts: list) -> list[float]:
 
 
 def polygon_report(pts: list[list[float]]) -> dict:
-    """Prueft ein gegen den Uhrzeigersinn orientiertes Polygon auf kurze Seiten, Selbstschnitt und Konvexitaet.
+    """Check a counter clockwise polygon for short sides, self intersection and convexity.
 
-    Rueckgabe {min_side, simple, convex, area, problems}."""
+    Returns {min_side, simple, convex, area, problems}."""
     out = {"min_side": min(side_lengths(pts)), "simple": True, "convex": True, "area": signed_area(pts), "problems": []}
     if out["min_side"] < EPS_LEN:
-        out["problems"].append(MSG_ZERO_SIDE)
+        out["problems"].append(tr("polygon.zero_side"))
         out["simple"] = out["convex"] = False
         return out
     if out["area"] <= EPS_AREA:
-        out["problems"].append(MSG_NO_AREA)
+        out["problems"].append(tr("polygon.no_area"))
         out["simple"] = out["convex"] = False
         return out
-    # Eine Gesamtdrehung ungleich 360 Grad heisst, die Kontur windet sich mehrfach (schneidet sich)
+    # A total turn other than 360 degrees means the outline winds several times (intersects itself)
     winds_once = abs(_total_turn(pts) - 2 * math.pi) <= WINDING_TOL
     out["simple"] = winds_once and not _has_crossing_sides(pts)
     out["convex"] = winds_once and is_convex_ccw(pts)
     if not out["simple"]:
-        out["problems"].append(MSG_SELF_INTERSECTION)
+        out["problems"].append(tr("polygon.self_intersection"))
     if not out["convex"]:
-        out["problems"].append(MSG_NOT_CONVEX)
+        out["problems"].append(tr("polygon.not_convex"))
     return out
 
 
 def penetration(a: list, b: list) -> float:
-    """Eindringtiefe zweier konvexer Polygone (SAT). Groesser 0 heisst echte Ueberlappung, Beruehren ist 0."""
+    """Penetration depth of two convex polygons (SAT). Greater than 0 means a real overlap, touching is 0."""
     return max(0.0, sat_penetration(a, b))
 
 
 def gear_box(cd: float, gear_diameter: float, gear_width: float) -> list[list[float]]:
-    """Zahnrad als Quader im Stangenrahmen (Mitte bei (-cd, 0), Welle parallel zu y)."""
+    """Gear as a box in the rod frame (centre at (-cd, 0), shaft parallel to y)."""
     r, h = gear_diameter / 2.0, gear_width / 2.0
     return [[-cd - r, -h], [-cd + r, -h], [-cd + r, h], [-cd - r, h]]
 
 
 def gear_overlap_message(pts: list, cd_nominal: float, cd: float, gear_diameter: float, gear_width: float) -> str:
-    """Meldung, wenn das Zahnrad in das Gehaeuse ragt (Gehaeuse bei Achsabstand cd gegenueber dem nominalen verschoben)."""
+    """Message if the gear reaches into the housing (housing shifted for centre distance cd compared to the nominal one)."""
     shift = cd_nominal - cd
     shifted = [[x + shift, y] for x, y in pts]
     depth = penetration(shifted, gear_box(cd, gear_diameter, gear_width))
     if depth > GEAR_OVERLAP_TOL:
-        return f"Das Zahnrad ragt {depth:.2f} mm in das Gehäuse (Achsabstand {cd:g} mm)"
+        return tr("polygon.gear_overlap", depth=depth, cd=cd)
     return ""
 
 
 def measures(pts: list[list[float]]) -> dict:
-    """Laengen aller Seiten und Innenwinkel an allen Punkten (Grad, 0 bis 360)."""
+    """Lengths of all sides and interior angles at all points (degrees, 0 to 360)."""
     n = len(pts)
     angles = []
     for i in range(n):

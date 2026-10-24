@@ -1,11 +1,11 @@
-"""Gemeinsame Bausteine der Optimierer.
+"""Shared building blocks of the optimizers.
 
-SearchBase haelt den Zustand einer Suche (beste Loesungen, Fortschritt, Stagnation) und bietet
-  assign        Zuordnung von Ebene, Winkel und Achsabstand zu gegebenen Stangenpositionen
-  grow_random   zufaelliges Auffuellen eines Layouts
-  local_search  Simulated Annealing Verfeinerung einer vorhandenen Anordnung (LocalSearch)
+SearchBase holds the state of a search (best solutions, progress, stagnation) and offers
+  assign        assignment of layer, angle and centre distance to given rod positions
+  grow_random   random filling of a layout
+  local_search  simulated annealing refinement of an existing arrangement (LocalSearch)
 
-Die konkreten Strategien (Muster, freie Verteilung, exakt auf Raster) liegen daneben.
+The concrete strategies (patterns, free distribution, exact on a grid, repeating tile) live next to it.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import time
 from typing import Callable, Iterator, Optional
 
 from ..geometry import BBox
+from ..i18n import tr
 from ..layout import Counter, Layout, Placement, layout_from_placements, layout_signature
 from ..model import Model
 from ..scoring import Score, evaluate
@@ -23,7 +24,7 @@ from .base import STATUS_STAGNATION, ProgressInfo, Solution, StopToken
 
 Halt = Callable[[], bool]
 
-KEEP_FACTOR = 4  # so viele Loesungen je top_k werden waehrend der Suche gehalten
+KEEP_FACTOR = 4  # this many solutions per top_k are kept during the search
 KEEP_MIN = 20
 IMPROVE_EPS = 1e-9
 
@@ -41,26 +42,26 @@ class SearchBase:
         self.usable = model.usable_planes()
         bounds = self.proj.bounds
         margin = bounds.edge_margin + model.rod_r
-        # Zulaessiger Bereich der Stangenachsen und Mitte des Bauraums
+        # Permitted region of the rod axes and centre of the build area
         self.region = (bounds.xmin + margin, bounds.ymin + margin, bounds.xmax - margin, bounds.ymax - margin)
         self.center = ((bounds.xmin + bounds.xmax) / 2.0, (bounds.ymin + bounds.ymax) / 2.0)
         self.solutions: dict[tuple, Solution] = {}
         self.best_total = -1.0
-        self.best_count = 0  # Anzahl der bestbewerteten Loesung (Anzeige und Stagnation)
-        self.max_count = 0  # groesste gefundene Anzahl (eine neue Hoechstzahl gilt als Fortschritt)
+        self.best_count = 0  # count of the best rated solution (display and stagnation)
+        self.max_count = 0  # largest count found (a new maximum counts as progress)
         self.best_placements: list[Placement] = []
         self.phase = "start"
         self._last_improve = time.monotonic()
-        # Achsabstaende, None (nominal) zuerst, dann nach Naehe zum Nominalwert
+        # Centre distances, None (nominal) first, then by closeness to the nominal value
         nominal = self.proj.motor.center_distance
         self.cds: list[Optional[float]] = [None] + [
             c for c in sorted(model.center_distances, key=lambda c: abs(c - nominal)) if abs(c - nominal) > IMPROVE_EPS
         ]
 
-    # -- Stopp ---------------------------------------------------------------
+    # -- Stop ---------------------------------------------------------------
     def stagnated(self) -> bool:
-        """True, wenn die bestbewertete Loesung die Zielanzahl erreicht und sich stagnation_s lang nichts
-        verbessert hat. Eine schlecht bewertete Anordnung mit voller Anzahl beendet die Suche nicht."""
+        """True if the best rated solution reaches the target number and nothing improved for stagnation_s.
+        A poorly rated arrangement with the full count does not end the search."""
         limit = self.se.stagnation_s
         if limit is None or self.best_count < self.target:
             return False
@@ -72,7 +73,7 @@ class SearchBase:
     def halted(self) -> bool:
         return self.stop.should_stop() or self.stagnated()
 
-    # -- Verwaltung der besten Loesungen ----------------------------------------
+    # -- Bookkeeping of the best solutions ----------------------------------------
     def consider(self, placements: list[Placement], tile: Optional[dict] = None) -> Optional[Score]:
         """Score a layout and keep it if it is among the best. tile describes a repeating pattern, if any."""
         if not placements:
@@ -105,19 +106,19 @@ class SearchBase:
             )
 
     def finalize(self) -> list[Solution]:
-        """Die top_k besten Loesungen, jede noch einmal vollstaendig auf Kollisionen geprueft."""
+        """The top_k best solutions, each checked again fully for collisions."""
         ranked = sorted(self.solutions.values(), key=lambda s: -s.score.total)
         out: list[Solution] = []
         for solution in ranked:
-            if layout_from_placements(self.model, solution.placements).is_valid():  # Sicherheitsnetz
+            if layout_from_placements(self.model, solution.placements).is_valid():  # safety net
                 out.append(solution)
             if len(out) >= self.se.top_k:
                 break
         return out
 
-    # -- Zuordnung -------------------------------------------------------------
+    # -- Assignment -------------------------------------------------------------
     def options_for(self, plane: int, first_angle_index: int = 0) -> Iterator[tuple[float, Optional[float]]]:
-        """(Winkel, Achsabstand) einer Ebene, beginnend beim Winkel mit Index first_angle_index."""
+        """(angle, centre distance) of a layer, starting with the angle at index first_angle_index."""
         angles = self.model.angles_for(plane)
         n = len(angles)
         for offset in range(n):
@@ -126,10 +127,10 @@ class SearchBase:
                 yield angle, cd
 
     def assign(self, points: list[tuple[float, float]], heuristic: str, halt: Halt) -> Layout:
-        """Weist jedem Punkt der Reihe nach eine gueltige Kombination aus Ebene, Winkel und Achsabstand zu.
+        """Assign a valid combination of layer, angle and centre distance to each point in turn.
 
-        heuristic "first" nimmt die erste gueltige, "gap" die mit dem groessten Abstand zu den
-        Nachbarn. Ebenen werden reihum begonnen, Winkel beim Winkel des Vorgaengers."""
+        heuristic "first" takes the first valid one, "gap" the one with the largest distance to the
+        neighbours. Layers start in round robin order, angles at the angle of the predecessor."""
         layout = Layout(self.model, self.counter)
         usable = self.usable
         prev_angle_index = 0
@@ -145,7 +146,7 @@ class SearchBase:
 
     def _best_option(self, layout: Layout, x: float, y: float, planes: list[int], prev_angle_index: int,
                      heuristic: str) -> Optional[tuple[float, Placement, int]]:
-        """(Abstand, Platzierung, Winkelindex) der gewaehlten Option oder None."""
+        """(distance, placement, angle index) of the chosen option or None."""
         best: Optional[tuple[float, Placement, int]] = None
         for plane in planes:
             angles = self.model.angles_for(plane)
@@ -156,7 +157,7 @@ class SearchBase:
                     continue
                 if best is None or result.min_gap > best[0] + IMPROVE_EPS:
                     best = (result.min_gap, placement, angles.index(angle))
-                # Ohne Nachbarn (inf) kann keine Option besser werden
+                # Without neighbours (inf) no option can be better
                 if heuristic == "first" or math.isinf(result.min_gap):
                     break
             if best is not None and (heuristic == "first" or math.isinf(best[0])):
@@ -164,18 +165,18 @@ class SearchBase:
         return best
 
     def random_placement(self, region: Optional[tuple[float, float, float, float]] = None) -> Placement:
-        """Zufaellige Position in region (Standard. ganzer Bereich) mit zufaelliger Ebene, Winkel, Achsabstand."""
+        """Random position in region (default. whole region) with random layer, angle and centre distance."""
         x0, y0, x1, y1 = region or self.region
         return self.random_option_at(self.rng.uniform(x0, x1), self.rng.uniform(y0, y1))
 
     def random_option_at(self, x: float, y: float) -> Placement:
-        """Zufaellige Ebene, Winkel und Achsabstand fuer eine feste Stangenposition."""
+        """Random layer, angle and centre distance for a fixed rod position."""
         rng = self.rng
         plane = rng.choice(self.usable)
         return Placement(x, y, plane, rng.choice(self.model.angles_for(plane)), rng.choice(self.cds))
 
     def grow_random(self, layout: Layout, tries: int, halt: Halt, region=None) -> None:
-        """Fuellt ein Layout mit zufaelligen gueltigen Platzierungen bis zur Zielanzahl."""
+        """Fill a layout with random valid placements up to the target number."""
         for _ in range(tries):
             if len(layout) >= self.target or halt():
                 return
@@ -183,33 +184,33 @@ class SearchBase:
 
     def local_search(self, start: list[Placement], halt: Halt, spread: bool = False,
                      duration: Optional[float] = None) -> None:
-        """Simulated Annealing ab start. duration ist die Laenge der Zeitscheibe (fuer die Abkuehlung),
-        ohne Angabe die Restzeit des Laufs."""
+        """Simulated annealing from start. duration is the length of the time slice (for the cooling),
+        by default the remaining time of the run."""
         LocalSearch(self, start, spread, duration).run(halt)
 
 
 # ---------------------------------------------------------------------------
-# Lokale Suche
+# Local search
 # ---------------------------------------------------------------------------
-REPORT_EVERY = 400  # Iterationen zwischen Zwischenstaenden
-ADD_PROBABILITY = 0.5  # Anteil der Zuege, die eine fehlende Einheit hinzufuegen wollen
-ADD_TRIES = 6  # Ebenen und Winkel, die fuer eine neue Position probiert werden
-TEMPERATURE_FACTOR = 0.004  # Starttemperatur relativ zur Energie
-SPREAD_MIN_BONUS = 0.005  # Gewicht des kleinsten Nachbarabstands in der spread Energie
-# Wahrscheinlichkeiten der Zugarten (kumulativ), der Rest sind Verschiebungen
+REPORT_EVERY = 400  # iterations between progress reports
+ADD_PROBABILITY = 0.5  # share of moves that try to add a missing unit
+ADD_TRIES = 6  # layers and angles tried for a new position
+TEMPERATURE_FACTOR = 0.004  # start temperature relative to the energy
+SPREAD_MIN_BONUS = 0.005  # weight of the smallest neighbour distance in the spread energy
+# Probabilities of the move kinds (cumulative), the rest are shifts
 MOVE_ROTATE, MOVE_PLANE, MOVE_CD = 0.25, 0.33, 0.40
 KEEP_ANGLE_ON_SHIFT = 0.8
-SHIFT_MIN, SHIFT_MAX = 0.02, 0.5  # Schrittweite relativ zur Mindestteilung
+SHIFT_MIN, SHIFT_MAX = 0.02, 0.5  # step size relative to the minimum pitch
 SHIFT_NOISE = 0.05
 
 
 class LocalSearch:
-    """Simulated Annealing. Zieht Stangen zur Mitte (compact) oder gleicht Abstaende aus (spread).
+    """Simulated annealing. Pulls rods to the centre (compact) or evens out distances (spread).
 
-    Energie compact. Flaeche der Bounding Box plus mittlere quadratische Entfernung zur Mitte.
-    Energie spread. Varianz der Nachbarabstaende minus kleiner Bonus fuer grosse Abstaende.
-    Zuege. Einheit hinzufuegen (solange die Zielanzahl fehlt), drehen, Ebene oder Achsabstand
-    wechseln, verschieben. Ungueltige Zuege werden sofort verworfen."""
+    Energy compact. Area of the bounding box plus mean squared distance to the centre.
+    Energy spread. Variance of the neighbour distances minus a small bonus for large distances.
+    Moves. Add a unit (while the target number is missing), rotate, change layer or centre distance,
+    shift. Invalid moves are discarded at once."""
 
     def __init__(self, search: SearchBase, start: list[Placement], spread: bool, duration: Optional[float]):
         self.search = search
@@ -226,7 +227,7 @@ class LocalSearch:
     def _bbox(self, pl: Placement) -> BBox:
         return self.model.unit_bbox(pl.x, pl.y, pl.plane, pl.angle, pl.cd)
 
-    # -- Energie -----------------------------------------------------------------
+    # -- Energy -----------------------------------------------------------------
     def energy(self) -> float:
         units = self.layout.units
         if not units:
@@ -255,11 +256,11 @@ class LocalSearch:
         return width * height + scatter
 
     def temperature(self, energy: float) -> float:
-        """Faellt linear ueber die eigene Zeitscheibe auf 0."""
+        """Falls linearly to 0 over the own time slice."""
         progress = min(1.0, (self.search.stop.elapsed - self.t_start) / self.duration)
         return max(1e-9, abs(energy) * TEMPERATURE_FACTOR * (1.0 - progress) + 1e-9)
 
-    # -- Zuege -------------------------------------------------------------------
+    # -- Moves -------------------------------------------------------------------
     def _try_add_unit(self) -> bool:
         x0, y0, x1, y1 = self.search.region
         x, y = self.rng.uniform(x0, x1), self.rng.uniform(y0, y1)
@@ -284,7 +285,7 @@ class LocalSearch:
         return self._shift(old)
 
     def _shift(self, old: Placement) -> Placement:
-        """Verschiebung. compact zieht zum Schwerpunkt, spread geht in eine zufaellige Richtung."""
+        """Shift. compact pulls towards the centroid, spread goes in a random direction."""
         rng = self.rng
         if self.spread:
             dx, dy = rng.gauss(0, 1), rng.gauss(0, 1)
@@ -309,7 +310,7 @@ class LocalSearch:
         self.boxes[nid] = self._bbox(new)
         return nid
 
-    # -- Ablauf ------------------------------------------------------------------
+    # -- Run ------------------------------------------------------------------
     def run(self, halt: Halt) -> None:
         search = self.search
         energy = self.energy()
@@ -318,7 +319,7 @@ class LocalSearch:
             iteration += 1
             if iteration % REPORT_EVERY == 0:
                 search.consider(self.layout.placements())
-                search.report("Lokale Suche")
+                search.report(tr("progress.local_search"))
             n = len(self.layout)
             if n < search.target and self.rng.random() < ADD_PROBABILITY:
                 if self._try_add_unit():
@@ -328,10 +329,10 @@ class LocalSearch:
                 continue
             energy = self._step(energy)
         search.consider(self.layout.placements())
-        search.report("Lokale Suche beendet")
+        search.report(tr("progress.local_search_done"))
 
     def _step(self, energy: float) -> float:
-        """Ein Zug mit Metropolis Annahme. Rueckgabe der neuen Energie."""
+        """One move with Metropolis acceptance. Returns the new energy."""
         uid = self.rng.choice(list(self.layout.units))
         old = self.layout.units[uid]
         new = self._propose(old)
@@ -343,7 +344,7 @@ class LocalSearch:
         temp = self.temperature(energy)
         if new_energy <= energy or self.rng.random() < math.exp(-(new_energy - energy) / temp):
             return new_energy
-        # Zug zuruecknehmen
+        # Undo the move
         self.layout.remove(nid)
         self.boxes.pop(nid)
         rid = self.layout.add(old)

@@ -1,4 +1,4 @@
-"""python -m blindsight startet die lokale Web Oberflaeche."""
+"""python -m blindsight starts the local web UI."""
 
 from .web.server import main
 

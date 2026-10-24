@@ -1,7 +1,7 @@
-"""Exporter Protokoll und gemeinsame, formatunabhaengige Geometriedaten.
+"""Exporter protocol and shared, format independent geometry data.
 
-Alle Exporter (SVG, JSON, spaeter DXF oder CAD) arbeiten auf dem Dictionary aus
-build_geometry und kennen weder Optimierer noch UI.
+All exporters (SVG, JSON, DXF, CSV, rod positions) work on the dictionary from build_geometry and know
+neither optimizers nor the UI.
 """
 
 from __future__ import annotations
@@ -16,15 +16,13 @@ class Exporter(Protocol):
     name: str  # key in EXPORTERS and in the API (/api/export/<job>.<name>)
     extension: str  # file extension
     filename: str  # suggested file name for downloads
-    mime: str
-    label: str  # label in the UI
-
+    mime: str  # the label in the UI comes from the catalogs (key export.<name>)
 
     def export(self, geometry: dict) -> str: ...
 
 
 def build_geometry(model: Model, placements: list[Placement]) -> dict:
-    """Vollstaendige, serialisierbare Geometrie einer Anordnung (alle Masse in mm)."""
+    """Complete, serialisable geometry of an arrangement (all dimensions in mm)."""
     proj = model.project
     lay = layout_from_placements(model, placements)
     units = []
@@ -108,14 +106,12 @@ def rod_presence(rod: dict, plane: dict) -> str | None:
 
 
 def rod_passes(geometry: dict, unit: dict, plane_index: int) -> bool:
-    """Durchquert die Stange der Einheit die Ebene (Durchgangsloch noetig)?"""
-    pl = geometry["planes"][plane_index]
-    rod = unit["rod"]
-    return rod["bottom_retracted"] <= pl["z_top"] and rod["tip_extended"] >= pl["z_bottom"]
+    """Does the rod of the unit pass through the layer at any time (through hole needed)?"""
+    return rod_presence(unit["rod"], geometry["planes"][plane_index]) is not None
 
 
 def holes_by_plane(geometry: dict) -> dict[int, list[dict]]:
-    """Durchgangsloecher je Ebene (inklusive G0). Jede Stange braucht ein Loch in jeder Ebene, die sie durchquert."""
+    """Through holes per layer (including G0). Every rod needs a hole in every layer it passes through."""
     out: dict[int, list[dict]] = {p["index"]: [] for p in geometry["planes"]}
     for u in geometry["units"]:
         for p in geometry["planes"]:

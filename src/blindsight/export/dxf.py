@@ -1,12 +1,12 @@
-"""DXF Export (ASCII, Format R12, Einheit mm, Y nach oben, Ursprung wie in der Konfiguration).
+"""DXF export (ASCII, format R12, unit mm, Y up, origin (0, 0) at the bottom left of the build area).
 
-Layer
-  BOUNDS            Bauraum
-  OBSTACLES         feste Hindernisse
-  TOP_RODS          Stangen (Kreise) in der Draufsicht
-  Gn_MOTOR          Gehaeusekonturen der Motoren auf Ebene n
-  Gn_GEAR           Zahnradkonturen auf Ebene n
-  Gn_HOLES          Durchgangsloecher der Ebene n (inklusive G0 als G0_HOLES)
+Layers
+  BOUNDS            build area
+  OBSTACLES         fixed obstacles
+  TOP_RODS          rods (circles) in top view
+  Gn_MOTOR          housing outlines of the motors on layer n
+  Gn_GEAR           gear outlines on layer n
+  Gn_HOLES          through holes of layer n (including G0 as G0_HOLES)
 """
 
 from __future__ import annotations
@@ -19,10 +19,9 @@ class DxfExporter:
     extension = "dxf"
     filename = "blindsight.dxf"
     mime = "application/dxf"
-    label = "DXF"
 
     def export(self, geometry: dict) -> str:
-        ents: list[tuple[str, str]] = []  # (Layer, Entitaetstext)
+        ents: list[tuple[str, str]] = []  # (layer, entity text)
         layers: set[str] = {"BOUNDS", "OBSTACLES", "TOP_RODS"}
         b = geometry["bounds"]
         ents.append(("BOUNDS", self._poly("BOUNDS", [(b["xmin"], b["ymin"]), (b["xmax"], b["ymin"]), (b["xmax"], b["ymax"]), (b["xmin"], b["ymax"])])))

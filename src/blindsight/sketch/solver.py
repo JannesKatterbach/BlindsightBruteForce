@@ -1,11 +1,11 @@
-"""Constraint Solver der Skizze (CAD Stil).
+"""Constraint solver of the sketch (CAD style).
 
-Ablauf von ``solve``
-  1. Struktur pruefen und die Kontur gegen den Uhrzeigersinn ausrichten
-  2. alle aktiven Constraints gemeinsam loesen (beim Ziehen mit dem Ziel als weichem Wunsch)
-  3. scheitert das, Widersprueche finden. Constraints werden der Reihe nach hinzugenommen, wer
-     sich nicht mehr erfuellen laesst, widerspricht den vorherigen
-  4. Rang der erfuellten Constraints bestimmen. Daraus folgen Freiheitsgrade und Redundanz
+Steps of ``solve``
+  1. check the structure and orient the outline counter clockwise
+  2. solve all active constraints together (when dragging with the target as a soft wish)
+  3. if that fails, find conflicts. Constraints are added one by one, one that can no longer be
+     satisfied contradicts the previous ones
+  4. determine the rank of the satisfied constraints. Degrees of freedom and redundancy follow from it
 """
 
 from __future__ import annotations
@@ -16,31 +16,25 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 from ..geometry import signed_area
+from ..i18n import tr
 from ..units import is_finite_number
 from .constraints import SketchGeometry, compile_constraint, constraint_label
 from .numeric import Residuals, Vector, constraint_rank, levenberg_marquardt, max_abs
 from .polygon import bounding_box, gear_overlap_message, measures, polygon_report
 from .structure import normalize_orientation, reversed_point_index, sketch_dict, validate_structure
 
-TIME_LIMIT_S = 3.0  # Obergrenze der Rechenzeit eines Solver Aufrufs
-TOL_OK = 1e-6  # ab hier gilt ein Constraint als erfuellt
-MIN_AREA = 1e-12  # kleinere Flaeche gilt als entartete Kontur
-DRAG_WEIGHT = 0.1  # Gewicht des Ziehziels gegenueber den Constraints
-REF_NUDGE = 1e-3  # Startlage weg von einer Referenz schieben (Abstand ist dort nicht differenzierbar)
+TIME_LIMIT_S = 3.0  # upper limit of the computing time of one solver call
+TOL_OK = 1e-6  # from here on a constraint counts as satisfied
+MIN_AREA = 1e-12  # a smaller area counts as a degenerate outline
+DRAG_WEIGHT = 0.1  # weight of the drag target compared to the constraints
+REF_NUDGE = 1e-3  # move the start position away from a reference (the distance is not differentiable there)
 
-# Zustaende
-STATE_UNDER = "under"  # noch Freiheitsgrade
-STATE_FULL = "full"  # voll bestimmt
-STATE_OVER = "over"  # mindestens ein Constraint ist redundant
-STATE_CONFLICT = "conflict"  # mindestens ein Constraint widerspricht den anderen
-STATE_INVALID = "invalid"  # Eingabe ungueltig oder nicht loesbar
-
-MSG_TIMEOUT = "Zeitlimit beim Lösen überschritten (zu viele oder zu komplizierte Constraints)"
-MSG_DRAG_REJECTED = "Die gezogene Lage verletzt Constraints. Die Skizze bleibt unverändert"
-MSG_UNSOLVED = "Die Constraints lassen sich nicht gleichzeitig erfüllen"
-MSG_BAD_DRAG = "drag. Erwartet {point, target:[x, y]} mit gültigem Punkt"
-MSG_BAD_CD = "cd. Achsabstand muss eine Zahl >= 0 sein"
-MSG_NO_AREA = "motor.sketch.points. Die Kontur hat keine Fläche"
+# States
+STATE_UNDER = "under"  # degrees of freedom left
+STATE_FULL = "full"  # fully determined
+STATE_OVER = "over"  # at least one constraint is redundant
+STATE_CONFLICT = "conflict"  # at least one constraint contradicts the others
+STATE_INVALID = "invalid"  # input invalid or not solvable
 
 
 @dataclass
@@ -49,13 +43,13 @@ class SolveResult:
     sketch: dict
     state: str  # STATE_*
     dof: int
-    constraints: list[dict] = field(default_factory=list)  # je Constraint {index, status, message, residual}
+    constraints: list[dict] = field(default_factory=list)  # per constraint {index, status, message, residual}
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     convex: bool = False
     measures: dict = field(default_factory=dict)
     bbox: Optional[dict] = None
-    reoriented: bool = False  # die Punktreihenfolge wurde umgedreht (Eingabe war im Uhrzeigersinn)
+    reoriented: bool = False  # the point order was reversed (the input was clockwise)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -70,7 +64,7 @@ def _invalid(sk: dict, errors: list[str], reoriented: bool = False) -> SolveResu
 
 
 def _parse_drag(drag: Any, n: int) -> Optional[tuple[int, float, float]]:
-    """(Punkt, Ziel x, Ziel y) oder None bei ungueltiger Angabe."""
+    """(point, target x, target y) or None for invalid input."""
     try:
         point, (tx, ty) = drag["point"], drag["target"]
     except (KeyError, TypeError, ValueError):
@@ -83,13 +77,13 @@ def _parse_drag(drag: Any, n: int) -> Optional[tuple[int, float, float]]:
 
 
 def _system(items: list[tuple[int, dict]], geo: SketchGeometry) -> Residuals:
-    """Alle Residuen der Constraints items als eine Funktion."""
+    """All residuals of the constraints items as one function."""
     fns = [compile_constraint(c, geo) for _, c in items]
     return lambda x: [r for fn in fns for r in fn(x)]
 
 
 def _nudge_off_references(x: Vector, items: list[tuple[int, dict]], geo: SketchGeometry) -> Vector:
-    """Punkte mit Abstandsbezug, die genau auf ihrer Referenz liegen, leicht verschieben."""
+    """Move points with a distance reference that lie exactly on their reference slightly."""
     x = x[:]
     for _, c in items:
         if c["type"] == "dist_point":
@@ -102,9 +96,9 @@ def _nudge_off_references(x: Vector, items: list[tuple[int, dict]], geo: SketchG
 
 def _find_conflicts(items: list[tuple[int, dict]], x0: Vector, n: int, cd: float,
                     deadline: float) -> tuple[Vector, list[int]]:
-    """Nimmt Constraints der Reihe nach hinzu. Wer sich nicht mehr erfuellen laesst, gilt als Widerspruch.
+    """Add constraints one by one. One that can no longer be satisfied counts as a conflict.
 
-    Rueckgabe (Loesung der widerspruchsfreien Constraints, Indizes der widerspruechlichen)."""
+    Returns (solution of the consistent constraints, indices of the conflicting ones)."""
     accepted: list[tuple[int, dict]] = []
     conflicts: list[int] = []
     x = x0
@@ -130,31 +124,30 @@ def _state(conflicts: list[int], redundant: list[bool], dof: int) -> str:
 
 def solve(sketch: Any, cd: float = 5.0, drag: Optional[dict] = None, diagnose: bool = True,
           gear: Optional[tuple[float, float]] = None, time_limit: float = TIME_LIMIT_S) -> SolveResult:
-    """Loest die Skizze. Die Punkte aus sketch sind die Startlage (minimale Bewegung).
+    """Solve the sketch. The points of sketch are the start position (minimal movement).
 
-    drag = {"point": i, "target": [x, y]} zieht einen Punkt so nah wie moeglich an das Ziel, ohne
-    Constraints zu verletzen. Laesst sich das Ziel nicht erreichen, bleibt die Skizze unveraendert.
-    Bei Widerspruechen enthaelt das Ergebnis die Loesung der widerspruchsfreien Constraints und ok ist
-    False. Mit diagnose=False wird die (teure) Suche nach den widerspruechlichen Constraints
-    uebersprungen, die Skizze bleibt dann unveraendert.
-    gear = (Durchmesser, Breite) prueft zusaetzlich, ob das Zahnrad ins Gehaeuse ragt (Warnung)."""
+    drag = {"point": i, "target": [x, y]} pulls a point as close as possible to the target without
+    violating constraints. If the target cannot be reached, the sketch stays unchanged. With conflicts
+    the result holds the solution of the consistent constraints and ok is False. With diagnose=False
+    the (expensive) search for the conflicting constraints is skipped and the sketch stays unchanged.
+    gear = (diameter, width) additionally checks whether the gear reaches into the housing (warning)."""
     sk = sketch_dict(sketch)
     errs = validate_structure(sk)
     if errs:
         return _invalid(sk, errs)
     if not is_finite_number(cd) or cd < 0:
-        return _invalid(sk, [MSG_BAD_CD])
+        return _invalid(sk, [tr("solver.bad_cd")])
     n = len(sk["points"])
     target = None
     if drag is not None:
         target = _parse_drag(drag, n)
         if target is None:
-            return _invalid(sk, [MSG_BAD_DRAG])
+            return _invalid(sk, [tr("solver.bad_drag")])
     sk, reoriented = normalize_orientation(sk)
     if reoriented and target is not None:
         target = (reversed_point_index(n, target[0]), target[1], target[2])
     if signed_area(sk["points"]) <= MIN_AREA:
-        return _invalid(sk, [MSG_NO_AREA], reoriented)
+        return _invalid(sk, [tr("solver.no_area")], reoriented)
 
     cons = sk["constraints"]
     active = [(k, c) for k, c in enumerate(cons) if c["enabled"]]
@@ -172,28 +165,28 @@ def solve(sketch: Any, cd: float = 5.0, drag: Optional[dict] = None, diagnose: b
             return [DRAG_WEIGHT * (x[2 * point] - tx), DRAG_WEIGHT * (x[2 * point + 1] - ty)]
 
         x, _ = levenberg_marquardt(hard, pull, x0, deadline=deadline)
-        x, resid = levenberg_marquardt(hard, None, x, deadline=deadline)  # Politur. Constraints haben Vorrang
+        x, resid = levenberg_marquardt(hard, None, x, deadline=deadline)  # polish. Constraints take precedence
     else:
         x, resid = levenberg_marquardt(hard, None, x0, deadline=deadline)
     if resid >= TOL_OK:
         if time.monotonic() > deadline:
-            return _invalid(sk, [MSG_TIMEOUT], reoriented)
+            return _invalid(sk, [tr("solver.timeout")], reoriented)
         if target is not None:
             x = x_start
-            errors.append(MSG_DRAG_REJECTED)
+            errors.append(tr("solver.drag_rejected"))
         elif diagnose:
             try:
                 x, conflicts = _find_conflicts(active, x0, n, cd, deadline)
             except _Timeout:
-                return _invalid(sk, [MSG_TIMEOUT], reoriented)
+                return _invalid(sk, [tr("solver.timeout")], reoriented)
         else:
             x = x_start
-            errors.append(MSG_UNSOLVED)
+            errors.append(tr("solver.unsolved"))
 
     used = [item for item in active if item[0] not in conflicts]
     geo = SketchGeometry(n, cd, x)
     fns_used = [compile_constraint(c, geo) for _, c in used]
-    resid = max((max_abs(fn(x)) for fn in fns_used), default=0.0)  # nach der Diagnose neu bestimmen
+    resid = max((max_abs(fn(x)) for fn in fns_used), default=0.0)  # determine again after the diagnosis
     rank, redundant = constraint_rank(fns_used, x)
     dof = 2 * n - rank
 
@@ -201,14 +194,14 @@ def solve(sketch: Any, cd: float = 5.0, drag: Optional[dict] = None, diagnose: b
     messages: dict[int, str] = {}
     for k in conflicts:
         status[k] = "conflict"
-        messages[k] = f"{constraint_label(cons[k], k)} widerspricht den vorherigen Constraints"
+        messages[k] = tr("solver.conflict", label=constraint_label(cons[k], k))
         errors.append(messages[k])
     for (k, _), is_redundant in zip(used, redundant):
         if is_redundant:
             status[k] = "redundant"
-            messages[k] = f"{constraint_label(cons[k], k)} ist redundant (bereits durch andere Constraints bestimmt)"
+            messages[k] = tr("solver.redundant", label=constraint_label(cons[k], k))
     if not errors and resid >= TOL_OK:
-        errors.append(MSG_UNSOLVED)
+        errors.append(tr("solver.unsolved"))
 
     pts = [[x[2 * i], x[2 * i + 1]] for i in range(n)]
     report = polygon_report(pts)

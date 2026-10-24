@@ -1,20 +1,20 @@
-"""Register der Skizzen Constraints.
+"""Registry of the sketch constraints.
 
-Jeder Constraint Typ ist genau ein Eintrag in ``CONSTRAINT_TYPES``. Daraus leiten sich ab
-  * die Strukturpruefung (welche Felder sind Seiten, welche Punkte, welche Werte noetig)
-  * die Gleichungen fuer den Solver (``residuals``)
-  * das Umindizieren beim Einfuegen eines Punktes (``on_split``)
-  * Beschriftungen und das Schema fuer die Web UI (``constraint_schema``)
+Every constraint type is exactly one entry in ``CONSTRAINT_TYPES``. Derived from it are
+  * the structure check (which fields are sides, which points, which values are needed)
+  * the equations for the solver (``residuals``)
+  * the reindexing when a point is inserted (``on_split``)
+  * labels and the schema for the web UI (``constraint_schema``)
 
-Erweitern. Einen neuen Typ anlegen heisst
-  1. eine Residuen Fabrik ``(c, geo) -> (x -> Liste von Residuen)`` schreiben
-  2. einen ``ConstraintType`` Eintrag in ``CONSTRAINT_TYPES`` ergaenzen
-  3. optional in der UI einen Werkzeugknopf hinzufuegen (Beschriftung und Werteart kommen
-     ueber /api/schema mit)
+Extending. Adding a new type means
+  1. write a residual factory ``(c, geo) -> (x -> list of residuals)``
+  2. add a ``ConstraintType`` entry to ``CONSTRAINT_TYPES`` and its label to the catalogs
+     (key ``constraint.<name>``)
+  3. optionally add a tool button in the UI (label and value kind come along via /api/schema)
 
-Bezeichnungen. Seite i geht von Punkt i nach Punkt i+1 (zyklisch). Der Innenwinkel an Punkt i
-liegt zwischen Seite i-1 und Seite i. Referenzen sind die Stangenachse (rod, Ursprung) und die
-Zahnradachse (gear, bei (-Achsabstand, 0)).
+Naming. Side i runs from point i to point i+1 (cyclic). The interior angle at point i lies between side
+i-1 and side i. References are the rod axis (rod, origin) and the gear axis (gear, at (-centre
+distance, 0)).
 """
 
 from __future__ import annotations
@@ -23,22 +23,23 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
-EPS_LEN = 1e-9  # kuerzeste erlaubte Seite (mm)
-MIN_NORM = 1e-12  # Untergrenze fuer Vektorlaengen (keine Division durch 0)
+from ..i18n import LocalText, tr
 
-REFS = ("rod", "gear")
-REF_LABELS = {"rod": "Stange", "gear": "Zahnrad"}
+EPS_LEN = 1e-9  # shortest permitted side (mm)
+MIN_NORM = 1e-12  # lower limit of vector lengths (no division by 0)
 
-Vector = list[float]  # Unbekannte des Solvers. [x0, y0, x1, y1, ...]
+REFS = ("rod", "gear")  # labels in the catalogs (key ref.<name>)
+
+Vector = list[float]  # unknowns of the solver. [x0, y0, x1, y1, ...]
 Residuals = Callable[[Vector], list[float]]
 
 
 # ---------------------------------------------------------------------------
-# Zugriff auf Punkte und Seiten im Unbekanntenvektor
+# Access to points and sides in the vector of unknowns
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class SketchGeometry:
-    """Kontext fuer die Residuen Fabriken. n Punkte, Achsabstand cd, Startlage x0."""
+    """Context for the residual factories. n points, centre distance cd, start position x0."""
 
     n: int
     cd: float
@@ -48,13 +49,13 @@ class SketchGeometry:
         return x[2 * i], x[2 * i + 1]
 
     def side(self, x: Vector, s: int) -> tuple[float, float]:
-        """Richtungsvektor der Seite s (von Punkt s zu Punkt s+1)."""
+        """Direction vector of side s (from point s to point s+1)."""
         ax, ay = self.point(x, s)
         bx, by = self.point(x, (s + 1) % self.n)
         return bx - ax, by - ay
 
     def ref(self, name: str) -> tuple[float, float]:
-        """Position einer Referenz (rod oder gear) im Stangenrahmen."""
+        """Position of a reference (rod or gear) in the rod frame."""
         return (0.0, 0.0) if name == "rod" else (-self.cd, 0.0)
 
 
@@ -71,12 +72,12 @@ def _dot(u: tuple[float, float], v: tuple[float, float]) -> float:
 
 
 def wrap_angle(angle_rad: float) -> float:
-    """Winkel auf [-pi, pi) abbilden."""
+    """Map an angle to [-pi, pi)."""
     return (angle_rad + math.pi) % (2 * math.pi) - math.pi
 
 
 # ---------------------------------------------------------------------------
-# Residuen Fabriken. Jede liefert eine Funktion x -> Liste von Residuen (0 = erfuellt).
+# Residual factories. Each returns a function x -> list of residuals (0 = satisfied).
 # ---------------------------------------------------------------------------
 def _length(c: dict, geo: SketchGeometry) -> Residuals:
     side, value = c["a"], c["value"]
@@ -98,8 +99,8 @@ def _interior_angle(c: dict, geo: SketchGeometry) -> Residuals:
 
 
 def _angle_between_sides(c: dict, geo: SketchGeometry) -> Residuals:
-    # Das Vorzeichen (Drehsinn von Seite a nach b) wird einmal aus der Startlage bestimmt,
-    # damit die Gleichung in der Naehe der Startlage glatt bleibt
+    # The sign (sense of rotation from side a to b) is determined once from the start position so that
+    # the equation stays smooth near the start position
     a, b = c["a"], c["b"]
     sign = -1.0 if _cross(geo.side(geo.x0, a), geo.side(geo.x0, b)) < 0 else 1.0
     target = sign * math.radians(c["value"])
@@ -182,54 +183,57 @@ def _distance_side_ref(c: dict, geo: SketchGeometry) -> Residuals:
     rx, ry = geo.ref(c["ref"])
 
     def signed_distance(x: Vector) -> float:
-        """Lotabstand der Referenz zur Geraden durch die Seite, positiv links der Seite (innen)."""
+        """Perpendicular distance of the reference to the line through the side, positive left of the side (inside)."""
         d = geo.side(x, side)
         px, py = geo.point(x, side)
         return _cross(d, (rx - px, ry - py)) / _norm(d)
 
-    # Referenz innerhalb (+) oder ausserhalb (-) der Seite, festgelegt durch die Startlage
+    # Reference inside (+) or outside (-) the side, fixed by the start position
     sign = 1.0 if signed_distance(geo.x0) > 0 else -1.0
     return lambda x: [signed_distance(x) - sign * value]
 
 
 # ---------------------------------------------------------------------------
-# Pruefung der Zahlenwerte. Liefert "" oder eine Meldung (ohne Feldpfad).
+# Check of the numbers. Returns "" or a message (without field path).
 # ---------------------------------------------------------------------------
 def _positive_length(v: float) -> str:
-    return "" if v > EPS_LEN else "Länge muss größer als 0 sein"
+    return "" if v > EPS_LEN else tr("sketch.length_positive")
 
 
 def _interior_angle_range(v: float) -> str:
-    return "" if 0 < v < 180 else "Innenwinkel muss zwischen 0 und 180 Grad liegen (exklusiv)"
+    return "" if 0 < v < 180 else tr("sketch.interior_angle_range")
 
 
 def _side_angle_range(v: float) -> str:
-    return "" if 0 <= v <= 180 else "Winkel muss zwischen 0 und 180 Grad liegen"
+    return "" if 0 <= v <= 180 else tr("sketch.side_angle_range")
 
 
 def _non_negative(v: float) -> str:
-    return "" if v >= 0 else "Abstand darf nicht negativ sein"
+    return "" if v >= 0 else tr("sketch.distance_negative")
 
 
 # ---------------------------------------------------------------------------
-# Register
+# Registry
 # ---------------------------------------------------------------------------
-SPLIT_DROP = "drop"  # Bezug auf eine geteilte Seite entfaellt (Laengen)
-SPLIT_BOTH = "both"  # Bezug gilt fuer beide Haelften (Richtungen liegen auf derselben Geraden)
+SPLIT_DROP = "drop"  # a reference to a split side is dropped (lengths)
+SPLIT_BOTH = "both"  # the reference holds for both halves (directions lie on the same line)
 
 
 @dataclass(frozen=True)
 class ConstraintType:
     name: str
-    label: str
     residuals: Callable[[dict, SketchGeometry], Residuals]
-    sides: tuple[str, ...] = ()  # Felder, die Seitenindizes sind
-    points: tuple[str, ...] = ()  # Felder, die Punktindizes sind
-    value: Optional[str] = None  # Einheit von value. "len" (mm), "deg" oder None (kein Wert)
-    value2: Optional[str] = None  # Einheit von value2 oder None
+    sides: tuple[str, ...] = ()  # fields that are side indices
+    points: tuple[str, ...] = ()  # fields that are point indices
+    value: Optional[str] = None  # unit of value. "len" (mm), "deg" or None (no value)
+    value2: Optional[str] = None  # unit of value2 or None
     check_value: Optional[Callable[[float], str]] = None
-    uses_ref: bool = False  # nutzt das Feld ref (rod oder gear)
-    on_split: str = SPLIT_BOTH  # Verhalten, wenn ein Punkt auf einer Bezugsseite eingefuegt wird
+    uses_ref: bool = False  # uses the field ref (rod or gear)
+    on_split: str = SPLIT_BOTH  # behaviour when a point is inserted on a referenced side
+
+    @property
+    def label(self) -> LocalText:
+        return tr(f"constraint.{self.name}")
 
     @property
     def index_fields(self) -> tuple[str, ...]:
@@ -245,50 +249,48 @@ class ConstraintType:
 CONSTRAINT_TYPES: dict[str, ConstraintType] = {
     t.name: t
     for t in (
-        ConstraintType("length", "Länge", _length, sides=("a",), value="len", check_value=_positive_length,
+        ConstraintType("length", _length, sides=("a",), value="len", check_value=_positive_length,
                        on_split=SPLIT_DROP),
-        ConstraintType("angle", "Winkel", _interior_angle, points=("a",), value="deg", check_value=_interior_angle_range),
-        ConstraintType("angle_sides", "Winkel zwischen Seiten", _angle_between_sides, sides=("a", "b"), value="deg",
+        ConstraintType("angle", _interior_angle, points=("a",), value="deg", check_value=_interior_angle_range),
+        ConstraintType("angle_sides", _angle_between_sides, sides=("a", "b"), value="deg",
                        check_value=_side_angle_range),
-        ConstraintType("parallel", "Parallel", _parallel, sides=("a", "b")),
-        ConstraintType("perpendicular", "Rechtwinklig", _perpendicular, sides=("a", "b")),
-        ConstraintType("equal", "Gleich lang", _equal_length, sides=("a", "b"), on_split=SPLIT_DROP),
-        ConstraintType("horizontal", "Horizontal", _horizontal, sides=("a",)),
-        ConstraintType("vertical", "Vertikal", _vertical, sides=("a",)),
-        ConstraintType("fix", "Fixiert", _fix, points=("a",), value="len", value2="len"),
-        ConstraintType("coord_x", "x Koordinate", _coord_x, points=("a",), value="len"),
-        ConstraintType("coord_y", "y Koordinate", _coord_y, points=("a",), value="len"),
-        ConstraintType("dist_point", "Abstand Punkt", _distance_point_ref, points=("a",), value="len",
+        ConstraintType("parallel", _parallel, sides=("a", "b")),
+        ConstraintType("perpendicular", _perpendicular, sides=("a", "b")),
+        ConstraintType("equal", _equal_length, sides=("a", "b"), on_split=SPLIT_DROP),
+        ConstraintType("horizontal", _horizontal, sides=("a",)),
+        ConstraintType("vertical", _vertical, sides=("a",)),
+        ConstraintType("fix", _fix, points=("a",), value="len", value2="len"),
+        ConstraintType("coord_x", _coord_x, points=("a",), value="len"),
+        ConstraintType("coord_y", _coord_y, points=("a",), value="len"),
+        ConstraintType("dist_point", _distance_point_ref, points=("a",), value="len",
                        check_value=_non_negative, uses_ref=True),
-        ConstraintType("dist_side", "Abstand Seite", _distance_side_ref, sides=("a",), value="len",
+        ConstraintType("dist_side", _distance_side_ref, sides=("a",), value="len",
                        check_value=_non_negative, uses_ref=True),
     )
 }
 
-# Abgeleitete Tabellen (Namen aus frueheren Versionen)
-# SPEC. name -> (Seitenfelder, Punktfelder, braucht value, braucht value2)
+# Derived table. name -> (side fields, point fields, needs value, needs value2)
 SPEC: dict[str, tuple[tuple[str, ...], tuple[str, ...], bool, bool]] = {
     t.name: (t.sides, t.points, t.value is not None, t.value2 is not None) for t in CONSTRAINT_TYPES.values()
 }
-LABELS: dict[str, str] = {t.name: t.label for t in CONSTRAINT_TYPES.values()}
 
 
 def compile_constraint(c: dict, geo: SketchGeometry) -> Residuals:
-    """Residuen Funktion fuer einen (strukturell geprueften) Constraint."""
+    """Residual function of a (structurally checked) constraint."""
     return CONSTRAINT_TYPES[c["type"]].residuals(c, geo)
 
 
 def constraint_label(c: dict, k: int) -> str:
-    """Lesbare Bezeichnung fuer Meldungen, z.B. 'Laenge (Seite 2) [Nr. 3]' (Zaehlung ab 1)."""
+    """Readable label for messages, e.g. 'Length (Side 2) [no. 3]' (counting from 1)."""
     ctype = CONSTRAINT_TYPES.get(c["type"])
     base = ctype.label if ctype else str(c["type"])
     where = []
     if ctype:
-        where += [f"Seite {c[f] + 1}" for f in ctype.sides]
-        where += [f"Punkt {c[f] + 1}" for f in ctype.points]
-    return f"{c['name'] or base} ({', '.join(where)}) [Nr. {k + 1}]"
+        where += [tr("sketch.side", n=c[f] + 1) for f in ctype.sides]
+        where += [tr("sketch.point", n=c[f] + 1) for f in ctype.points]
+    return tr("sketch.constraint_label", name=c["name"] or base, where=where, number=k + 1)
 
 
 def constraint_schema() -> list[dict[str, Any]]:
-    """Beschreibung aller Typen fuer die Web UI (Reihenfolge wie im Register)."""
+    """Description of all types for the web UI (order as in the registry)."""
     return [t.as_schema() for t in CONSTRAINT_TYPES.values()]

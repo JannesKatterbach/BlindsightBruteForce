@@ -1,11 +1,13 @@
-"""Hintergrundverwaltung von Optimierungslaeufen (ohne UI Abhaengigkeit).
+"""Background management of optimization runs (without UI dependency).
 
-Jeder Lauf laeuft in einem eigenen Thread. Der Status ist jederzeit abfragbar. Alle Zugriffe auf
-die Jobliste laufen unter einer Sperre, ein Job selbst wird nur von seinem Thread geschrieben.
+Every run has its own thread. The status can be queried at any time. All accesses to the job list
+happen under a lock, a job itself is only written by its own thread. The thread runs in a copy of the
+caller's context, so it keeps the language of the request that started it.
 """
 
 from __future__ import annotations
 
+import contextvars
 import threading
 import time
 import traceback
@@ -14,12 +16,13 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .config import ConfigError, Project
+from .i18n import tr
 from .layout import Counter
 from .model import Model
 from .optimizers import run_optimizer
 from .optimizers.base import OptimizationResult, ProgressInfo, StopToken
 
-# Zustaende eines Jobs
+# States of a job
 JOB_QUEUED = "queued"
 JOB_RUNNING = "running"
 JOB_FINISHED = "finished"
@@ -27,16 +30,21 @@ JOB_FAILED = "failed"
 JOB_CANCELLED = "cancelled"
 ACTIVE_STATES = (JOB_QUEUED, JOB_RUNNING)
 
-MAX_KEPT_JOBS = 20  # aeltere, beendete Jobs werden verworfen
+MAX_KEPT_JOBS = 20  # older, finished jobs are discarded
 JOB_ID_LENGTH = 12
 SHUTDOWN_JOIN_S = 5.0
 
 
 class JobNotFound(KeyError):
-    """Unbekannte Job Id (Unterklasse von KeyError fuer bestehende Aufrufer)."""
+    """Unknown job id (subclass of KeyError for existing callers)."""
 
-    def __str__(self) -> str:  # KeyError setzt die Meldung sonst in Anfuehrungszeichen
-        return str(self.args[0]) if self.args else "Unbekannter Lauf"
+    def __str__(self) -> str:  # KeyError would otherwise put the message in quotes
+        return str(self.args[0]) if self.args else tr("job.unknown")
+
+    @property
+    def message(self):
+        """The message as given (a LocalText that can be rendered in another language)."""
+        return self.args[0] if self.args else tr("job.unknown")
 
 
 @dataclass
@@ -57,7 +65,7 @@ class Job:
         return self.state in ACTIVE_STATES
 
     def best_so_far(self) -> list:
-        """Beste bisherige Anordnung als Liste von Platzierungs Dictionaries (Live Vorschau)."""
+        """Best arrangement so far as a list of placement dictionaries (live preview)."""
         progress = self.progress
         return list(progress.best_placements) if progress else []
 
@@ -79,7 +87,7 @@ class Job:
         }
 
     def run(self, counter: Counter) -> None:
-        """Arbeitsfunktion des Job Threads."""
+        """Work function of the job thread."""
         self.state = JOB_RUNNING
 
         def on_progress(info: ProgressInfo) -> None:
@@ -87,9 +95,9 @@ class Job:
 
         try:
             self.result = run_optimizer(self.model, on_progress, self.stop, counter)
-            # Abbruch hat Vorrang, auch wenn vorher schon ein anderer Grund (z.B. Zeitlimit) gesetzt war
+            # Cancellation takes precedence, even if another reason (e.g. time limit) was set before
             self.state = JOB_CANCELLED if self.stop is not None and self.stop.cancelled else JOB_FINISHED
-        except Exception:  # Schutz gegen Thread Absturz, der Fehler erscheint im Status
+        except Exception:  # protection against a thread crash, the error appears in the status
             self.error = traceback.format_exc()
             self.state = JOB_FAILED
 
@@ -101,17 +109,18 @@ class JobManager:
 
     @property
     def jobs(self) -> dict[str, Job]:
-        """Momentaufnahme der Jobs (Kopie, sicher zum Iterieren)."""
+        """Snapshot of the jobs (copy, safe to iterate)."""
         with self._lock:
             return dict(self._jobs)
 
     def start(self, project: Project) -> Job:
-        """Startet einen Lauf. Wirft ConfigError bei ungueltiger Konfiguration."""
+        """Start a run. Raises ConfigError for an invalid configuration."""
         model = Model(project)
         counter = Counter()
         stop = StopToken(project.search.time_limit_s, project.search.max_candidates, counter)
         job = Job(uuid.uuid4().hex[:JOB_ID_LENGTH], project, model, stop=stop)
-        job.thread = threading.Thread(target=job.run, args=(counter,), daemon=True, name=f"job-{job.id}")
+        job.thread = threading.Thread(target=contextvars.copy_context().run, args=(job.run, counter), daemon=True,
+                                      name=f"job-{job.id}")
         with self._lock:
             self._jobs[job.id] = job
             self._evict_old()
@@ -119,7 +128,7 @@ class JobManager:
         return job
 
     def _evict_old(self) -> None:
-        """Haelt hoechstens MAX_KEPT_JOBS, laufende Jobs bleiben immer (Aufruf unter der Sperre)."""
+        """Keep at most MAX_KEPT_JOBS, running jobs always stay (called under the lock)."""
         for old in sorted(self._jobs.values(), key=lambda j: j.started)[:-MAX_KEPT_JOBS]:
             if not old.active:
                 self._jobs.pop(old.id, None)
@@ -128,7 +137,7 @@ class JobManager:
         with self._lock:
             job = self._jobs.get(job_id)
         if job is None:
-            raise JobNotFound(f"Unbekannter Lauf {job_id}")
+            raise JobNotFound(tr("job.unknown_id", id=job_id))
         return job
 
     def cancel(self, job_id: str) -> None:
@@ -142,7 +151,7 @@ class JobManager:
                 job.stop.cancel()
 
     def shutdown(self, timeout: float = SHUTDOWN_JOIN_S) -> None:
-        """Bricht alle Laeufe ab und wartet (begrenzt) auf ihre Threads."""
+        """Cancel all runs and wait (bounded) for their threads."""
         self.cancel_all()
         deadline = time.monotonic() + timeout
         for job in self.jobs.values():

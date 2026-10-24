@@ -1,39 +1,38 @@
-"""Parametrische Skizze fuer die Motorkontur (Constraint Solver im CAD Stil).
+"""Parametric sketch of the motor outline (constraint solver in CAD style).
 
-Koordinatensystem. Ursprung ist die Achse der Gewindestange, Einheit mm, y nach oben. Der ganze
-Motor dreht bei der Platzierung um diesen Ursprung. Das Zahnrad liegt fest bei (-Achsabstand, 0),
-seine Welle verlaeuft parallel zu y.
+Coordinate system. The origin is the axis of the threaded rod, unit mm, y up. The whole motor rotates
+about this origin when placed. The gear sits fixed at (-centre distance, 0), its shaft runs parallel
+to y.
 
-Die Skizze ist ein konvexes Polygon (Punkte gegen den Uhrzeigersinn).
-  Seite i geht von Punkt i nach Punkt i+1 (zyklisch).
-  Winkel an Punkt i ist der Innenwinkel zwischen Seite i-1 und Seite i.
+The sketch is a convex polygon (points counter clockwise).
+  Side i runs from point i to point i+1 (cyclic).
+  The angle at point i is the interior angle between side i-1 and side i.
 
-Constraints (Feld type, Indizes a und b, Zahlenwerte value und value2, Referenz ref)
-  length         Seite a hat die Laenge value
-  angle          Innenwinkel an Punkt a ist value Grad (0 bis 180, exklusiv)
-  angle_sides    Winkel zwischen den Richtungen der Seiten a und b ist value Grad (0 bis 180)
-  parallel       Seiten a und b sind parallel (auch gegenlaeufig)
-  perpendicular  Seiten a und b stehen senkrecht
-  equal          Seiten a und b sind gleich lang
-  horizontal     Seite a ist parallel zur x Achse
-  vertical       Seite a ist parallel zur y Achse
-  fix            Punkt a liegt bei (value, value2)
-  coord_x        Punkt a hat die x Koordinate value
-  coord_y        Punkt a hat die y Koordinate value
-  dist_point     Abstand Punkt a zur Referenz ref (rod oder gear) ist value
-  dist_side      Lotabstand der Geraden durch Seite a zur Referenz ref ist value
+Constraints (field type, indices a and b, numbers value and value2, reference ref)
+  length         side a has length value
+  angle          interior angle at point a is value degrees (0 to 180, exclusive)
+  angle_sides    angle between the directions of sides a and b is value degrees (0 to 180)
+  parallel       sides a and b are parallel (also opposite)
+  perpendicular  sides a and b are perpendicular
+  equal          sides a and b have equal length
+  horizontal     side a is parallel to the x axis
+  vertical       side a is parallel to the y axis
+  fix            point a lies at (value, value2)
+  coord_x        point a has the x coordinate value
+  coord_y        point a has the y coordinate value
+  dist_point     distance of point a to the reference ref (rod or gear) is value
+  dist_side      perpendicular distance of the line through side a to the reference ref is value
 
-Der Solver loest die Gleichungen mit Levenberg Marquardt (reines Python, keine Abhaengigkeit) und
-bewegt die Punkte dabei so wenig wie moeglich. Er meldet Freiheitsgrade, redundante und
-widerspruechliche Constraints.
+The solver solves the equations with Levenberg Marquardt (pure Python, no dependency) and moves the
+points as little as possible. It reports degrees of freedom, redundant and conflicting constraints.
 
-Module
-  constraints  Register der Constraint Typen (neue Typen hier eintragen)
-  structure    Normierung, Strukturpruefung, Punkte einfuegen und loeschen, Huelle
-  polygon      Masse und Gueltigkeit der Kontur, Zahnrad Ueberlappung
-  numeric      Levenberg Marquardt, Rang
-  solver       solve und SolveResult
-  motor        Verbindung zu MotorSpec (Gehaeusekontur, Umrechnung alter Angaben)
+Modules
+  constraints  registry of the constraint types (add new types here)
+  structure    normalisation, structure check, inserting and deleting points, hull
+  polygon      measures and validity of the outline, gear overlap
+  numeric      Levenberg Marquardt, rank
+  solver       solve and SolveResult
+  motor        link to MotorSpec (housing outline, conversion of legacy values)
 """
 
 from ..errors import SketchError
@@ -41,7 +40,6 @@ from ..geometry import signed_area
 from .constraints import (
     CONSTRAINT_TYPES,
     EPS_LEN,
-    LABELS,
     REFS,
     SPEC,
     ConstraintType,
@@ -69,7 +67,7 @@ from .structure import (
 )
 
 __all__ = [
-    "CONSTRAINT_TYPES", "ConstraintType", "EPS_LEN", "LABELS", "MAX_CONSTRAINTS", "MAX_POINTS", "MIN_POINTS", "REFS",
+    "CONSTRAINT_TYPES", "ConstraintType", "EPS_LEN", "MAX_CONSTRAINTS", "MAX_POINTS", "MIN_POINTS", "REFS",
     "SPEC", "SketchError", "SketchGeometry", "SolveResult", "TIME_LIMIT_S", "TOL_OK", "TOL_SOLVE",
     "check_sketch_motor", "compile_constraint", "constraint_dict", "constraint_label", "constraint_schema",
     "delete_point", "gear_box", "gear_overlap_message", "housing_polygon", "hull_sketch", "insert_point",

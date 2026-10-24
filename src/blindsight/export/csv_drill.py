@@ -1,4 +1,4 @@
-"""Bohrliste (CSV) der Stangenloecher je Ebene sowie Stangenlaengen."""
+"""Drill list (CSV) of the rod holes per layer and rod lengths."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ class DrillCsvExporter:
     extension = "csv"
     filename = "blindsight.csv"
     mime = "text/csv"
-    label = "Bohrliste CSV"
 
     def export(self, geometry: dict) -> str:
         buf = io.StringIO()

@@ -35,7 +35,7 @@ def browser():
 
 @pytest.fixture
 def page(browser, base_url):
-    pg = browser.new_page(viewport={"width": 1500, "height": 950})
+    pg = browser.new_page(locale="de-DE", viewport={"width": 1500, "height": 950})
     pg.errors = []
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
     pg.goto(base_url)

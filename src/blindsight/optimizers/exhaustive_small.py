@@ -1,13 +1,12 @@
-"""Exakte Suche auf einem diskreten Raster fuer kleine Aufgaben (Backtracking mit frueher Verwerfung).
+"""Exact search on a discrete grid for small tasks (backtracking with early rejection).
 
-Vorgehen. Fenster der Stangenmittelpunkte (w mal h Rasterpunkte) werden nach der Anzahl ihrer
-Rasterpunkte aufsteigend untersucht. Je Fenster sucht ein Backtracking alle Kombinationen aus
-Position, Ebene, Winkel und Achsabstand. Ungueltige Teilkonfigurationen werden sofort verworfen.
-Das erste Fenster mit gueltiger Loesung ist das Fenster mit den wenigsten Rasterpunkten, sofern
-alle kleineren Fenster vollstaendig widerlegt wurden.
+Method. Windows of rod centres (w by h grid points) are examined in ascending order of their number
+of grid points. Per window a backtracking searches all combinations of position, layer, angle and
+centre distance. Invalid partial configurations are discarded at once. The first window with a valid
+solution is the window with the fewest grid points, provided all smaller windows were fully refuted.
 
-Aussage. Optimalitaet gilt nur bezogen auf das Raster (nicht im stetigen Raum) und nur, wenn kein Knotenlimit
-erreicht wurde. Sonst wird ehrlich gemeldet, dass die Widerlegung unvollstaendig ist.
+Statement. Optimality only holds with respect to the grid (not in continuous space) and only if no
+node limit was hit. Otherwise it is reported honestly that the refutation is incomplete.
 """
 
 from __future__ import annotations
@@ -16,25 +15,26 @@ import math
 import random
 from typing import Iterator, Optional
 
+from ..i18n import tr
 from ..layout import Counter, Layout, Placement
 from ..model import Model
 from .base import STATUS_INFEASIBLE, OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import SearchBase
 from .registry import register
 
-MAX_TARGET = 14  # groessere Aufgaben sind fuer das Backtracking zu teuer
-NODE_LIMIT = 30000  # Knoten je Fenster, danach gilt die Widerlegung als unvollstaendig
+MAX_TARGET = 14  # larger tasks are too expensive for the backtracking
+NODE_LIMIT = 30000  # nodes per window, after that the refutation counts as incomplete
 
 
 class _Abort(Exception):
-    """Knotenlimit oder Abbruch der Suche."""
+    """Node limit or cancellation of the search."""
 
 
 def windows_by_size(nx: int, ny: int, min_points: int) -> Iterator[tuple[int, int, int]]:
-    """Fenster (Punkte, w, h) mit w <= nx, h <= ny und w * h >= min_points, aufsteigend nach (w * h, w).
+    """Windows (points, w, h) with w <= nx, h <= ny and w * h >= min_points, ascending by (w * h, w).
 
-    Die Fenster werden erst bei Bedarf erzeugt. Je Punktzahl a werden nur die Teiler bis sqrt(a)
-    durchsucht, so bleibt auch ein riesiges Raster ohne Speicherproblem."""
+    The windows are generated on demand. Per point count a only the divisors up to sqrt(a) are
+    searched, so even a huge grid causes no memory problem."""
     for points in range(max(1, min_points), nx * ny + 1):
         pairs = []
         for w in range(1, math.isqrt(points) + 1):
@@ -51,7 +51,7 @@ def windows_by_size(nx: int, ny: int, min_points: int) -> Iterator[tuple[int, in
 @register
 class ExhaustiveSmallOptimizer(Optimizer):
     name = "exhaustive_small"
-    supports_parallel = False  # das Ergebnis ist deterministisch, weitere Seeds bringen nichts
+    supports_parallel = False  # the result is deterministic, further seeds do not help
 
     def search(self, model: Model, res: OptimizationResult, progress: Optional[ProgressCallback], stop: StopToken,
                counter: Counter) -> OptimizationResult:
@@ -59,20 +59,17 @@ class ExhaustiveSmallOptimizer(Optimizer):
         target = model.project.target_count
         if target > MAX_TARGET:
             res.status = STATUS_INFEASIBLE
-            res.messages.append(
-                f"Der exakte Modus ist nur für bis zu {MAX_TARGET} Stangen gedacht (Zielanzahl {target}). "
-                "Bitte 'pattern_greedy' oder 'anneal_free' verwenden."
-            )
-            res.optimality_note = "Nicht ausgeführt."
+            res.messages.append(tr("exhaustive.too_large", max=MAX_TARGET, target=target))
+            res.optimality_note = tr("exhaustive.not_run")
             res.elapsed = stop.elapsed
             return res
         search = SearchBase(model, counter, stop, random.Random(se.seed), progress)
-        search.phase = "Exakte Suche"
+        search.phase = tr("phase.exact")
         step = se.fixed_pitch or (model.project.rod.diameter + model.gap)
         x0, y0, x1, y1 = search.region
         nx = int((x1 - x0) / step) + 1
         ny = int((y1 - y0) / step) + 1
-        complete = True  # alle bisher untersuchten kleineren Fenster vollstaendig widerlegt
+        complete = True  # all smaller windows examined so far fully refuted
         found = False
         for _, w, h in windows_by_size(nx, ny, search.target):
             if search.halted():
@@ -86,24 +83,17 @@ class ExhaustiveSmallOptimizer(Optimizer):
                 complete = False
                 break
             complete = complete and not budget_hit
-            search.report(f"Fenster {w} x {h} widerlegt" + (" (unvollständig)" if budget_hit else ""))
+            search.report(tr("progress.window_refuted_partial" if budget_hit else "progress.window_refuted", w=w, h=h))
         out = finish(res, search, stop, counter, grid_exact=True)
         if found and complete and out.best:
             out.proven_optimal = True
-            out.optimality_note = (
-                f"Fenster mit den wenigsten Rasterpunkten auf dem Raster {step:.2f} mm bewiesen (alle kleineren Fenster "
-                "vollständig widerlegt, Fenster in der Ecke des Bauraums). Im stetigen Raum oder an anderer Stelle "
-                "kann eine kleinere Anordnung existieren."
-            )
+            out.optimality_note = tr("exhaustive.proven", step=step)
         elif found:
-            out.optimality_note = (
-                "Lösung gefunden, aber kleinere Fenster wurden nicht vollständig widerlegt (Knotenlimit oder Abbruch). "
-                "Nicht als optimal bewiesen."
-            )
+            out.optimality_note = tr("exhaustive.not_proven")
         return out
 
     def _window_dfs(self, search: SearchBase, points: list[tuple[float, float]]) -> tuple[bool, bool]:
-        """Backtracking ueber die Punkte eines Fensters. Rueckgabe (Loesung gefunden, Knotenlimit erreicht)."""
+        """Backtracking over the points of a window. Returns (solution found, node limit hit)."""
         target = search.target
         layout = Layout(search.model, search.counter)
         n = len(points)
@@ -117,7 +107,7 @@ class ExhaustiveSmallOptimizer(Optimizer):
                 return True
             for i in range(start, n):
                 if n - i < target - len(layout):
-                    return False  # es bleiben zu wenige Punkte
+                    return False  # too few points remain
                 x, y = points[i]
                 for plane in search.usable:
                     for angle, cd in search.options_for(plane):

@@ -1,8 +1,8 @@
-"""Optimierungsstrategien.
+"""Optimization strategies.
 
-Die Strategien registrieren sich beim Import ihres Moduls (``registry.register``). Eine neue
-Strategie braucht ein eigenes Modul mit ``@register`` Klasse, einen Import hier und einen
-Eintrag in den Optionen von ``search.optimizer`` (config.FIELD_META).
+The strategies register themselves when their module is imported (``registry.register``). A new
+strategy needs its own module with a ``@register`` class, an import here and an entry in the options
+of ``search.optimizer`` (config.FIELD_META).
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ __all__ = [
 
 def run_optimizer(model, progress: Optional[ProgressCallback] = None, stop: Optional[StopToken] = None,
                   counter: Optional[Counter] = None) -> OptimizationResult:
-    """Fuehrt den in der Konfiguration gewaehlten Optimierer aus (mit mehreren Prozessen, wenn
-    search.workers > 1 und die Strategie das unterstuetzt)."""
+    """Run the optimizer chosen in the configuration (with several processes if search.workers > 1 and
+    the strategy supports it)."""
     search = model.project.search
     counter = counter or Counter()
     stop = stop or StopToken(search.time_limit_s, search.max_candidates, counter)

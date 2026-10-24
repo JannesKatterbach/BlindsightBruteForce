@@ -353,7 +353,7 @@ def test_parallel_seeds_stay_valid_and_status_survives():
 
 
 def test_registries_match_configuration_options():
-    optimizer_options = {value for value, _ in META_BY_PATH["search.optimizer"].options}
+    optimizer_options = set(META_BY_PATH["search.optimizer"].options)
     assert set(OPTIMIZERS) == optimizer_options
     assert set(OBJECTIVES) == {f.name for f in dataclasses.fields(WeightsSpec)}
     assert not OPTIMIZERS["exhaustive_small"].supports_parallel

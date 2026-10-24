@@ -1,26 +1,28 @@
-"""Verstaendliche Diagnose, warum eine Konfiguration keine oder zu wenige Loesungen liefert."""
+"""Understandable diagnosis of why a configuration yields no or too few solutions."""
 
 from __future__ import annotations
 
 from collections import Counter as Tally
 
+from .i18n import tr
 from .layout import Layout, Placement
 from .model import Model
 
-PROBE_GRID = 9  # Probepunkte je Achse ueber den nutzbaren Bauraum
+PROBE_GRID = 9  # probe points per axis across the usable build area
 
 
 def single_unit_report(model: Model) -> list[str]:
-    """Pruefungen ohne Optimierung. Leere Liste heisst, eine Einzeleinheit ist moeglich.
+    """Checks without optimisation. An empty list means a single unit is possible.
 
-    Ist keine Ebene nutzbar, werden deren Probleme gemeldet. Sonst wird eine einzelne Einheit
-    auf einem Gitter ueber den Bauraum (abzueglich Randabstand) mit allen Ebenen, Winkeln und
-    Achsabstaenden probiert. Scheitert alles, nennt der Bericht den haeufigsten Grund.
+    If no layer is usable, its problems are reported. Otherwise a single unit is tried on a grid across
+    the build area (minus the edge margin) with all layers, angles and centre distances. If everything
+    fails, the report names the most frequent reason.
     """
     usable = model.usable_planes()
     if not usable:
-        msgs = [f"{p.name}. {problem}" for p in model.stack.motor_planes for problem in model.plane_problems(p.index)]
-        msgs.append("Keine Motorebene ist nutzbar. Ebenenabstand erhöhen, Motor niedriger wählen oder Montage ändern")
+        msgs = [tr("diagnose.plane_problem", plane=p.name, problem=problem)
+                for p in model.stack.motor_planes for problem in model.plane_problems(p.index)]
+        msgs.append(tr("diagnose.no_plane"))
         return msgs
     bounds = model.project.bounds
     layout = Layout(model)
@@ -35,14 +37,13 @@ def single_unit_report(model: Model) -> list[str]:
                     reasons[result.reason] += 1
     most_common = reasons.most_common(1)[0][0]
     return [
-        f"Selbst eine einzelne Einheit passt nicht in den Bauraum. Häufigster Grund. {most_common}",
-        f"Die Einheit reicht bis {model.unit_radius:.1f} mm von der Stangenachse. "
-        f"Bauraum {bounds.width:.0f} mal {bounds.height:.0f} mm",
+        tr("diagnose.single_fails", reason=most_common),
+        tr("diagnose.unit_size", radius=model.unit_radius, width=bounds.width, height=bounds.height),
     ]
 
 
 def _probe_points(model: Model) -> list[tuple[float, float]]:
-    """Gleichmaessiges Gitter ueber den Bauraum abzueglich Randabstand (Mitte zuerst)."""
+    """Uniform grid across the build area minus the edge margin (centre first)."""
     bounds = model.project.bounds
     margin = bounds.edge_margin
     x0, x1 = bounds.xmin + margin, bounds.xmax - margin

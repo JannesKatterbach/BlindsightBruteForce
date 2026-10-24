@@ -1,10 +1,12 @@
-"""Exportformate.
+"""Export formats.
 
-Erweitern. Ein neuer Exporter ist eine Klasse mit ``name``, ``extension``, ``filename``, ``mime``, ``label`` und
-``export(geometry) -> str`` (Protokoll ``base.Exporter``) und ein Eintrag in ``_EXPORTER_CLASSES``.
-Server, CLI und die Formatauswahl der UI (ueber /api/schema) kennen ihn dann automatisch.
+Extending. A new exporter is a class with ``name``, ``extension``, ``filename``, ``mime`` and
+``export(geometry) -> str`` (protocol ``base.Exporter``), a label in the catalogs (``export.<name>``)
+and an entry in ``_EXPORTER_CLASSES``. Server, CLI and the format selection of the UI (via /api/schema)
+then know it automatically.
 """
 
+from ..i18n import tr
 from .base import Exporter, build_geometry
 from .csv_drill import DrillCsvExporter
 from .dxf import DxfExporter
@@ -17,8 +19,9 @@ EXPORTERS = {cls.name: cls for cls in _EXPORTER_CLASSES}
 
 
 def exporter_schema() -> list[dict]:
-    """Beschreibung der Formate fuer die Web UI (Reihenfolge wie oben)."""
-    return [{"name": cls.name, "label": cls.label, "mime": cls.mime, "filename": cls.filename} for cls in _EXPORTER_CLASSES]
+    """Description of the formats for the web UI (order as above)."""
+    return [{"name": cls.name, "label": tr(f"export.{cls.name}"), "mime": cls.mime, "filename": cls.filename}
+            for cls in _EXPORTER_CLASSES]
 
 
 __all__ = [

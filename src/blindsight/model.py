@@ -1,28 +1,27 @@
-"""Geometriemodell. Uebersetzt die Konfiguration in konkrete Ebenen und Bauteile.
+"""Geometric model. Turns the configuration into concrete layers and parts.
 
-Trennung der Begriffe fuer die Gewindestange (siehe RodGeometry).
-  1. feste Motorebene (Montageflaeche, z_mount)
-  2. Laenge unter der Motorebene (length_below_mount)
-  3. maximaler Hub oberhalb von G0 (stroke)
-  4. Gewindeueberstand und Sicherheitszuschlaege (engage_below, length_tolerance)
+Separate terms of the threaded rod (see RodGeometry)
+  1. fixed motor layer (mounting face, z_mount)
+  2. length below the motor layer (length_below_mount)
+  3. maximum stroke above G0 (stroke)
+  4. thread overhang and safety allowances (engage_below, length_tolerance)
 
-Koordinatensysteme
-  * Welt. x, y in der Draufsicht, z = 0 ist die Oberseite von G0, nach unten negativ.
-  * Stangenrahmen. Ursprung ist die Achse der eigenen Gewindestange. Gehaeuse und
-    Zahnrad werden hier beschrieben und bei der Platzierung um die Stange gedreht.
+Coordinate systems
+  * World. x, y in top view with the origin (0, 0) at the bottom left corner of the build area,
+    z = 0 is the top face of G0, negative below.
+  * Rod frame. The origin is the axis of the unit's own threaded rod. Housing and gear are described
+    here and rotated about the rod when placed.
 
-Annahmen des vereinfachten Modells (bewusst klein gehalten)
-  * Gehaeuse = konvexes Prisma (Rechteck, Umriss oder Skizze), Zahnrad = Quader der
-    Abmessungen Durchmesser mal Breite (konservative Einhuellende eines Zylinders),
-    keine Zahngeometrie.
-  * Der Eingriff Zahnrad zu Gewinde ist nur ueber den Achsabstand (center_distance)
-    festgelegt. Er gilt nicht als Kollision. Die mechanische Funktion muss mit den
-    realen Bauteilen separat validiert werden.
-  * Die Stange wird als Zylinder ueber ihren gesamten Verfahrweg modelliert
-    (Huelle von eingefahrener bis ausgefahrener Stellung).
+Assumptions of the simplified model (kept small on purpose)
+  * Housing = convex prism (rectangle, outline or sketch), gear = box of diameter x width (a
+    conservative envelope of a cylinder), no tooth geometry.
+  * The mesh of gear and thread is only defined by the centre distance (center_distance). It does not
+    count as a collision. The mechanical function must be validated separately with the real parts.
+  * The rod is modelled as a cylinder over its whole travel (hull from the retracted to the extended
+    position).
 
-Das Modell liest die Konfiguration einmal beim Erzeugen. Spaetere Aenderungen am
-Project wirken erst in einem neuen Model.
+The model reads the configuration once when it is created. Later changes to the Project only take
+effect in a new Model.
 """
 
 from __future__ import annotations
@@ -34,14 +33,18 @@ from typing import Optional
 from .config import ConfigError, Project
 from .errors import SketchError
 from .geometry import BBox, Footprint, Point, Prism, point_polygon_distance, rotate, z_gap
+from .i18n import LocalText, tr
 from .sketch import housing_polygon
 from .units import EPS, KEY_DIGITS
 
-PARTS_CACHE_LIMIT = 400_000  # Anzahl zwischengespeicherter Platzierungen, danach wird geleert
+PARTS_CACHE_LIMIT = 400_000  # number of cached placements, the cache is cleared afterwards
 
-# Bauteilarten. Die Beschriftung erscheint in Meldungen wie "Motor liegt ausserhalb des Bauraums".
+# Part kinds. Their label appears in messages like "Motor lies outside the build area".
 KIND_HOUSING, KIND_GEAR, KIND_ROD, KIND_OBSTACLE = "housing", "gear", "rod", "obstacle"
-PART_LABELS = {KIND_HOUSING: "Motor", KIND_GEAR: "Zahnrad", KIND_ROD: "Stange"}
+
+
+def part_label(kind: str) -> LocalText:
+    return tr(f"part.{kind}")
 
 
 @dataclass(frozen=True)
@@ -58,24 +61,24 @@ class Plane:
 
 @dataclass(frozen=True)
 class RodGeometry:
-    """Berechnete Laengen einer Stange fuer eine bestimmte Motorebene (mm, z=0 ist G0 Oberseite).
+    """Computed lengths of a rod for one motor layer (mm, z = 0 is the top face of G0).
 
-    ``stroke``, ``tip_extended`` und ``length_above_g0`` haben immer denselben Wert. Sie bleiben
-    getrennt, weil sie in der Ausgabe unterschiedliche Fragen beantworten."""
+    ``stroke``, ``tip_extended`` and ``length_above_g0`` always have the same value. They stay separate
+    because they answer different questions in the output."""
 
     plane_index: int
-    z_mount: float  # Montageflaeche des Motors
-    z_axis: float  # Hoehe der Zahnradachse
-    stroke: float  # Hub oberhalb von G0
-    tip_extended: float  # Spitze bei maximalem Ausfahren (= stroke)
-    tip_retracted: float  # Spitze eingefahren (= -retract_depth)
-    bottom_extended: float  # Stangenende unten bei maximalem Ausfahren
-    bottom_retracted: float  # Stangenende unten eingefahren (tiefster Punkt der Huelle)
-    length: float  # erforderliche Gesamtlaenge
-    length_below_mount: float  # Teil der Stange unter der Montageflaeche (ausgefahren)
-    length_above_g0: float  # Teil der Stange ueber G0 bei maximalem Hub
-    engage_below_actual: float  # tatsaechliches Gewinde unter der Achse bei max. Ausfahren
-    engage_above_actual: float  # tatsaechliches Gewinde ueber der Achse bei vollem Einfahren
+    z_mount: float  # mounting face of the motor
+    z_axis: float  # height of the gear axis
+    stroke: float  # stroke above G0
+    tip_extended: float  # tip when fully extended (= stroke)
+    tip_retracted: float  # tip when retracted (= -retract_depth)
+    bottom_extended: float  # lower rod end when fully extended
+    bottom_retracted: float  # lower rod end when retracted (lowest point of the hull)
+    length: float  # required total length
+    length_below_mount: float  # part of the rod below the mounting face (extended)
+    length_above_g0: float  # part of the rod above G0 at full stroke
+    engage_below_actual: float  # actual thread below the axis when fully extended
+    engage_above_actual: float  # actual thread above the axis when fully retracted
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -83,16 +86,16 @@ class RodGeometry:
 
 @dataclass
 class Part:
-    """Ein Bauteil im Layout."""
+    """A part of the layout."""
 
     kind: str  # KIND_HOUSING | KIND_GEAR | KIND_ROD | KIND_OBSTACLE
     prism: Prism
-    owner: Optional[int] = None  # Unit Id, None bei festen Hindernissen
+    owner: Optional[int] = None  # unit id, None for fixed obstacles
     label: str = ""
 
 
 class PlaneStack:
-    """Die Ebenen G0 bis Gn mit Hoehen und Dicken (aus StackSpec)."""
+    """The layers G0 to Gn with heights and thicknesses (from StackSpec)."""
 
     def __init__(self, project: Project):
         stack = project.stack
@@ -101,10 +104,8 @@ class PlaneStack:
         ]
         for upper, lower in zip(self.planes, self.planes[1:]):
             if lower.z_top >= upper.z_bottom:
-                raise ConfigError(
-                    f"Ebenen {upper.name} und {lower.name} überlappen. Abstand {upper.z_top - lower.z_top:.2f} mm "
-                    f"ist kleiner als die Dicke von {upper.name} ({upper.thickness:.2f} mm)"
-                )
+                raise ConfigError(tr("model.planes_overlap", upper=upper.name, lower=lower.name,
+                                     distance=upper.z_top - lower.z_top, thickness=upper.thickness))
 
     def __getitem__(self, i: int) -> Plane:
         return self.planes[i]
@@ -114,26 +115,26 @@ class PlaneStack:
         return self.planes[1:]
 
     def free_height_above(self, i: int) -> float:
-        """Freier Raum ueber der Oberseite von Ebene i bis zur Unterseite der Ebene darueber (inf fuer G0)."""
+        """Free space above the top face of layer i up to the bottom face of the layer above (inf for G0)."""
         if i <= 0:
             return math.inf
         return self.planes[i - 1].z_bottom - self.planes[i].z_top
 
     def free_height_below(self, i: int) -> float:
-        """Freier Raum unter Ebene i bis zur Oberseite der naechsten unteren Ebene (inf bei der letzten)."""
+        """Free space below layer i down to the top face of the next lower layer (inf for the last one)."""
         if i + 1 < len(self.planes):
             return self.planes[i].z_bottom - self.planes[i + 1].z_top
         return math.inf
 
 
 class Model:
-    """Kompiliertes Projekt. Erzeugt Bauteile fuer Platzierungen und prueft statische Bedingungen."""
+    """Compiled project. Creates parts for placements and checks static conditions."""
 
     def __init__(self, project: Project):
         project.validate()
         self.project = project
         motor = project.motor
-        # Konstante Groessen aus der Konfiguration
+        # Constant values from the configuration
         self.stack = PlaneStack(project)
         self.gap = project.required_gap
         self.rod_r = project.rod.diameter / 2.0
@@ -144,21 +145,21 @@ class Model:
         }
         self.center_distances = motor.center_distances()
         self.capacity = {int(k): v for k, v in project.stack.max_per_plane.items()}
-        # Zwischenspeicher
+        # Caches
         self._parts_cache: dict[tuple, list[Part]] = {}
         self._housing_cache: dict[float, list[Point]] = {}
         self._cd_problem_cache: dict[float, str] = {}
-        # Abgeleitete Geometrie (Reihenfolge wichtig. Stangen vor Ebenenpruefung, Gehaeuse vor Radius)
+        # Derived geometry (order matters. Rods before the layer check, housing before the radius)
         self._rod_geo = {p.index: self._compute_rod(p) for p in self.stack.motor_planes}
         self._plane_problems = {p.index: self._check_plane(p) for p in self.stack.motor_planes}
         self.obstacles = self._build_obstacles()
         self.housing_nominal = self._housing_polygon()
         self.unit_radius = self._compute_unit_radius()
 
-    # -- Hoehen ---------------------------------------------------------------
+    # -- Heights ---------------------------------------------------------------
     @property
     def _mount_top(self) -> bool:
-        """True, wenn der Motor auf der Ebene steht, False, wenn er darunter haengt."""
+        """True if the motor stands on the layer, False if it hangs below it."""
         return self.project.motor.mount == "top"
 
     def _mount_z(self, plane: Plane) -> float:
@@ -177,12 +178,12 @@ class Model:
         r = self.project.motor.gear_radius
         return (z_axis - r, z_axis + r)
 
-    # -- Gewindestange -------------------------------------------------------
+    # -- Threaded rod -------------------------------------------------------
     def _compute_rod(self, plane: Plane) -> RodGeometry:
         rod = self.project.rod
         z_axis = self._axis_z(plane)
         z_mount = self._mount_z(plane)
-        tip_extended = rod.stroke  # Spitze bei vollem Hub, bezogen auf Oberseite G0 (z=0)
+        tip_extended = rod.stroke  # tip at full stroke, relative to the top face of G0 (z = 0)
         bottom_extended = z_axis - rod.engage_below - rod.length_tolerance
         length = tip_extended - bottom_extended
         tip_retracted = -rod.retract_depth
@@ -205,50 +206,43 @@ class Model:
     def rod_geometry(self, plane_index: int) -> RodGeometry:
         return self._rod_geo[plane_index]
 
-    # -- Statische Pruefungen ---------------------------------------------------
+    # -- Static checks ---------------------------------------------------
     def _check_plane(self, plane: Plane) -> list[str]:
-        """Prueft, ob Gehaeuse und Zahnrad in den vertikalen Bauraum passen. Liefert Probleme."""
+        """Check whether housing and gear fit into the vertical space. Returns the problems."""
         problems: list[str] = []
         allowed = self.project.stack.allowed_planes
         gap = self.gap
         if allowed is not None and plane.index not in allowed:
-            problems.append("Ebene ist nicht als Motorebene erlaubt")
+            problems.append(tr("model.plane_not_allowed"))
         housing_z = self._housing_z(plane)
         gear_z = self._gear_z(plane)
         for other in self.stack.planes:
-            # Das Gehaeuse sitzt auf der eigenen Ebene. Das Zahnrad muss dagegen auch von ihr Abstand halten.
+            # The housing sits on its own layer. The gear in contrast must keep its distance from it too.
             if other.index != plane.index:
                 dist = z_gap(*housing_z, other.z_bottom, other.z_top)
                 if dist < gap - EPS:
-                    problems.append(
-                        f"Motorgehäuse (Höhe {housing_z[1] - housing_z[0]:.1f} mm) passt nicht zwischen die Ebenen. "
-                        f"Abstand zu {other.name} nur {max(dist, 0):.2f} mm, benötigt {gap:.2f} mm"
-                    )
+                    problems.append(tr("model.housing_vertical", height=housing_z[1] - housing_z[0], other=other.name,
+                                       distance=max(dist, 0), gap=gap))
             dist = z_gap(*gear_z, other.z_bottom, other.z_top)
             if dist < gap - EPS:
-                problems.append(
-                    f"Zahnrad kollidiert vertikal mit {other.name} (Abstand {max(dist, 0):.2f} mm, benötigt {gap:.2f} mm)"
-                )
+                problems.append(tr("model.gear_vertical", other=other.name, distance=max(dist, 0), gap=gap))
         rod = self._rod_geo[plane.index]
         if rod.engage_above_actual < self.project.rod.engage_above - EPS:
-            problems.append(
-                f"Zahnradachse liegt zu nah an G0. Eingefahren nur {rod.engage_above_actual:.1f} mm Gewinde "
-                f"über der Achse, benötigt {self.project.rod.engage_above:.1f} mm"
-            )
+            problems.append(tr("model.axis_near_g0", actual=rod.engage_above_actual, required=self.project.rod.engage_above))
         return problems
 
     def plane_problems(self, plane_index: int) -> list[str]:
         return list(self._plane_problems[plane_index])
 
     def usable_planes(self) -> list[int]:
-        """Motorebenen ohne Hoehenprobleme, die erlaubt sind und mindestens einen Motor tragen duerfen."""
+        """Motor layers without height problems that are allowed and may carry at least one motor."""
         return [
             p.index for p in self.stack.motor_planes
             if not self._plane_problems[p.index] and self.capacity.get(p.index, 1) > 0
         ]
 
     def cd_problem(self, cd: Optional[float]) -> str:
-        """Leer, wenn das Gehaeuse bei diesem Achsabstand die eigene Stange freihaelt, sonst Meldung."""
+        """Empty if the housing keeps clear of its own rod at this centre distance, otherwise a message."""
         motor = self.project.motor
         key = round(motor.center_distance if cd is None else cd, 9)
         cached = self._cd_problem_cache.get(key)
@@ -257,30 +251,27 @@ class Model:
         distance = point_polygon_distance(0.0, 0.0, self.housing_rod(cd)) - self.rod_r
         message = ""
         if distance < motor.own_clearance - EPS:
-            message = (
-                f"Motorgehäuse berührt die eigene Stange (Abstand {max(distance, 0):.2f} mm, benötigt "
-                f"{motor.own_clearance:.2f} mm). Zahnradabstand oder Achsabstand anpassen"
-            )
+            message = tr("model.own_rod", distance=max(distance, 0), required=motor.own_clearance)
         self._cd_problem_cache[key] = message
         return message
 
     def angles_for(self, plane_index: int) -> tuple[float, ...]:
-        """Erlaubte Drehwinkel (Grad) auf dieser Ebene. Unveraenderlich, weil oft in Schleifen genutzt."""
+        """Permitted angles (degrees) on this layer. Immutable because it is used in hot loops."""
         return self._plane_angles[plane_index]
 
-    # -- Gehaeuse im Stangenrahmen ------------------------------------------------
+    # -- Housing in the rod frame ------------------------------------------------
     def _housing_polygon(self) -> list[Point]:
-        """Gehaeusekontur im Stangenrahmen (Ursprung = Stangenachse) bei nominalem Achsabstand."""
+        """Housing outline in the rod frame (origin = rod axis) at the nominal centre distance."""
         try:
             return housing_polygon(self.project.motor)
         except SketchError as exc:
             raise ConfigError(exc.errors) from exc
 
     def housing_rod(self, cd: Optional[float] = None) -> list[Point]:
-        """Gehaeusekontur im Stangenrahmen fuer einen Achsabstand.
+        """Housing outline in the rod frame for a centre distance.
 
-        Gehaeuse und Zahnradachse gehoeren zusammen, nur die Stange bleibt im Ursprung. Ein
-        groesserer Achsabstand verschiebt das Gehaeuse daher in -x."""
+        Housing and gear axis belong together, only the rod stays at the origin. A larger centre
+        distance therefore moves the housing in -x."""
         nominal = self.project.motor.center_distance
         if cd is None or abs(cd - nominal) < EPS:
             return self.housing_nominal
@@ -293,11 +284,11 @@ class Model:
         return cached
 
     @property
-    def housing_local(self) -> list[Point]:  # Name aus frueheren Versionen
+    def housing_local(self) -> list[Point]:  # name from earlier versions
         return self.housing_nominal
 
     def _compute_unit_radius(self) -> float:
-        """Obere Schranke fuer den Abstand aller Bauteilpunkte von der Stangenachse (fuer Raster)."""
+        """Upper bound of the distance of all part points from the rod axis (for the spatial grid)."""
         motor = self.project.motor
         radius = self.rod_r
         gear_r, gear_half_width = motor.gear_radius, motor.gear_width / 2.0
@@ -309,15 +300,15 @@ class Model:
                     radius = max(radius, math.hypot(x, y))
         return radius
 
-    # -- Bauteile -------------------------------------------------------------
+    # -- Parts -------------------------------------------------------------
     def unit_parts(
         self, owner: int, x: float, y: float, plane_index: int, angle_deg: float, cd: Optional[float] = None
     ) -> list[Part]:
-        """Gehaeuse, Zahnrad und Stangenhuelle einer Platzierung.
+        """Housing, gear and rod hull of a placement.
 
-        (x, y) ist die Position der Gewindestange, angle_deg die Drehung des Motors um die Stange,
-        cd der Achsabstand (None = nominal). Die Prismen werden zwischengespeichert und geteilt,
-        die Part Objekte sind fuer jeden Aufruf neu.
+        (x, y) is the position of the threaded rod, angle_deg the rotation of the motor about the rod,
+        cd the centre distance (None = nominal). The prisms are cached and shared, the Part objects are
+        new for every call.
         """
         key = (
             round(x, KEY_DIGITS), round(y, KEY_DIGITS), plane_index, round(angle_deg, KEY_DIGITS),
@@ -338,7 +329,7 @@ class Model:
         angle_rad = math.radians(angle_deg)
 
         def world(px: float, py: float) -> Point:
-            """Punkt im Stangenrahmen in Weltkoordinaten (Drehung um die Stange)."""
+            """Point of the rod frame in world coordinates (rotation about the rod)."""
             dx, dy = rotate(px, py, angle_rad)
             return (x + dx, y + dy)
 
@@ -347,13 +338,13 @@ class Model:
         gear = Footprint.rect(gear_x, gear_y, motor.gear_diameter, motor.gear_width, angle_rad)
         rod_circle = Footprint.circle(x, y, self.rod_r)
         return [
-            Part(KIND_HOUSING, Prism(housing, *self._housing_z(plane)), None, PART_LABELS[KIND_HOUSING]),
-            Part(KIND_GEAR, Prism(gear, *self._gear_z(plane)), None, PART_LABELS[KIND_GEAR]),
-            Part(KIND_ROD, Prism(rod_circle, rod.bottom_retracted, rod.tip_extended), None, PART_LABELS[KIND_ROD]),
+            Part(KIND_HOUSING, Prism(housing, *self._housing_z(plane)), None, part_label(KIND_HOUSING)),
+            Part(KIND_GEAR, Prism(gear, *self._gear_z(plane)), None, part_label(KIND_GEAR)),
+            Part(KIND_ROD, Prism(rod_circle, rod.bottom_retracted, rod.tip_extended), None, part_label(KIND_ROD)),
         ]
 
     def unit_bbox(self, x: float, y: float, plane_index: int, angle_deg: float, cd: Optional[float] = None) -> BBox:
-        """Bounding Box aller Bauteile einer Platzierung in der Draufsicht."""
+        """Bounding box of all parts of a placement in top view."""
         boxes = [p.prism.fp.bbox for p in self.unit_parts(0, x, y, plane_index, angle_deg, cd)]
         return (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
 
@@ -365,16 +356,16 @@ class Model:
             else:
                 footprint = Footprint.rect(obstacle.x, obstacle.y, obstacle.w, obstacle.h, math.radians(obstacle.angle))
             z0, z1 = obstacle.z0, obstacle.z1
-            if obstacle.plane is not None:  # Sperrzone. Gilt fuer die Platte und den Raum der Motoren dieser Ebene
+            if obstacle.plane is not None:  # keep out zone. Applies to the board and the motor space of this layer
                 plane = self.stack[obstacle.plane]
                 housing_z0, housing_z1 = self._housing_z(plane)
                 z0, z1 = min(housing_z0, plane.z_bottom), max(housing_z1, plane.z_top)
-            out.append(Part(KIND_OBSTACLE, Prism(footprint, z0, z1), None, obstacle.name or f"Hindernis {i + 1}"))
+            out.append(Part(KIND_OBSTACLE, Prism(footprint, z0, z1), None, obstacle.name or tr("part.obstacle_numbered", n=i + 1)))
         return out
 
-    # -- Bauraum --------------------------------------------------------------
+    # -- Build area --------------------------------------------------------------
     def within_bounds(self, parts: list[Part], plane_index: int) -> Optional[str]:
-        """Gibt None zurueck, wenn alles im Bauraum (und in den Montagebereichen) liegt, sonst eine Meldung."""
+        """None if everything lies inside the build area (and the mounting areas), otherwise a message."""
         bounds = self.project.bounds
         margin = bounds.edge_margin
         x0, y0 = bounds.xmin + margin, bounds.ymin + margin
@@ -384,12 +375,12 @@ class Model:
                 continue
             bx0, by0, bx1, by1 = part.prism.fp.bbox
             if bx0 < x0 - EPS or by0 < y0 - EPS or bx1 > x1 + EPS or by1 > y1 + EPS:
-                return f"{part.label} liegt außerhalb des Bauraums"
+                return tr("model.outside_bounds", part=part.label)
         zones = self.project.stack.mount_zones.get(str(plane_index))
         if zones:
             for part in parts:
                 if part.kind == KIND_HOUSING and not any(_bbox_inside(part.prism.fp.bbox, zone) for zone in zones):
-                    return "Motor liegt außerhalb der Montagebereiche der Ebene"
+                    return tr("model.outside_zones")
         return None
 
 

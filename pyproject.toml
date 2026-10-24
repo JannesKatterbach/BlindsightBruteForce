@@ -23,7 +23,7 @@ version = { attr = "blindsight.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-blindsight = ["web/static/*", "web/static/**/*"]
+blindsight = ["web/static/*", "web/static/**/*", "i18n/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

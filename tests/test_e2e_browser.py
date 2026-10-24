@@ -34,7 +34,7 @@ def browser():
 
 
 def test_full_flow(browser, base_url):
-    pg = browser.new_page(viewport={"width": 1400, "height": 900})
+    pg = browser.new_page(locale="de-DE", viewport={"width": 1400, "height": 900})
     errors = []
     pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)

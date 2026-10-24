@@ -1,7 +1,7 @@
-"""Numerik des Skizzen Solvers in reinem Python (keine Abhaengigkeit).
+"""Numerics of the sketch solver in pure Python (no dependency).
 
-  * levenberg_marquardt  minimiert die Residuen mit minimaler Bewegung der Punkte
-  * constraint_rank      Rang der Jacobi Matrix, daraus Freiheitsgrade und redundante Constraints
+  * levenberg_marquardt  minimises the residuals with minimal movement of the points
+  * constraint_rank      rank of the Jacobian, giving degrees of freedom and redundant constraints
 """
 
 from __future__ import annotations
@@ -14,25 +14,25 @@ Vector = list[float]
 Matrix = list[list[float]]
 Residuals = Callable[[Vector], list[float]]
 
-TOL_SOLVE = 1e-9  # Abbruch, wenn alle harten Residuen kleiner sind
+TOL_SOLVE = 1e-9  # stop when all hard residuals are smaller
 MAX_ITERATIONS = 120
-MAX_DAMPING_TRIES = 30  # Versuche je Iteration, eine Verbesserung durch staerkere Daempfung zu finden
+MAX_DAMPING_TRIES = 30  # attempts per iteration to find an improvement with stronger damping
 DAMPING_START = 1e-3
 DAMPING_MIN = 1e-12
-DAMPING_DECREASE = 3.0  # nach erfolgreichem Schritt
-DAMPING_INCREASE = 4.0  # nach abgelehntem Schritt
-DAMPING_SINGULAR = 10.0  # wenn das Gleichungssystem singulaer ist
-REGULARIZATION = 1e-14  # kleiner Zuschlag auf der Diagonalen, haelt das System loesbar
-MIN_STEP = 1e-13  # Schritte darunter gelten als Stillstand
-COST_ZERO = 1e-26  # Kosten darunter gelten als exakt geloest
-PIVOT_MIN = 1e-300  # kleinster Pivot der Gauss Elimination
-FD_STEP = 1e-6  # relative Schrittweite der numerischen Ableitung
-RANK_ROW_MIN = 1e-9  # Jacobi Zeilen mit kleinerer Norm wirken nicht
-RANK_REL_TOL = 1e-6  # relative Restnorm, ab der eine Zeile linear unabhaengig ist
+DAMPING_DECREASE = 3.0  # after a successful step
+DAMPING_INCREASE = 4.0  # after a rejected step
+DAMPING_SINGULAR = 10.0  # when the system of equations is singular
+REGULARIZATION = 1e-14  # small allowance on the diagonal, keeps the system solvable
+MIN_STEP = 1e-13  # smaller steps count as standstill
+COST_ZERO = 1e-26  # smaller costs count as exactly solved
+PIVOT_MIN = 1e-300  # smallest pivot of the Gaussian elimination
+FD_STEP = 1e-6  # relative step size of the numerical derivative
+RANK_ROW_MIN = 1e-9  # Jacobian rows with a smaller norm have no effect
+RANK_REL_TOL = 1e-6  # relative residual norm from which a row is linearly independent
 
 
 def solve_linear(A: Matrix, b: Vector) -> Optional[Vector]:
-    """Loest A x = b mit Gauss Elimination und Spaltenpivotisierung. None bei singulaerem A."""
+    """Solve A x = b with Gaussian elimination and column pivoting. None for a singular A."""
     n = len(b)
     M = [row[:] + [b[i]] for i, row in enumerate(A)]
     for col in range(n):
@@ -54,7 +54,7 @@ def solve_linear(A: Matrix, b: Vector) -> Optional[Vector]:
 
 
 def jacobian(fn: Residuals, x: Vector, m: int) -> Matrix:
-    """Jacobi Matrix (m Zeilen) ueber zentrale Differenzen."""
+    """Jacobian (m rows) by central differences."""
     N = len(x)
     J = [[0.0] * N for _ in range(m)]
     for j in range(N):
@@ -74,13 +74,13 @@ def max_abs(values: list[float]) -> float:
 
 def levenberg_marquardt(hard: Residuals, soft: Optional[Residuals], x0: Vector, max_iter: int = MAX_ITERATIONS,
                         deadline: Optional[float] = None) -> tuple[Vector, float]:
-    """Minimiert |hard|^2 + |soft|^2. hard sind die Constraints, soft optionale Wuensche (Ziehen).
+    """Minimise |hard|^2 + |soft|^2. hard are the constraints, soft optional wishes (dragging).
 
-    Jeder Schritt ist die Minimum Norm Loesung dx = -J^T (J J^T + mu I)^-1 r. Sie liegt im Zeilenraum
-    von J, nicht eindeutig bestimmte Richtungen bleiben daher unveraendert (minimale Bewegung der
-    Punkte) und Rundungsrauschen wird nicht in freie Richtungen verstaerkt.
+    Every step is the minimum norm solution dx = -J^T (J J^T + mu I)^-1 r. It lies in the row space of
+    J, so directions that are not uniquely determined stay unchanged (minimal movement of the points)
+    and rounding noise is not amplified into free directions.
 
-    Rueckgabe (x, groesster Betrag der harten Residuen)."""
+    Returns (x, largest absolute value of the hard residuals)."""
     if soft is None:
         def soft(x: Vector) -> list[float]:
             return []
@@ -115,9 +115,9 @@ def levenberg_marquardt(hard: Residuals, soft: Optional[Residuals], x0: Vector, 
 
 def _damped_step(J: Matrix, JJT: Matrix, r: Vector, x: Vector, full: Residuals, cost: float,
                  damping: float, scale: float):
-    """Sucht mit wachsender Daempfung einen Schritt, der die Kosten senkt.
+    """Search a step that lowers the cost with growing damping.
 
-    Rueckgabe (x, r, Kosten, Daempfung, Schrittlaenge) oder None, wenn keiner gefunden wurde."""
+    Returns (x, r, cost, damping, step length) or None if none was found."""
     m, N = len(r), len(x)
     for _ in range(MAX_DAMPING_TRIES):
         A = [row[:] for row in JJT]
@@ -139,10 +139,10 @@ def _damped_step(J: Matrix, JJT: Matrix, r: Vector, x: Vector, full: Residuals, 
 
 
 def constraint_rank(fns: list[Residuals], x: Vector) -> tuple[int, list[bool]]:
-    """Rang der gemeinsamen Jacobi Matrix, Constraint fuer Constraint aufgebaut (Gram Schmidt).
+    """Rank of the joint Jacobian, built constraint by constraint (Gram Schmidt).
 
-    Rueckgabe (Rang, redundant je Constraint). Ein Constraint ist redundant, wenn keine seiner
-    Zeilen etwas Neues zur Basis der vorherigen beitraegt."""
+    Returns (rank, redundant per constraint). A constraint is redundant if none of its rows adds
+    anything new to the basis of the previous ones."""
     basis: list[Vector] = []
     redundant: list[bool] = []
     for fn in fns:
@@ -151,9 +151,9 @@ def constraint_rank(fns: list[Residuals], x: Vector) -> tuple[int, list[bool]]:
         for row in J:
             row_norm = math.sqrt(sum(v * v for v in row))
             if row_norm < RANK_ROW_MIN:
-                continue  # Zeile ist null. Der Constraint wirkt hier nicht, zaehlt als abhaengig
+                continue  # the row is zero. The constraint has no effect here and counts as dependent
             v = row[:]
-            for _ in range(2):  # zweimal orthogonalisieren, numerisch stabiler
+            for _ in range(2):  # orthogonalise twice, numerically more stable
                 for b in basis:
                     d = sum(v[i] * b[i] for i in range(len(v)))
                     v = [v[i] - d * b[i] for i in range(len(v))]

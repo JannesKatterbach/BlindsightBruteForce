@@ -1,8 +1,8 @@
-"""Optimierer mit freier Verteilung (ohne Rastervorgabe).
+"""Optimizer with free distribution (no grid given).
 
-Mehrfachstart. Jeder Lauf beginnt mit einem zufaelligen gueltigen Teillayout und wird mit Simulated Annealing
-verdichtet (compact) oder ausgeglichen (spread). Liefert unregelmaessige, aber oft platzsparende Anordnungen
-und dient als Gegenprobe zu den Rastermustern. Heuristisch, keine Optimalitaetsaussage.
+Multi start. Every run begins with a random valid partial layout and is compacted (compact) or evened
+out (spread) with simulated annealing. Gives irregular but often space saving arrangements and serves
+as a cross check of the grid patterns. Heuristic, no statement about optimality.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 from typing import Optional
 
+from ..i18n import tr
 from ..layout import Counter, Layout
 from ..model import Model
 from .base import OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
@@ -18,9 +19,9 @@ from .registry import register
 
 RESTARTS = 4
 MIN_SLICE_S = 0.3
-START_TRIES = 4000  # Zufallsversuche fuer das Startlayout in der Mitte
-FALLBACK_TRIES = 20000  # Zufallsversuche im ganzen Bereich, wenn die Mitte nichts ergibt
-MIN_START_SPAN = 10.0  # mm, halbe Kantenlaenge des Startbereichs um die Mitte
+START_TRIES = 4000  # random attempts for the start layout in the centre
+FALLBACK_TRIES = 20000  # random attempts in the whole region if the centre gives nothing
+MIN_START_SPAN = 10.0  # mm, half edge length of the start region around the centre
 
 
 @register
@@ -31,7 +32,7 @@ class AnnealFreeOptimizer(Optimizer):
                counter: Counter) -> OptimizationResult:
         se = model.project.search
         search = SearchBase(model, counter, stop, random.Random(se.seed), progress)
-        search.phase = "Freie Verteilung"
+        search.phase = tr("phase.free")
         spread = se.layout_goal == "spread"
         for i in range(RESTARTS):
             if search.halted():
@@ -39,7 +40,7 @@ class AnnealFreeOptimizer(Optimizer):
             duration = max(MIN_SLICE_S, (se.time_limit_s - stop.elapsed) / (RESTARTS - i))
             end = stop.elapsed + duration
             layout = Layout(model, counter)
-            # compact beginnt in einer kleinen Region um die Mitte, damit der Block kompakt startet
+            # compact starts in a small region around the centre so that the block starts compact
             region = None
             if not spread:
                 cx, cy = search.center
@@ -49,7 +50,7 @@ class AnnealFreeOptimizer(Optimizer):
             if len(layout) == 0:
                 search.grow_random(layout, FALLBACK_TRIES, search.halted)
             search.consider(layout.placements())
-            search.report(f"Start {i + 1} von {RESTARTS}, {len(layout)} Einheiten")
+            search.report(tr("progress.restart", i=i + 1, n=RESTARTS, count=len(layout)))
             search.local_search(layout.placements(), lambda e=end: search.halted() or stop.elapsed > e,
                                 spread=spread, duration=duration)
         return finish(res, search, stop, counter)

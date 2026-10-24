@@ -1,4 +1,4 @@
-"""Verbindung von Skizze und Motor (MotorSpec). Umrechnung alter Gehaeuseangaben und Gehaeusekontur."""
+"""Link between sketch and motor (MotorSpec). Conversion of legacy housing values and housing outline."""
 
 from __future__ import annotations
 
@@ -8,15 +8,16 @@ from typing import Any
 
 from ..errors import SketchError
 from ..geometry import Footprint
+from ..i18n import tr
 from .polygon import gear_overlap_message
 from .solver import solve
 from .structure import sketch_dict
 
-CACHE_SIZE = 64  # geloeste Motorskizzen, die zwischengespeichert werden
+CACHE_SIZE = 64  # solved motor sketches that are cached
 
-# Schluessel aus Skizze und Motormassen -> (Gehaeusepunkte, Fehler). Eine Skizze wird pro Lauf
-# mehrfach gebraucht (Validierung, Modell, Service). Der Cache spart die Rechenzeit und verhindert,
-# dass ein knappes Zeitlimit die Validierung einmal bestehen und einmal scheitern laesst.
+# Key from sketch and motor dimensions -> (housing points, errors). A sketch is needed several times per
+# run (validation, model, service). The cache saves computing time and prevents a tight time limit from
+# letting the validation pass once and fail once.
 _motor_cache: "OrderedDict[str, tuple[list[tuple[float, float]], list[str]]]" = OrderedDict()
 
 
@@ -25,9 +26,9 @@ def _constraint(type_: str, a: Any = None, b: Any = None, value: Any = None) -> 
 
 
 def legacy_to_sketch(motor: Any, with_constraints: bool = True) -> dict:
-    """Wandelt Rechteck oder outline eines Motors in eine Skizze im Stangenrahmen um.
+    """Turn the rectangle or outline of a motor into a sketch in the rod frame.
 
-    Beim Rechteck werden Constraints mitgeliefert, die die Rechteckform festhalten."""
+    For the rectangle, constraints that keep the rectangular shape come along."""
     outline = getattr(motor, "outline", None)
     if outline:
         poly = [list(p) for p in Footprint.polygon(outline).pts]
@@ -46,10 +47,10 @@ def legacy_to_sketch(motor: Any, with_constraints: bool = True) -> dict:
 
 
 def sketch_from_outline(outline: list[list[float]], motor: Any) -> dict:
-    """Kontur im Gehaeuse Koordinatensystem (z.B. aus SVG) als Skizze im Stangenrahmen ohne Constraints.
+    """Outline in the housing coordinate system (e.g. from SVG) as a sketch in the rod frame without constraints.
 
-    Die Kontur wird so zum Zahnrad gesetzt, wie es auch ein Umriss ohne Skizze waere. Das Zahnrad sitzt
-    gear_gap hinter der obersten Kante, die Stange auf Hoehe der Zahnradmitte."""
+    The outline is placed relative to the gear the same way as an outline without a sketch. The gear sits
+    gear_gap behind the top edge, the rod at the height of the gear centre."""
     poly = [list(p) for p in Footprint.polygon(outline).pts]
     top = max(p[1] for p in poly)
     rx, ry = motor.shaft_x + motor.center_distance, top + motor.gear_gap + motor.gear_width / 2.0
@@ -65,7 +66,7 @@ def _cache_key(motor: Any, prefix: str) -> str:
 
 
 def check_sketch_motor(motor: Any, prefix: str = "motor.sketch") -> tuple[list[tuple[float, float]], list[str]]:
-    """Loest die Skizze eines Motors und prueft sie gegen das Zahnrad. Rueckgabe (Gehaeuse, Fehler)."""
+    """Solve the sketch of a motor and check it against the gear. Returns (housing, errors)."""
     key = _cache_key(motor, prefix)
     cached = _motor_cache.get(key)
     if cached is None:
@@ -82,21 +83,21 @@ def check_sketch_motor(motor: Any, prefix: str = "motor.sketch") -> tuple[list[t
 def _check_sketch_motor(motor: Any, prefix: str) -> tuple[list[tuple[float, float]], list[str]]:
     res = solve(motor.sketch, cd=motor.center_distance)
     if not res.ok:
-        return [], list(res.errors or [f"{prefix}. Skizze nicht lösbar"])
+        return [], list(res.errors or [tr("sketch.unsolvable", prefix=prefix)])
     if not res.convex:
-        return [], [f"{prefix}. {w}" for w in res.warnings]
+        return [], [tr("sketch.prefixed", prefix=prefix, message=w) for w in res.warnings]
     pts = res.sketch["points"]
     for cd in motor.center_distances():
         message = gear_overlap_message(pts, motor.center_distance, cd, motor.gear_diameter, motor.gear_width)
         if message:
-            return [(p[0], p[1]) for p in pts], [f"{prefix}. {message}"]
+            return [(p[0], p[1]) for p in pts], [tr("sketch.prefixed", prefix=prefix, message=message)]
     return [(p[0], p[1]) for p in pts], []
 
 
 def housing_polygon(motor: Any) -> list[tuple[float, float]]:
-    """Gehaeusekontur im Stangenrahmen bei nominalem Achsabstand (gegen den Uhrzeigersinn).
+    """Housing outline in the rod frame at the nominal centre distance (counter clockwise).
 
-    Mit Skizze wird sie geloest, sonst aus Rechteck oder outline berechnet. Wirft SketchError bei Fehlern."""
+    With a sketch it is solved, otherwise computed from the rectangle or outline. Raises SketchError on errors."""
     if getattr(motor, "sketch", None) is not None:
         pts, errs = check_sketch_motor(motor)
         if errs:

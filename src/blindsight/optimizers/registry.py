@@ -1,14 +1,16 @@
-"""Register der Optimierungsstrategien.
+"""Registry of the optimization strategies.
 
-Erweitern. Eine neue Strategie ist eine Unterklasse von ``base.Optimizer`` mit eindeutigem
-``name``, dekoriert mit ``@register``. Ihr Modul muss in ``optimizers/__init__.py`` importiert
-werden, und der Name gehoert in die Optionen von ``search.optimizer`` (config.FIELD_META), damit
-Validierung und UI ihn kennen. Ein Test prueft, dass beide Listen uebereinstimmen.
+Extending. A new strategy is a subclass of ``base.Optimizer`` with a unique ``name``, decorated with
+``@register``. Its module must be imported in ``optimizers/__init__.py``, and the name belongs into
+the options of ``search.optimizer`` (config.FIELD_META, with catalog texts ``option.search.optimizer.<name>``)
+so that validation and UI know it. A test checks that both lists match.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeVar
+
+from ..i18n import tr
 
 if TYPE_CHECKING:
     from .base import Optimizer
@@ -19,17 +21,17 @@ T = TypeVar("T")
 
 
 def register(cls: T) -> T:
-    """Klassendekorator. Traegt die Strategie unter ihrem Namen ein."""
+    """Class decorator. Registers the strategy under its name."""
     name = cls.name  # type: ignore[attr-defined]
     if name in OPTIMIZERS and OPTIMIZERS[name] is not cls:
-        raise ValueError(f"Optimierer '{name}' ist bereits registriert")
+        raise ValueError(tr("optimizer.duplicate", name=name))
     OPTIMIZERS[name] = cls  # type: ignore[assignment]
     return cls
 
 
 def get_optimizer(name: str = "pattern_greedy") -> "Optimizer":
-    """Neue Instanz der Strategie name."""
+    """New instance of the strategy name."""
     try:
         return OPTIMIZERS[name]()
     except KeyError:
-        raise ValueError(f"Unbekannter Optimierer '{name}'. Verfügbar. {sorted(OPTIMIZERS)}") from None
+        raise ValueError(tr("optimizer.unknown", name=name, known=sorted(OPTIMIZERS))) from None

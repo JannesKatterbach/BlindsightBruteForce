@@ -1,9 +1,9 @@
-"""Datenhaltung der Skizze. Normierung, Strukturpruefung und Umindizieren.
+"""Sketch data. Normalisation, structure check and reindexing.
 
-Die Skizze wird intern als JSON nahes Dictionary gefuehrt.
+Internally the sketch is a JSON like dictionary.
   {"points": [[x, y], ...], "constraints": [{"type", "a", "b", "value", "value2", "ref", "enabled", "name"}, ...]}
 
-Alle Funktionen hier liefern neue Dictionaries und veraendern ihre Eingabe nicht.
+All functions here return new dictionaries and do not change their input.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 
 from ..errors import SketchError
 from ..geometry import convex_hull_indices, signed_area
+from ..i18n import tr
 from ..units import is_finite_number
 from .constraints import CONSTRAINT_TYPES, REFS, SPLIT_DROP
 
@@ -21,17 +22,17 @@ MAX_CONSTRAINTS = 150
 
 CONSTRAINT_FIELDS = ("type", "a", "b", "value", "value2", "ref", "enabled", "name")
 
-IndexMap = Callable[[int], Optional[int]]  # alter Index -> neuer Index oder None (Bezug entfaellt)
+IndexMap = Callable[[int], Optional[int]]  # old index -> new index or None (reference dropped)
 
 
 # ---------------------------------------------------------------------------
-# Normierung
+# Normalisation
 # ---------------------------------------------------------------------------
 def constraint_dict(c: Any) -> dict:
-    """Wandelt ein ConstraintSpec oder Dictionary in ein normiertes Dictionary.
+    """Turn a ConstraintSpec or dictionary into a normalised dictionary.
 
-    Werte werden nicht umgewandelt (auch enabled nicht), damit validate_structure falsche
-    Typen melden kann statt sie still zu deuten."""
+    Values are not converted (enabled neither) so that validate_structure can report wrong types
+    instead of silently interpreting them."""
     if isinstance(c, dict):
         def get(key, default=None):
             return c.get(key, default)
@@ -47,9 +48,9 @@ def constraint_dict(c: Any) -> dict:
 
 
 def sketch_dict(sk: Any) -> dict:
-    """Wandelt SketchSpec oder Dictionary in {points, constraints} mit Kopien.
+    """Turn a SketchSpec or dictionary into {points, constraints} with copies.
 
-    Unpassende Eingaben (keine Listen) bleiben erhalten, validate_structure meldet sie."""
+    Unsuitable input (no lists) is kept, validate_structure reports it."""
     if isinstance(sk, dict):
         pts, cons = sk.get("points", []), sk.get("constraints", [])
     else:
@@ -62,24 +63,24 @@ def sketch_dict(sk: Any) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Strukturpruefung
+# Structure check
 # ---------------------------------------------------------------------------
 def validate_structure(sk: dict, prefix: str = "motor.sketch") -> list[str]:
-    """Prueft Typen, Indizes und Wertebereiche. Gibt alle Fehler mit Feldpfad zurueck."""
+    """Check types, indices and value ranges. Returns all errors with field path."""
     pts, cons = sk.get("points"), sk.get("constraints")
     if not isinstance(pts, list) or not isinstance(cons, list):
-        return [f"{prefix}. points und constraints müssen Listen sein"]
+        return [tr("sketch.not_lists", prefix=prefix)]
     errs: list[str] = []
     n = len(pts)
     if n < MIN_POINTS:
-        errs.append(f"{prefix}.points. Mindestens {MIN_POINTS} Punkte nötig (sind {n})")
+        errs.append(tr("sketch.min_points", prefix=prefix, min=MIN_POINTS, n=n))
     if n > MAX_POINTS:
-        errs.append(f"{prefix}.points. Höchstens {MAX_POINTS} Punkte erlaubt (sind {n})")
+        errs.append(tr("sketch.max_points", prefix=prefix, max=MAX_POINTS, n=n))
     for i, p in enumerate(pts):
         if not (isinstance(p, (list, tuple)) and len(p) == 2 and all(is_finite_number(v) for v in p)):
-            errs.append(f"{prefix}.points[{i}]. Muss [x, y] mit endlichen Zahlen sein")
+            errs.append(tr("sketch.point_format", path=f"{prefix}.points[{i}]"))
     if len(cons) > MAX_CONSTRAINTS:
-        errs.append(f"{prefix}.constraints. Zu viele Constraints (max {MAX_CONSTRAINTS})")
+        errs.append(tr("sketch.too_many_constraints", prefix=prefix, max=MAX_CONSTRAINTS))
         return errs
     for k, c in enumerate(cons):
         errs.extend(_constraint_errors(c, n, f"{prefix}.constraints[{k}]"))
@@ -89,39 +90,39 @@ def validate_structure(sk: dict, prefix: str = "motor.sketch") -> list[str]:
 def _constraint_errors(c: dict, n: int, tag: str) -> list[str]:
     ctype = CONSTRAINT_TYPES.get(c["type"]) if isinstance(c["type"], str) else None
     if ctype is None:
-        return [f"{tag}.type. Unbekannter Typ '{c['type']}'. Erlaubt. {sorted(CONSTRAINT_TYPES)}"]
+        return [tr("sketch.unknown_type", tag=tag, type=c["type"], allowed=sorted(CONSTRAINT_TYPES))]
     errs: list[str] = []
     for f in ctype.index_fields:
         idx = c[f]
         if isinstance(idx, bool) or not isinstance(idx, int):
-            errs.append(f"{tag}.{f}. Index muss eine ganze Zahl sein")
+            errs.append(tr("sketch.index_integer", path=f"{tag}.{f}"))
         elif not 0 <= idx < max(n, 1):
-            what = "Seite" if f in ctype.sides else "Punkt"
-            errs.append(f"{tag}.{f}. {what} {idx} existiert nicht (0..{n - 1})")
+            key = "sketch.side_missing" if f in ctype.sides else "sketch.point_missing"
+            errs.append(tr(key, path=f"{tag}.{f}", index=idx, last=n - 1))
     if len(ctype.sides) == 2 and isinstance(c["a"], int) and c["a"] == c["b"]:
-        errs.append(f"{tag}. Die beiden Seiten müssen verschieden sein")
+        errs.append(tr("sketch.sides_differ", tag=tag))
     if ctype.value is not None and not is_finite_number(c["value"]):
-        errs.append(f"{tag}.value. Zahl erforderlich")
+        errs.append(tr("sketch.number_required", path=f"{tag}.value"))
     elif ctype.value2 is not None and not is_finite_number(c["value2"]):
-        errs.append(f"{tag}.value2. Zahl erforderlich")
+        errs.append(tr("sketch.number_required", path=f"{tag}.value2"))
     elif ctype.check_value is not None:
         message = ctype.check_value(c["value"])
         if message:
-            errs.append(f"{tag}.value. {message}")
+            errs.append(tr("sketch.value_message", path=f"{tag}.value", message=message))
     if ctype.uses_ref and c["ref"] not in REFS:
-        errs.append(f"{tag}.ref. Muss 'rod' oder 'gear' sein")
+        errs.append(tr("sketch.ref_invalid", path=f"{tag}.ref"))
     if not isinstance(c["enabled"], bool):
-        errs.append(f"{tag}.enabled. Muss true oder false sein")
+        errs.append(tr("value.bool", path=f"{tag}.enabled"))
     if not isinstance(c["name"], str):
-        errs.append(f"{tag}.name. Muss Text sein")
+        errs.append(tr("value.text", path=f"{tag}.name"))
     return errs
 
 
 # ---------------------------------------------------------------------------
-# Umindizieren (Orientierung, Punkt einfuegen, loeschen, Huelle)
+# Reindexing (orientation, insert point, delete, hull)
 # ---------------------------------------------------------------------------
 def _map_constraint(c: dict, point_map: IndexMap, side_map: IndexMap) -> Optional[dict]:
-    """Uebertraegt einen Constraint auf neue Indizes. None, wenn ein Bezug entfaellt."""
+    """Carry a constraint over to new indices. None if a reference is dropped."""
     ctype = CONSTRAINT_TYPES[c["type"]]
     out = dict(c)
     for fields, index_map in ((ctype.sides, side_map), (ctype.points, point_map)):
@@ -143,14 +144,14 @@ def _map_all(constraints: list[dict], point_map: IndexMap, side_map: IndexMap) -
 
 
 def reversed_point_index(n: int, i: int) -> int:
-    """Index von Punkt i, nachdem die Punktreihenfolge umgedreht wurde."""
+    """Index of point i after the point order was reversed."""
     return n - 1 - i
 
 
 def normalize_orientation(sk: dict) -> tuple[dict, bool]:
-    """Dreht die Punktreihenfolge, falls die Kontur im Uhrzeigersinn liegt (Constraints werden umindiziert).
+    """Reverse the point order if the outline is clockwise (constraints are reindexed).
 
-    Rueckgabe (Skizze, wurde gedreht). Seite s (Punkt s nach s+1) wird zur Seite n-2-s."""
+    Returns (sketch, was reversed). Side s (point s to s+1) becomes side n-2-s."""
     pts = sk["points"]
     n = len(pts)
     if signed_area(pts) >= 0:
@@ -161,23 +162,23 @@ def normalize_orientation(sk: dict) -> tuple[dict, bool]:
 
 
 def insert_point(sk: dict, side: int, t: float = 0.5) -> dict:
-    """Fuegt einen Punkt auf Seite side ein (Parameter t zwischen 0 und 1, exklusiv).
+    """Insert a point on side side (parameter t between 0 and 1, exclusive).
 
-    Laengenbezuege der geteilten Seite entfallen, Richtungsbezuege gelten fuer beide Haelften."""
+    Length references of the split side are dropped, direction references hold for both halves."""
     pts = sk["points"]
     n = len(pts)
     if isinstance(side, bool) or not isinstance(side, int) or not 0 <= side < n:
-        raise SketchError(f"Seite {side} existiert nicht")
+        raise SketchError(tr("sketch.side_not_exists", side=side))
     if not is_finite_number(t) or not 0 < t < 1:
-        raise SketchError("t. Muss eine Zahl zwischen 0 und 1 sein (exklusiv)")
+        raise SketchError(tr("sketch.t_range"))
     if n >= MAX_POINTS:
-        raise SketchError(f"Höchstens {MAX_POINTS} Punkte erlaubt")
+        raise SketchError(tr("sketch.max_points_plain", max=MAX_POINTS))
     a, b = pts[side], pts[(side + 1) % n]
     new = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
     new_pts = [list(p) for p in pts[: side + 1]] + [new] + [list(p) for p in pts[side + 1:]]
 
     def shift(i: int) -> int:
-        """Punkt und Seitenindizes hinter der Einfuegestelle wandern um eins."""
+        """Point and side indices behind the insertion point move by one."""
         return i if i <= side else i + 1
 
     out: list[dict] = []
@@ -199,14 +200,14 @@ def insert_point(sk: dict, side: int, t: float = 0.5) -> dict:
 
 
 def remap_vertices(sk: dict, keep: list[int]) -> dict:
-    """Behaelt nur die Punkte keep (in dieser Reihenfolge). Constraints mit entfallenen Bezuegen werden entfernt."""
+    """Keep only the points keep (in this order). Constraints with dropped references are removed."""
     pts = sk["points"]
     n = len(pts)
     m = len(keep)
     new_of = {old: new for new, old in enumerate(keep)}
 
     def side_map(s: int) -> Optional[int]:
-        """Eine Seite bleibt nur, wenn ihre beiden Endpunkte weiterhin Nachbarn sind."""
+        """A side only stays if its two end points are still neighbours."""
         a, b = new_of.get(s), new_of.get((s + 1) % n)
         if a is None or b is None or b != (a + 1) % m:
             return None
@@ -217,19 +218,19 @@ def remap_vertices(sk: dict, keep: list[int]) -> dict:
 
 
 def delete_point(sk: dict, v: int) -> dict:
-    """Entfernt Punkt v. Constraints mit Bezug auf den Punkt oder seine zwei Seiten entfallen."""
+    """Remove point v. Constraints referring to the point or its two sides are dropped."""
     n = len(sk["points"])
     if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v < n:
-        raise SketchError(f"Punkt {v} existiert nicht")
+        raise SketchError(tr("sketch.point_not_exists", point=v))
     if n <= MIN_POINTS:
-        raise SketchError(f"Mindestens {MIN_POINTS} Punkte nötig")
+        raise SketchError(tr("sketch.min_points_plain", min=MIN_POINTS))
     return remap_vertices(sk, [i for i in range(n) if i != v])
 
 
 def hull_sketch(sk: dict) -> dict:
-    """Ersetzt die Kontur durch ihre konvexe Huelle (gegen den Uhrzeigersinn, Start beim kleinsten alten Index)."""
+    """Replace the outline by its convex hull (counter clockwise, starting at the smallest old index)."""
     keep = convex_hull_indices(sk["points"])
     if len(keep) < MIN_POINTS:
-        raise SketchError("Die Hülle hat weniger als 3 Punkte")
+        raise SketchError(tr("sketch.hull_too_small"))
     first = keep.index(min(keep))
     return remap_vertices(sk, keep[first:] + keep[:first])

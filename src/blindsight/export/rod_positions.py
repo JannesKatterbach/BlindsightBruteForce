@@ -61,7 +61,6 @@ class RodPositionsExporter:
     extension = "json"
     filename = "blindsight-rods.json"
     mime = "application/json"
-    label = "Schraubenpositionen (JSON)"
 
     def export(self, geometry: dict) -> str:
         return json.dumps(rod_positions(geometry), indent=2, ensure_ascii=False)
