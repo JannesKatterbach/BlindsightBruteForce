@@ -50,7 +50,7 @@
   }
 
   // Aenderungen an Werten in der Anzeigeeinheit (Laengen) oder in Grad
-  const toValue = (kind, v) => (kind === "len" ? fromU(v) : v);
+  const toValue = (kind, v) => (kind === "len" ? v : v);
   const showValue = (kind, v) => (kind === "len" ? fmtLen(v) : fmtDeg(v));
 
   /** Waehrend Tabellen neu gebaut werden, feuert der Browser change fuer entfernte Felder. Das ignorieren. */
@@ -133,7 +133,7 @@
   }
 
   function sidesTable(measures) {
-    let html = `<table class="grid"><tr><th>Seite</th><th>Länge [${unit}]</th><th>parallel zu</th><th>H</th><th>V</th></tr>`;
+    let html = `<table class="grid"><tr><th>Seite</th><th>Länge [mm]</th><th>parallel zu</th><th>H</th><th>V</th></tr>`;
     for (let i = 0; i < skCount(); i++) {
       const parallel = SK.sk.constraints.find((c) => c.type === "parallel" && c.enabled && (c.a === i || c.b === i));
       const partner = parallel ? (parallel.a === i ? parallel.b : parallel.a) : null;
@@ -149,7 +149,7 @@
   }
 
   function pointsTable(measures) {
-    let html = `<table class="grid"><tr><th>Punkt</th><th>x [${unit}]</th><th>y [${unit}]</th><th>Winkel °</th><th></th></tr>`;
+    let html = `<table class="grid"><tr><th>Punkt</th><th>x [mm]</th><th>y [mm]</th><th>Winkel °</th><th></th></tr>`;
     for (let i = 0; i < skCount(); i++) {
       const q = Sketch.point(i), fixed = hasConstraint("fix", i);
       const driven = (type) => (hasConstraint(type, i) || (type !== "angle" && fixed) ? "driven" : "");
@@ -178,7 +178,7 @@
   }
 
   function bindSideTable() {
-    onNumber("#skSides [data-sk-len]", "skLen", (i, v) => { if (v > 0) Sketch.commit((s) => upsert(s, "length", (c) => c.a === i, { a: i, value: fromU(v) })); });
+    onNumber("#skSides [data-sk-len]", "skLen", (i, v) => { if (v > 0) Sketch.commit((s) => upsert(s, "length", (c) => c.a === i, { a: i, value: v })); });
     $$("#skSides [data-sk-par]").forEach((select) => select.addEventListener("change", () => {
       const i = +select.dataset.skPar, j = select.value === "" ? null : +select.value;
       Sketch.commit((s) => {
@@ -197,8 +197,8 @@
   }
 
   function bindPointTable() {
-    onNumber("#skPoints [data-sk-x]", "skX", (i, v) => Sketch.commit((s) => upsert(s, "coord_x", (c) => c.a === i, { a: i, value: fromU(v) })));
-    onNumber("#skPoints [data-sk-y]", "skY", (i, v) => Sketch.commit((s) => upsert(s, "coord_y", (c) => c.a === i, { a: i, value: fromU(v) })));
+    onNumber("#skPoints [data-sk-x]", "skX", (i, v) => Sketch.commit((s) => upsert(s, "coord_x", (c) => c.a === i, { a: i, value: v })));
+    onNumber("#skPoints [data-sk-y]", "skY", (i, v) => Sketch.commit((s) => upsert(s, "coord_y", (c) => c.a === i, { a: i, value: v })));
     onNumber("#skPoints [data-sk-ang]", "skAng", (i, v) => { if (v > 0 && v < 180) Sketch.commit((s) => upsert(s, "angle", (c) => c.a === i, { a: i, value: v })); });
     $$("#skPoints [data-sk-fix]").forEach((button) => button.addEventListener("click", () => {
       const i = +button.dataset.skFix;
@@ -220,7 +220,7 @@
     for (const m of [...(r.errors || []), ...(r.warnings || [])]) items.push(`<span style="color:var(--bad)">${esc(m)}</span>`);
     const clearance = skCount() >= 3 ? Sketch.housingClearance() : 0;
     if (clearance < cfg.motor.own_clearance - SK_EPS) {
-      items.push(`<span style="color:var(--bad)">Gehäuse zu nah an der Stange (${fmtLen(Math.max(0, clearance))} ${unit}, benötigt ${fmtLen(cfg.motor.own_clearance)} ${unit})</span>`);
+      items.push(`<span style="color:var(--bad)">Gehäuse zu nah an der Stange (${fmtLen(Math.max(0, clearance))} mm, benötigt ${fmtLen(cfg.motor.own_clearance)} mm)</span>`);
     }
     if (SK.msg) items.push(`<span style="color:var(--bad)">${esc(SK.msg)}</span>`);
     if (!SK.attached) items.push("Vorschau des aktuellen Motors. Die erste Änderung übernimmt die Skizze in die Konfiguration.");

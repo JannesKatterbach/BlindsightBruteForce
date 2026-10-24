@@ -1,13 +1,14 @@
 import math
 
 from blindsight.geometry import Footprint, Prism, footprint_distance, prism_distance
-from blindsight.units import from_mm, to_mm
+from blindsight.motor_import import _length_mm
 
 
-def test_units_roundtrip():
-    assert to_mm(2, "cm") == 20
-    assert math.isclose(to_mm(1, "in"), 25.4)
-    assert math.isclose(from_mm(25.4, "in"), 1.0)
+def test_svg_lengths_are_converted_to_mm():
+    # The program works in mm only, SVG files may carry other units which are converted on import
+    assert _length_mm("2cm") == 20
+    assert math.isclose(_length_mm("1in"), 25.4)
+    assert _length_mm("10px") is None and _length_mm("10") is None
 
 
 def test_circle_circle_distance():

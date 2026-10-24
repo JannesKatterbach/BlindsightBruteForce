@@ -1,14 +1,9 @@
 "use strict";
-// Gemeinsamer Zustand der Oberflaeche und Einheiten. cfg ist die Konfiguration im JSON Format des Kerns (mm).
+// Gemeinsamer Zustand der Oberflaeche. cfg ist die Konfiguration im JSON Format des Kerns. Alle Laengen in mm.
 
 let cfg = null;  // aktuelle Konfiguration (Tests greifen ueber den globalen Namen zu)
 let schema = null;  // /api/schema (Felder, Constraint Typen, Exportformate)
 let defaults = null;  // /api/default
-let unit = "mm";  // Anzeigeeinheit fuer Laengen
-
-const UNIT = { mm: 1, cm: 10, in: 25.4 };
-const toU = (mm) => round(mm / UNIT[unit]);
-const fromU = (value) => value * UNIT[unit];
 
 /**
  * Feldarten des Schemas. read wandelt den Eingabetext in den Wert (mm) und liefert undefined bei
@@ -21,15 +16,15 @@ function parseNumbers(text, parse) {
   return values.some((v) => v === undefined) ? undefined : values;
 }
 const KINDS = {
-  len: { length: true, read: (t) => { const v = parseNumber(t); return v === undefined ? v : fromU(v); }, write: (v) => toU(v) },
+  len: { length: true, read: parseNumber, write: (v) => round(v) },
   num: { read: parseNumber, write: (v) => v },
   int: { read: parseInteger, write: (v) => v },
   text: { read: (t) => t, write: (v) => v },
   enum: { read: (t) => t, write: (v) => v },
   list: { list: true, read: (t) => parseNumbers(t, parseNumber), write: (v) => v.map((x) => round(x)).join(", ") },
-  lenlist: { list: true, length: true, read: (t) => { const v = parseNumbers(t, parseNumber); return v && v.map(fromU); }, write: (v) => v.map(toU).join(", ") },
+  lenlist: { list: true, length: true, read: (t) => parseNumbers(t, parseNumber), write: (v) => v.map((x) => round(x)).join(", ") },
   listint: { list: true, read: (t) => parseNumbers(t, parseInteger), write: (v) => v.join(", ") },
   liststr: { list: true, read: (t) => splitList(t), write: (v) => v.join(", ") },
 };
 const kindOf = (name) => KINDS[name] || KINDS.text;
-const lenLabel = (label, kind) => (kindOf(kind).length ? `${label} [${unit}]` : label);
+const lenLabel = (label, kind) => (kindOf(kind).length ? `${label} [mm]` : label);

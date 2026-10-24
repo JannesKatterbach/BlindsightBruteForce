@@ -66,8 +66,8 @@
   function addLength() {
     const sides = sortedSides();
     const i = sides.length ? sides[0] : Sketch.adjacentSide(sortedPoints());
-    askValue(`Länge S${i + 1} [${unit}]`, fmtLen(Sketch.sideLen(i)), Sketch.sideMid(i), (v) => {
-      if (v > 0) Sketch.commit((s) => Sketch.upsert(s, "length", (c) => c.a === i, { a: i, value: fromU(v) }));
+    askValue(`Länge S${i + 1} [mm]`, fmtLen(Sketch.sideLen(i)), Sketch.sideMid(i), (v) => {
+      if (v > 0) Sketch.commit((s) => Sketch.upsert(s, "length", (c) => c.a === i, { a: i, value: v }));
     });
   }
 
@@ -112,14 +112,14 @@
     const points = sortedPoints();
     if (points.length === 1) {
       const i = points[0], q = Sketch.point(i), r = Sketch.refPos(ref);
-      askValue(`Abstand P${i + 1} zu ${word} [${unit}]`, fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), q, (v) => {
-        if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_point", (c) => c.a === i && c.ref === ref, { a: i, ref, value: fromU(v) }));
+      askValue(`Abstand P${i + 1} zu ${word} [mm]`, fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), q, (v) => {
+        if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_point", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
       });
       return;
     }
     const i = sortedSides()[0];
-    askValue(`Abstand S${i + 1} zu ${word} [${unit}]`, fmtLen(Sketch.distanceSideRef(i, ref)), Sketch.sideMid(i), (v) => {
-      if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_side", (c) => c.a === i && c.ref === ref, { a: i, ref, value: fromU(v) }));
+    askValue(`Abstand S${i + 1} zu ${word} [mm]`, fmtLen(Sketch.distanceSideRef(i, ref)), Sketch.sideMid(i), (v) => {
+      if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_side", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
     });
   }
 
@@ -132,7 +132,7 @@
     if (kind !== "cons" || !valueKind) return;
     const at = c.type === "dist_point" ? Sketch.point(c.a) : Sketch.sideMid(c.a ?? 0);
     askValue(Sketch.constraintText(c), valueKind === "len" ? fmtLen(c.value) : fmtDeg(c.value), at, (v) => {
-      Sketch.commit((s) => { s.constraints[i].value = valueKind === "len" ? fromU(v) : v; });
+      Sketch.commit((s) => { s.constraints[i].value = valueKind === "len" ? v : v; });
     });
   }
 

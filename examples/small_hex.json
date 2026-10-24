@@ -37,10 +37,8 @@
     "mount_zones": {}
   },
   "bounds": {
-    "xmin": 0.0,
-    "ymin": 0.0,
-    "xmax": 100,
-    "ymax": 100,
+    "width": 100.0,
+    "height": 100.0,
     "edge_margin": 0.0,
     "parts_in_bounds": "all"
   },

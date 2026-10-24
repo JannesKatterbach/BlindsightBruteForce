@@ -194,22 +194,24 @@ class StackSpec:
 
 @dataclass
 class BoundsSpec:
-    """Zulaessiger Bauraum in der Draufsicht (Rechteck)."""
+    """Build area in top view. A rectangle from the origin (0, 0) at the bottom left to (width, height), in mm."""
 
-    xmin: float = 0.0
-    ymin: float = 0.0
-    xmax: float = 120.0
-    ymax: float = 120.0
+    width: float = 120.0
+    height: float = 120.0
     edge_margin: float = 0.0
     parts_in_bounds: str = "all"
 
-    @property
-    def width(self) -> float:
-        return self.xmax - self.xmin
+    # Corner coordinates for the geometry code. The origin is fixed at the bottom left corner.
+    xmin = 0.0
+    ymin = 0.0
 
     @property
-    def height(self) -> float:
-        return self.ymax - self.ymin
+    def xmax(self) -> float:
+        return self.width
+
+    @property
+    def ymax(self) -> float:
+        return self.height
 
 
 @dataclass
@@ -447,8 +449,8 @@ def plane_overlap_errors(stack: StackSpec) -> list[str]:
 
 def _check_bounds(proj: Project, errs: list[str]) -> None:
     bounds = proj.bounds
-    if bounds.xmax <= bounds.xmin or bounds.ymax <= bounds.ymin:
-        errs.append("bounds. Bauraum hat keine positive Fläche (xmax>xmin, ymax>ymin)")
+    if bounds.width <= 0 or bounds.height <= 0:
+        errs.append("bounds. Bauraum hat keine positive Fläche (Breite und Höhe größer 0)")
     elif 2 * bounds.edge_margin >= min(bounds.width, bounds.height):
         errs.append("bounds.edge_margin. Randabstand ist größer als der halbe Bauraum")
 
@@ -564,10 +566,8 @@ FIELD_META: list[Meta] = [
     Meta("stack.g0_thickness", "Dicke G0", "Plattendicke der oberen Referenzebene", "len", 0, 1000, True, group="stack"),
     Meta("stack.thicknesses", "Dicke je Ebene (Liste, optional)", "Eigene Dicke für jede Motorebene, überschreibt die gemeinsame Dicke", "lenlist", group="stack", optional=True),
     Meta("stack.allowed_planes", "Erlaubte Motorebenen (Liste, leer = alle)", "Nur diese Ebenen dürfen Motoren tragen", "listint", group="stack", optional=True),
-    Meta("bounds.xmin", "x min", "Bauraum, linke Grenze", "len", -1e6, 1e6, group="bounds"),
-    Meta("bounds.xmax", "x max", "Bauraum, rechte Grenze", "len", -1e6, 1e6, group="bounds"),
-    Meta("bounds.ymin", "y min", "Bauraum, untere Grenze", "len", -1e6, 1e6, group="bounds"),
-    Meta("bounds.ymax", "y max", "Bauraum, obere Grenze", "len", -1e6, 1e6, group="bounds"),
+    Meta("bounds.width", "Breite (x)", "Ausdehnung des Bauraums in x ab dem Ursprung unten links", "len", 0, 1e6, True, group="bounds"),
+    Meta("bounds.height", "Höhe (y)", "Ausdehnung des Bauraums in y ab dem Ursprung unten links", "len", 0, 1e6, True, group="bounds"),
     Meta("bounds.edge_margin", "Randabstand", "Zusätzlicher Abstand aller Bauteile zum Rand", "len", 0, 1e6, group="bounds"),
     Meta("bounds.parts_in_bounds", "Im Bauraum müssen liegen", "Alle Bauteile oder nur die Stangen", "enum", group="bounds",
          options=(("all", "alle Bauteile"), ("rods", "nur Stangen"))),

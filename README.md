@@ -290,10 +290,8 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `stack.g0_thickness` | Dicke G0. Plattendicke der oberen Referenzebene | mm | > 0, <= 1000 |
 | `stack.thicknesses` | Dicke je Ebene (Liste, optional). Eigene Dicke für jede Motorebene, überschreibt die gemeinsame Dicke | mm |  |
 | `stack.allowed_planes` | Erlaubte Motorebenen (Liste, leer = alle) (optional). Nur diese Ebenen dürfen Motoren tragen |  |  |
-| `bounds.xmin` | x min. Bauraum, linke Grenze | mm | >= -1e+06, <= 1e+06 |
-| `bounds.xmax` | x max. Bauraum, rechte Grenze | mm | >= -1e+06, <= 1e+06 |
-| `bounds.ymin` | y min. Bauraum, untere Grenze | mm | >= -1e+06, <= 1e+06 |
-| `bounds.ymax` | y max. Bauraum, obere Grenze | mm | >= -1e+06, <= 1e+06 |
+| `bounds.width` | Breite (x). Ausdehnung des Bauraums in x ab dem Ursprung unten links | mm | > 0, <= 1e+06 |
+| `bounds.height` | Höhe (y). Ausdehnung des Bauraums in y ab dem Ursprung unten links | mm | > 0, <= 1e+06 |
 | `bounds.edge_margin` | Randabstand. Zusätzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
 | `bounds.parts_in_bounds` | Im Bauraum müssen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
 | `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` |

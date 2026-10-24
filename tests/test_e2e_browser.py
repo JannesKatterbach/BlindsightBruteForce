@@ -50,10 +50,10 @@ def test_full_flow(browser, base_url):
     pg.dispatch_event("#in-rod-diameter", "change")
     pg.wait_for_selector("#in-rod-diameter:not(.err)")
     errors.clear()  # die absichtlich ungueltige Eingabe erzeugt eine 400 Antwort im Browser Log
-    # Einheit cm rechnet um
-    pg.select_option("#unitSel", "cm")
-    assert pg.input_value("#in-rod-diameter") == "0.4"
-    pg.select_option("#unitSel", "mm")
+    # Alle Laengen in mm, Bauraum ab dem Ursprung unten links
+    assert pg.locator("#unitSel").count() == 0
+    assert "[mm]" in pg.inner_text("[data-label-for='rod.diameter']")
+    assert pg.locator("#in-bounds-xmin").count() == 0 and pg.locator("#in-bounds-width").count() == 1
     # Optimierung
     pg.click("[data-tab=optim]")
     # Zeitpuffer fuer volle Testlaeufe. Nach erreichter Zielanzahl beendet die Stagnation den Lauf frueh

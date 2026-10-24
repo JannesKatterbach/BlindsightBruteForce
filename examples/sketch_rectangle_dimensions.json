@@ -126,10 +126,8 @@
     "plane_angles": {}
   },
   "bounds": {
-    "xmin": 0.0,
-    "ymin": 0.0,
-    "xmax": 120.0,
-    "ymax": 120.0,
+    "width": 120.0,
+    "height": 120.0,
     "edge_margin": 0.0,
     "parts_in_bounds": "all"
   },

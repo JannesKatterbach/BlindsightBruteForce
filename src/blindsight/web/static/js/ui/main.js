@@ -36,13 +36,6 @@ function onFile(selector, handler) {
 
 function bindHeader() {
   $$("#tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
-  $("#unitSel").addEventListener("change", () => {
-    unit = $("#unitSel").value;
-    writeInputs();
-    refresh();
-    if (selUnit != null) renderEditPanel();
-    if (window.skRender) skRender();
-  });
   $("#btnSave").addEventListener("click", () => download("blindsight-config.json", JSON.stringify(cfg, null, 2), "application/json"));
   $("#btnReset").addEventListener("click", () => loadCfg({}));
   onFile("#fileLoad", async (file) => {

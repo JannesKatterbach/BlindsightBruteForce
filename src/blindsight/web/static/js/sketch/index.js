@@ -31,7 +31,7 @@
     $("#skCdIn").addEventListener("change", () => {
       const v = parseFloat($("#skCdIn").value);
       if (!(v >= 0)) return;
-      cfg.motor.center_distance = fromU(v);
+      cfg.motor.center_distance = v;
       writeInputs();
       Sketch.resolve();
     });

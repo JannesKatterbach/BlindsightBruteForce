@@ -1,12 +1,12 @@
-"""Zentrale Definition der Masseinheiten, Toleranzen und Zahlpruefungen.
+"""Units, tolerances and number checks of the whole program.
 
-Intern wird ausschliesslich in Millimetern (mm) gerechnet. Winkel stehen in der
-Konfiguration in Grad, im Rechenkern (geometry.py) in Radiant. Die Web UI
-rechnet Eingaben in cm oder inch mit derselben Tabelle um (sie bekommt sie ueber
-``/api/schema``).
+Units. All lengths are millimetres (mm), in the configuration, in the UI, in exports and in the
+computation. Time is in seconds. Motor angles are in degrees in the configuration and the UI
+(accepted for use with SI) and in radians inside the geometry kernel (``geometry.py``).
+Coordinates. The origin (0, 0) is the bottom left corner of the build area, x to the right, y up,
+z = 0 is the top face of G0 and negative below.
 
-Toleranzen sind hier gesammelt, damit gleiche Begriffe ueberall gleich verglichen
-werden. Wer eine Toleranz aendert, aendert sie fuer das ganze Programm.
+Tolerances are collected here so equal concepts are compared equally everywhere.
 """
 
 from __future__ import annotations
@@ -14,54 +14,20 @@ from __future__ import annotations
 import math
 from typing import Any
 
-MM = 1.0
-LENGTH_UNITS = {
-    "mm": 1.0,
-    "cm": 10.0,
-    "m": 1000.0,
-    "in": 25.4,
-    "mil": 0.0254,
-}
-UI_LENGTH_UNITS = ("mm", "cm", "in")  # in der Oberflaeche waehlbar
-
-# Numerische Toleranzen
-EPS = 1e-9  # allgemeiner Vergleich von Laengen in mm (Rundungsrauschen)
-EPS_AREA = 1e-9  # Flaeche in mm^2, darunter gilt eine Kontur als flaechenlos
-ANGLE_TOL_DEG = 1e-4  # zwei Winkel in Grad gelten als gleich
-KEY_DIGITS = 6  # Rundung von Koordinaten und Winkeln fuer Cache Schluessel und Signaturen
-FAR_AWAY = 1e6  # "unendlich" fuer Z Grenzen von Hindernissen (mm)
+# Numeric tolerances
+EPS = 1e-9  # general comparison of lengths in mm (rounding noise)
+EPS_AREA = 1e-9  # area in mm^2, below this an outline counts as degenerate
+ANGLE_TOL_DEG = 1e-4  # two angles in degrees count as equal
+KEY_DIGITS = 6  # rounding of coordinates and angles for cache keys and signatures
+FAR_AWAY = 1e6  # "infinite" z limit of obstacles (mm)
 
 
 def is_finite_number(value: Any) -> bool:
-    """True fuer int oder float, die endlich sind. bool zaehlt nicht als Zahl."""
+    """True for finite int or float values. bool does not count as a number."""
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def normalize_angle_deg(angle_deg: float) -> float:
-    """Winkel in Grad auf [0, 360) abbilden, gerundet fuer stabile Vergleiche."""
+    """Map an angle in degrees to [0, 360), rounded for stable comparisons."""
     a = round(angle_deg % 360.0, KEY_DIGITS)
     return 0.0 if a >= 360.0 else a
-
-
-def to_mm(value: float, unit: str = "mm") -> float:
-    """Rechnet einen Wert der angegebenen Einheit in Millimeter um."""
-    try:
-        return float(value) * LENGTH_UNITS[unit]
-    except KeyError:
-        raise ValueError(f"Unbekannte Längeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
-
-
-def from_mm(value_mm: float, unit: str = "mm") -> float:
-    """Rechnet Millimeter in die angegebene Einheit um."""
-    try:
-        return float(value_mm) / LENGTH_UNITS[unit]
-    except KeyError:
-        raise ValueError(f"Unbekannte Längeneinheit '{unit}'. Erlaubt. {sorted(LENGTH_UNITS)}") from None
-
-
-def deg2rad(deg: float) -> float:
-    return math.radians(deg)
-
-
-def rad2deg(rad: float) -> float:
-    return math.degrees(rad)

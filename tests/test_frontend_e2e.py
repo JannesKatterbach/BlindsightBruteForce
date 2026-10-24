@@ -115,10 +115,9 @@ def test_loaded_result_click_reset_and_export(page):
     page.wait_for_selector("#edX")
     page.wait_for_timeout(300)
     assert page.evaluate("edited") is False
-    # Bearbeiten in der Anzeigeeinheit, dann Zuruecksetzen auf den geladenen Stand
-    page.select_option("#unitSel", "cm")
-    page.wait_for_function("document.querySelector('#edX') && document.querySelector('#edX').value === '3'")
-    change(page, "#edX", "5")
+    # Bearbeiten in mm, dann Zuruecksetzen auf den geladenen Stand
+    assert page.input_value("#edX") == "30"
+    change(page, "#edX", "50")
     page.wait_for_function("edited && lastGeo.units[0].x === 50")
     page.click("#edReset")
     page.wait_for_function("!edited && lastGeo.units[0].x === 30")

@@ -273,16 +273,16 @@ from blindsight.scoring import OBJECTIVES, evaluate, upper_bound_count  # noqa: 
 def test_upper_bound_is_at_least_one_when_a_single_rod_fits():
     # Frueher ergab die Flaechenschranke fuer kleine Bereiche 0, obwohl eine Stange passt
     p = Project()
-    p.bounds.xmax = p.bounds.xmin + p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
-    p.bounds.ymax = p.bounds.ymin + p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
+    p.bounds.width = p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
+    p.bounds.height = p.rod.diameter + 2 * p.bounds.edge_margin + 0.5
     assert upper_bound_count(Model(p)) >= 1
 
 
 def test_upper_bound_counts_rods_on_a_line():
     p = Project()
     d = p.rod.diameter + p.required_gap
-    p.bounds.xmax = p.bounds.xmin + p.rod.diameter + 2 * p.bounds.edge_margin + 4 * d  # 5 Stangen in einer Reihe
-    p.bounds.ymax = p.bounds.ymin + p.rod.diameter + 2 * p.bounds.edge_margin
+    p.bounds.width = p.rod.diameter + 2 * p.bounds.edge_margin + 4 * d  # 5 Stangen in einer Reihe
+    p.bounds.height = p.rod.diameter + 2 * p.bounds.edge_margin
     assert upper_bound_count(Model(p)) >= 5
 
 
@@ -321,7 +321,7 @@ def test_stagnation_waits_for_the_best_rated_solution_to_reach_the_target():
 
 def test_pattern_points_are_limited_before_generation():
     p = Project()
-    p.bounds.xmax = p.bounds.ymax = 100_000.0
+    p.bounds.width = p.bounds.height = 100_000.0
     p.search.layout_goal = "spread"
     model = Model(p)
     counter = Counter()

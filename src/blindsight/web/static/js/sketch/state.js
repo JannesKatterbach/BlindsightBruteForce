@@ -35,8 +35,8 @@ const SK_EPS = 1e-9;
 
 const skCount = () => SK.sk.points.length;
 const skClearSelection = () => { SK.sel = { p: new Set(), s: new Set() }; };
-/** Laenge in der Anzeigeeinheit (3 Nachkommastellen). */
-const fmtLen = (mm) => String(Math.round((mm / UNIT[unit]) * 1000) / 1000);
+/** Laenge in mm (3 Nachkommastellen). */
+const fmtLen = (mm) => String(Math.round(mm * 1000) / 1000);
 const fmtDeg = (deg) => String(Math.round(deg * 100) / 100);
 /** Neuer Constraint mit allen Feldern. */
 const makeConstraint = (type, fields = {}) => ({ type, a: null, b: null, value: null, value2: null, ref: "rod", enabled: true, name: "", ...fields });

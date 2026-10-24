@@ -13,14 +13,14 @@ def test_infeasible_config_reports_understandable_message():
 
 
 def test_bounds_too_small_for_single_unit():
-    m = make_model(bounds__xmax=20.0, bounds__ymax=20.0)
+    m = make_model(bounds__width=20.0, bounds__height=20.0)
     res = get_optimizer().run(m)
     assert res.status == "infeasible"
     assert any("einzelne Einheit" in s for s in res.messages)
 
 
 def test_partial_solution_is_reported_honestly():
-    m = make_model(target_count=60, bounds__xmax=60.0, bounds__ymax=60.0)
+    m = make_model(target_count=60, bounds__width=60.0, bounds__height=60.0)
     m.project.search.time_limit_s = 2
     res = get_optimizer().run(m)
     n = len(res.best.placements)

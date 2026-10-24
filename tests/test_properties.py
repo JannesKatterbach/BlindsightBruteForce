@@ -31,7 +31,7 @@ def random_project(rng: random.Random) -> Project:
     else:
         p.stack.uniform_spacing = rng.uniform(14, 35)
     s = rng.choice([70, 100, 140])
-    p.bounds.xmax = p.bounds.ymax = float(s)
+    p.bounds.width = p.bounds.height = float(s)
     p.search.time_limit_s = 0.6
     p.search.angle_step = rng.choice([15.0, 30.0, 45.0])
     p.search.seed = rng.randint(0, 1000)

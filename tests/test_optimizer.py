@@ -10,7 +10,7 @@ def run(model, **kw):
 
 
 def test_optimizer_returns_valid_layouts_with_target_count():
-    m = make_model(target_count=8, bounds__xmax=100.0, bounds__ymax=100.0)
+    m = make_model(target_count=8, bounds__width=100.0, bounds__height=100.0)
     m.project.search.time_limit_s = 4
     res = run(m)
     assert res.best is not None
@@ -55,7 +55,7 @@ def test_weights_change_ranking():
     from blindsight.config import WeightsSpec
     from blindsight.scoring import evaluate
 
-    m = make_model(target_count=40, bounds__xmax=90.0, bounds__ymax=90.0)
+    m = make_model(target_count=40, bounds__width=90.0, bounds__height=90.0)
     m.project.search.time_limit_s = 1.5
     pl = run(m).best.placements
     a = evaluate(m, pl, WeightsSpec(count=1, area=0, uniformity=0, regularity=0), 40)

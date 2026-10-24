@@ -62,8 +62,8 @@ function renderEditPanel() {
   const planes = lastGeo.planes.slice(1).map((p) => `<option value="${p.index}" ${u && u.plane === p.index ? "selected" : ""}>${esc(p.name)}</option>`).join("");
   const unitControls = u ? `Einheit ${u.id}:
     Ebene <select id="edPlane">${planes}</select> Winkel <input id="edAngle" type="number" step="any" value="${esc(u.angle)}" style="width:80px">
-    x [${unit}] <input id="edX" type="number" step="any" value="${esc(round(toU(u.x), 3))}" style="width:80px">
-    y [${unit}] <input id="edY" type="number" step="any" value="${esc(round(toU(u.y), 3))}" style="width:80px">
+    x [mm] <input id="edX" type="number" step="any" value="${esc(round(round(u.x), 3))}" style="width:80px">
+    y [mm] <input id="edY" type="number" step="any" value="${esc(round(round(u.y), 3))}" style="width:80px">
     <button id="edDel">Entfernen</button>` : "Keine Einheit gewählt.";
   box.innerHTML = `<b>Bearbeiten.</b> Stange in der Draufsicht ziehen. Jede Änderung wird sofort geprüft. ${unitControls} ` +
     `<button id="edAdd">Einheit hinzufügen</button> <button id="edReset">Zurücksetzen</button>` +
@@ -79,8 +79,8 @@ function bindUnitControls() {
   const number = (id) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : undefined; };
   $("#edPlane").addEventListener("change", update((q) => { q.plane = +$("#edPlane").value; }));
   $("#edAngle").addEventListener("change", update((q) => { const v = number("#edAngle"); if (v === undefined) return false; q.angle = v; }));
-  $("#edX").addEventListener("change", update((q) => { const v = number("#edX"); if (v === undefined) return false; q.x = fromU(v); }));
-  $("#edY").addEventListener("change", update((q) => { const v = number("#edY"); if (v === undefined) return false; q.y = fromU(v); }));
+  $("#edX").addEventListener("change", update((q) => { const v = number("#edX"); if (v === undefined) return false; q.x = v; }));
+  $("#edY").addEventListener("change", update((q) => { const v = number("#edY"); if (v === undefined) return false; q.y = v; }));
   $("#edDel").addEventListener("click", () => {
     lastGeo.units = lastGeo.units.filter((q) => q.id !== selUnit);
     selUnit = null;

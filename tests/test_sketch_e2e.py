@@ -310,12 +310,12 @@ def test_dragging_the_gear_changes_the_center_distance(page):
     assert float(page.locator("#skCdIn").input_value()) == pytest.approx(after, abs=1e-6)
 
 
-def test_unit_switch_converts_the_tables(page):
+def test_tables_work_in_millimetres(page):
+    # The program works in mm only, there is no unit selection
+    assert page.locator("#unitSel").count() == 0
     draw_trapezoid(page)
-    mm = float(page.input_value("[data-sk-len='0']"))
-    page.select_option("#unitSel", "cm")
-    page.wait_for_function("document.querySelector('[data-sk-len=\"0\"]') && Math.abs(parseFloat(document.querySelector('[data-sk-len=\"0\"]').value) - %r) < 1e-6" % (mm / 10))
-    page.fill("[data-sk-len='0']", "1.5")  # 1.5 cm
+    assert "[mm]" in page.inner_text("#skSides")
+    page.fill("[data-sk-len='0']", "15")
     page.dispatch_event("[data-sk-len='0']", "change")
     settle(page)
     assert math.hypot(*side(pts(page), 0)) == pytest.approx(15.0, abs=1e-6)

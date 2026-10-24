@@ -24,10 +24,11 @@ from typing import Any, Optional
 
 from .config import MotorSpec
 from .geometry import convex_hull, polygon_area
-from .units import LENGTH_UNITS, is_finite_number
+from .units import is_finite_number
 
-PT_MM = 25.4 / 72.0  # Punkt
-PC_MM = 25.4 / 6.0  # Pica
+# Length units that may appear in SVG files, converted to mm on import (the program itself only uses mm).
+# Unitless values, px and % are ambiguous and require an explicit scale.
+SVG_UNITS_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "pt": 25.4 / 72.0, "pc": 25.4 / 6.0}
 CONVEX_AREA_RATIO = 0.9999  # Flaeche der Kontur relativ zur Huelle, ab der sie als konvex gilt
 LINE_COMMANDS = "MLHVZ"
 
@@ -62,13 +63,7 @@ def _length_mm(text: Optional[str]) -> Optional[float]:
         return None
     unit = m.group(2).lower()
     val = float(m.group(1))
-    if unit in LENGTH_UNITS:
-        return val * LENGTH_UNITS[unit]
-    if unit == "pt":
-        return val * PT_MM
-    if unit == "pc":
-        return val * PC_MM
-    return None  # einheitenlos, px und % sind nicht eindeutig
+    return val * SVG_UNITS_MM[unit] if unit in SVG_UNITS_MM else None  # einheitenlos, px und % sind nicht eindeutig
 
 
 def _path_points(d: str) -> list[tuple[float, float]]:

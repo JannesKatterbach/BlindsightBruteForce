@@ -9,7 +9,7 @@ SVG = "{http://www.w3.org/2000/svg}"
 
 
 def test_svg_positions_are_true_to_scale():
-    m = make_model(bounds__xmin=10.0, bounds__ymin=5.0, bounds__xmax=130.0, bounds__ymax=125.0)
+    m = make_model(bounds__width=120.0, bounds__height=120.0)
     placements = [pl(40, 50, 1, 0), pl(90, 100, 2, 90)]
     geo = build_geometry(m, placements)
     root = ET.fromstring(SvgExporter().export(geo))
@@ -20,8 +20,8 @@ def test_svg_positions_are_true_to_scale():
     rods = {int(c.get("data-unit")): c for c in top.iter(SVG + "circle") if c.get("class") == "rod"}
     for uid, p in enumerate(placements):
         c = rods[uid]
-        assert math.isclose(float(c.get("cx")), p.x - 10.0, abs_tol=1e-3)
-        assert math.isclose(float(c.get("cy")), 125.0 - p.y, abs_tol=1e-3)  # Y gespiegelt
+        assert math.isclose(float(c.get("cx")), p.x, abs_tol=1e-3)
+        assert math.isclose(float(c.get("cy")), 120.0 - p.y, abs_tol=1e-3)  # Y gespiegelt
         assert math.isclose(float(c.get("r")), m.project.rod.diameter / 2, abs_tol=1e-3)
 
 

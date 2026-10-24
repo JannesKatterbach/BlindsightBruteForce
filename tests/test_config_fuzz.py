@@ -82,7 +82,7 @@ def test_roundtrip_json():
 
 def test_messages_name_the_field():
     with pytest.raises(ConfigError) as e:
-        Project.from_dict({"rod": {"diameter": -1}, "bounds": {"xmax": -5}})
+        Project.from_dict({"rod": {"diameter": -1}, "bounds": {"width": -5}})
     txt = " ".join(e.value.errors)
     assert "rod.diameter" in txt
 
