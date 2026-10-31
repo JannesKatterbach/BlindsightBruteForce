@@ -108,7 +108,7 @@
  "field.motor.axis_height.help": "Hauteur de l'arbre de sortie au-dessus de la face de montage du moteur. Elle fixe la hauteur du pignon et donc l'endroit où il engrène sur la tige et s'il tient entre les couches.",
  "field.motor.axis_height.label": "Hauteur de l'arbre au-dessus de la face de montage",
  "field.motor.axis_height.tip": "Hauteur de l'arbre de sortie au-dessus de la face de montage",
- "field.motor.center_distance.help": "Distance entre l'axe du pignon et l'axe de la tige. Elle fixe la position du moteur par rapport à la tige. Le pignon engrène le filetage à cette distance, aucune forme de dent n'est modélisée. Vérifiez l'engrènement réel avec les vraies pièces.",
+ "field.motor.center_distance.help": "Distance entre l'axe du pignon et l'axe de la tige. Elle fixe la position du moteur par rapport à la tige. Le pignon engrène le filetage à cette distance, aucune forme de dent n'est modélisée. Vérifiez l'engrènement réel avec les vraies pièces. Avec une esquisse de moteur, la valeur provient de la cote entre l'origine et le centre du pignon.",
  "field.motor.center_distance.label": "Entraxe pignon tige",
  "field.motor.center_distance.tip": "Distance entre l'arbre de sortie et l'axe de la tige. L'engrènement n'est modélisé que par cette distance",
  "field.motor.center_distance_max.help": "Facultatif. Limite supérieure de l'entraxe variable, uniquement avec le minimum. La valeur nominale doit se trouver entre min et max.",

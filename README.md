@@ -74,7 +74,7 @@ Exitcodes der Kommandozeile
 | `optimizers/` | Register (`registry.py`), Basisklasse mit Rahmen (`base.py`), gemeinsame Suche und lokale Suche (`common.py`), `pattern_greedy`, `anneal_free`, `exhaustive_small`, `periodic_tile`, `fixed_holes`, `parallel` |
 | `diagnose.py` | verständliche Gründe, wenn keine Lösung existiert |
 | `analysis.py` | abgeleitete Größen ohne Optimierung (Ebenen, Stangenlängen, Probleme) |
-| `sketch/` | Motor Skizze. `constraints` (Register der Typen), `structure`, `polygon`, `numeric` (Levenberg Marquardt, Rang), `solver`, `motor` |
+| `sketch/` | Motor Skizze wie Onshape. `entities` (Punkte, Linien, Kreise, Bögen, Referenzen), `constraints` (Register der Beziehungen und Maße), `numeric` (Levenberg Marquardt, Rang), `solver`, `profile` (Gehäusehülle, Zahnrad), `motor` |
 | `export/` | `build_geometry` (formatneutral), Register `EXPORTERS` mit SVG, Schraubenpositionen JSON, JSON, DXF, Bohrliste CSV |
 | `service.py` | Hintergrundläufe in Threads mit Fortschritt, Abbruch und Herunterfahren |
 | `web/server.py` | HTTP Server (stdlib) mit Routentabelle, einheitlicher Fehlerform, Host, Origin und Content Type Prüfung |
@@ -100,11 +100,11 @@ Entscheidungen
 
 ## Erweitern
 
-Neuer Constraint Typ der Skizze
-1. In `sketch/constraints.py` eine Residuen Fabrik `(c, geo) -> (x -> Liste)` schreiben
-2. Einen `ConstraintType` in `CONSTRAINT_TYPES` eintragen (Seiten und Punktfelder, Werteart `len` oder `deg`, Wertebereich, Verhalten beim Teilen einer Seite)
+Neue Beziehung oder neues Maß der Skizze
+1. In `sketch/constraints.py` eine Residuen Fabrik `(refs, c, v, x0) -> (x -> Liste)` schreiben (`v` greift auf Punkte, Linien und Radien im Unbekanntenvektor zu)
+2. Einen `ConstraintType` in `CONSTRAINT_TYPES` eintragen (erlaubte Referenzarten `point`, `line`, `curve` je Signatur, Werteart `len`, `deg` oder keine, Prüfung des Werts)
 3. Bezeichnung `constraint.<name>` in den Katalogen des Kerns
-4. Optional einen Knopf mit `data-sk-add` und `data-i18n` in `index.html` und einen Eintrag in `TOOLS` (`js/sketch/constraints.js`). Werteart kommt über `/api/schema`
+4. Für eine Beziehung einen Knopf mit `data-sk-rel` in `index.html`, den Namen in `RELATIONS` (`js/sketch/state.js`), ein Symbol in `ICONS` (`js/sketch/panels.js`), eine Glyphe in `GLYPHS` (`js/sketch/render.js`) und die Texte `ui.sk.rel.<name>` in den UI Katalogen. Signaturen und Werteart kommen über `/api/schema`
 
 Neues Kandidatenmuster
 1. Funktion `(pitch, region) -> Punkte` in `patterns.py`, Eintrag in `PATTERNS` und `PATTERN_DENSITY`
@@ -239,68 +239,119 @@ Obergrenze der Anzahl erreicht wird, wird Optimalität gemeldet. Die Obergrenze 
 Punkte mit Mindestabstand d (Stangendurchmesser plus Sicherheitsabstand) im Rechteck der zulässigen Stangenmitten mit
 Fläche A und Umfang P, N <= 2/sqrt(3) A/d² + P/(2d) + 1. Motoren bleiben dabei unberücksichtigt.
 
-## Motor Skizze (CAD Stil)
+## Motor Skizze (CAD Stil wie Onshape)
 
-Im Reiter "Motor Skizze" wird die Gehäusekontur wie in einer CAD Skizze aufgebaut und bemaßt.
+Im Reiter "Motor Skizze" wird der Motor in der Draufsicht wie in einer Onshape Skizze gezeichnet. Einfache Elemente
+zeichnen, Beziehungen und Maße direkt in der Zeichnung setzen, fertig. Daneben gibt es nur eine Statuszeile und eine
+einklappbare Liste der Beziehungen.
 
 Koordinatensystem
-- Der Ursprung ist die Achse der Gewindestange (Getriebestange). Sie ist als schwarzer Kreis gezeichnet, dazu das gestrichelte Loch (Stange plus Lochspiel) und der Ring des Eigenabstands (rot, wenn das Gehäuse zu nah kommt)
-- Das Zahnrad liegt fest bei (-Achsabstand, 0), die Welle zeigt in y Richtung, das Gehäuse sitzt dahinter
-- Der ganze Motor dreht bei der Platzierung um die Stange. Der Regler "Drehvorschau" zeigt das, "Hüllkurve" den größten Kreis, den der Motor überstreicht
-- Die Zahnradachse lässt sich in der Zeichnung ziehen (Achsabstand), das Gehäuse bleibt in der Skizze
+- Der Ursprung ist die Achse der Gewindestange. Sie ist als Kreis gezeichnet, dazu das gestrichelte Loch (Stange plus
+  Lochspiel) und der Ring des Eigenabstands. Der Ursprung lässt sich wie ein Punkt anklicken (Koinzident, Abstand)
+- Das Zahnrad liegt auf der negativen x Achse, die Welle zeigt in y Richtung, das Gehäuse sitzt dahinter
+- Der ganze Motor dreht bei der Platzierung um die Stange. Unter "Ansicht" zeigen Drehvorschau und Hüllkurve das
 
-Bedienung
-- Polygon zeichnen. Klick setzt Punkte, Enter oder Doppelklick schließt. Punkte lassen sich ziehen (der Solver hält alle Constraints ein), Doppelklick auf eine Seite fügt einen Punkt ein, Rechtsklick oder Entf löscht ihn
-- Seiten und Punkte anklicken (Umschalt für mehrere), dann ein Werkzeug wählen. Werte erscheinen direkt an der Skizze
-- Alternativ die Tabellen "Seiten" und "Punkte". Länge, Winkel und Koordinaten eintippen setzt den passenden Constraint, die Auswahl "parallel zu" legt Parallelität fest
-- Rückgängig und Wiederholen (Strg+Z, Strg+Y oder Strg+Umschalt+Z), Zoom mit Mausrad, Verschieben mit der Maus auf leerer Fläche, Raster mit Fang
-- Maße in mm, Winkel in Grad
-
-Constraints
-| Typ | Bedeutung |
+Elemente und Werkzeuge (Kürzel in Klammern, Esc bricht ab)
+| Werkzeug | Bedienung |
 |---|---|
-| `length` | Länge einer Seite |
-| `angle` | Innenwinkel an einem Punkt (benachbarte Seiten) |
-| `angle_sides` | Winkel zwischen zwei beliebigen Seiten |
-| `parallel` | zwei Seiten parallel (auch gegenläufig) |
-| `perpendicular` | zwei Seiten rechtwinklig |
-| `equal` | zwei Seiten gleich lang |
-| `horizontal`, `vertical` | Seite parallel zur x oder y Achse |
-| `fix`, `coord_x`, `coord_y` | Punkt festhalten oder eine Koordinate vorgeben |
-| `dist_point`, `dist_side` | Abstand eines Punktes oder einer Seite (Lot) zur Stange (`rod`) oder zur Zahnradachse (`gear`) |
+| Auswahl (S) | Klick wählt aus und fügt zur Auswahl hinzu, Klick ins Leere leert sie. Punkte, Linien und Kreise lassen sich ziehen, leere Fläche verschiebt die Ansicht |
+| Linie (L) | Klick, Klick, ... als Kette. Doppelklick, Enter oder Esc beendet, Klick auf den Startpunkt schließt die Kontur |
+| Rechteck (R) | zwei Ecken. Ergibt vier Linien mit Koinzident, Horizontal und Vertikal |
+| Kreis (C) | Mitte, dann Radius |
+| Bogen (A) | Mitte, Start, Ende (gegen den Uhrzeigersinn) |
+| Zahnrad (G) | zwei Ecken. Rechteck mit Rolle Zahnrad, die Mitte liegt auf der x Achse. Nur ein Zahnrad je Skizze |
+| Konstruktion (Q) | schaltet die Auswahl auf Hilfsgeometrie (gestrichelt), sie zählt nicht zum Gehäuse |
+| Bemaßung (D) | ein Element (Linie Länge, Kreis Durchmesser, Bogen Radius) oder zwei (Abstand, Winkel, Punkt zu Linie), dann die Maßzahl platzieren und den Wert eintippen |
+| Rückgängig, Wiederholen | Strg+Z, Strg+Y oder Strg+Umschalt+Z |
+| Einpassen (F), Entf | Ansicht einpassen, Auswahl löschen (samt ihrer Beziehungen) |
 
-Jeder Constraint kann deaktiviert werden. Der Status steht an jeder Zeile
-- blau oder grün bestimmt (grün bei voll bestimmter Skizze, 0 Freiheitsgrade)
-- orange redundant (bereits durch andere bestimmt, aber widerspruchsfrei)
-- rot Widerspruch. Der Solver benennt den ersten Constraint, der nicht mehr zu den vorherigen passt, und behält die letzte widerspruchsfreie Lösung
+Beim Zeichnen rastet der Mauszeiger wie in Onshape ein. Auf vorhandene Punkte und den Ursprung (Koinzident), auf Linien,
+Kreise und Bögen (Punkt liegt darauf), sonst auf das Raster. Fast waagerechte oder senkrechte Linien bekommen Horizontal
+oder Vertikal. Das Fangsymbol erscheint am Mauszeiger.
 
-Eine Skizze muss nicht voll bestimmt sein. Unterbestimmt heißt nur, dass noch Freiheitsgrade bleiben. Die aktuelle Lösung wird verwendet.
+Beziehungen. Elemente anklicken und dann die Beziehung wählen, oder erst die Beziehung (sie bleibt aktiv) und dann die
+Elemente. Mehrere Linien auf einmal werden zum Beispiel alle horizontal oder alle parallel zur ersten.
+| Typ | Elemente | Bedeutung |
+|---|---|---|
+| `coincident` (I) | Punkt und Punkt, Linie, Kreis oder Bogen | Punkte liegen aufeinander oder der Punkt liegt auf dem Element |
+| `horizontal` (H), `vertical` (V) | Linie oder zwei Punkte | parallel zur x oder y Achse |
+| `parallel`, `perpendicular` | zwei Linien | parallel oder senkrecht |
+| `equal` (E) | zwei Linien oder zwei Kreise und Bögen | gleich lang oder gleicher Radius |
+| `midpoint` | Punkt und Linie | Punkt in der Mitte der Linie |
+| `concentric` | zwei Kreise und Bögen, oder Kreis und Punkt | gleiche Mitte |
+| `fix` | Punkt | hält den Punkt an seiner Lage fest |
 
-Datenformat in der Konfiguration (`motor.sketch`, Punkte im Stangenrahmen, gegen den Uhrzeigersinn)
+Maße (Werte in mm, Winkel in Grad)
+| Typ | Elemente | Bedeutung |
+|---|---|---|
+| `length` | Linie | Länge |
+| `distance` | zwei Punkte, Punkt und Linie, zwei parallele Linien | Abstand (Lot bei Linien) |
+| `hdistance`, `vdistance` | zwei Punkte | waagerechter oder senkrechter Abstand. Entsteht, wenn die Maßzahl neben den beiden Punkten liegt |
+| `angle` | zwei Linien | Winkel, an einer gemeinsamen Ecke der Innenwinkel |
+| `diameter`, `radius` | Kreis oder Bogen | Durchmesser oder Radius |
+
+Maßzahlen lassen sich ziehen, Doppelklick ändert den Wert. Ein Klick auf ein Beziehungssymbol wählt die Beziehung aus,
+Entf löscht sie. In der Liste "Beziehungen" stehen alle Beziehungen und Maße mit Zustand, Wert, an und aus und Löschen.
+
+Zustand und Farben
+- blau frei (Freiheitsgrade übrig), schwarz voll bestimmt (im dunklen Modus hell), rot Widerspruch, orange Auswahl
+- Statuszeile. Voll bestimmt, Unterbestimmt mit Anzahl der Freiheitsgrade, Überbestimmt (redundant, aber widerspruchsfrei)
+  oder Widerspruch. Der Solver benennt die Beziehung, die nicht mehr zu den vorherigen passt, und behält die letzte
+  widerspruchsfreie Lösung
+- Eine Skizze muss nicht voll bestimmt sein. Die aktuelle Lösung wird verwendet
+
+Gehäuse und Zahnrad
+- Gehäuse ist die konvexe Hülle aller normalen Elemente ohne Zahnrad (hell gefüllt). Kreise und Bögen gehen als
+  umschreibende Vielecke ein (konservativ), Konstruktionsgeometrie zählt nicht
+- Das Zahnrad ist ein achsparalleles Rechteck aus vier Linien mit Rolle `gear` und seiner Mitte auf der x Achse.
+  Durchmesser ist die Ausdehnung in x, Breite die in y, Achsabstand der Abstand der Mitte zum Ursprung. Das Werkzeug legt
+  dazu eine Konstruktionsdiagonale und einen Mittelpunkt an, das Maß Ursprung zu Mittelpunkt ist der Achsabstand
+- Mit Skizze werden `width`, `depth`, `gear_diameter`, `gear_width` und `center_distance` aus der Skizze übernommen
+  (auch beim Laden im Kern), die Felder im Reiter Geometrie sind dann gesperrt. `shaft_x`, `gear_gap` und `outline`
+  werden ignoriert
+- Ohne Skizze zeigt der Reiter eine Vorschau aus den Motorfeldern (voll bemaßtes Rechteck plus Zahnrad). Die erste
+  Änderung übernimmt sie in die Konfiguration, "Skizze verwerfen" geht zurück zu den Feldern
+
+Datenformat in der Konfiguration (`motor.sketch`, mm im Stangenrahmen)
 
 ```json
 "sketch": {
-  "points": [[-13, -27], [3, -27], [0, -6], [-11, -6]],
+  "points": [[-24, -27], [-12, -27], [-12, -27], [-12, -3], [-18, -15]],
+  "entities": [
+    {"type": "line", "points": [0, 1], "construction": false, "role": ""},
+    {"type": "line", "points": [2, 3]},
+    {"type": "circle", "points": [4], "radius": 3.0}
+  ],
   "constraints": [
-    {"type": "horizontal", "a": 0},
-    {"type": "length", "a": 0, "value": 16.0},
-    {"type": "parallel", "a": 0, "b": 2},
-    {"type": "angle", "a": 1, "value": 78.0},
-    {"type": "dist_side", "a": 3, "ref": "rod", "value": 9.0}
+    {"type": "coincident", "refs": ["p1", "p2"]},
+    {"type": "horizontal", "refs": ["e0"]},
+    {"type": "vertical", "refs": ["e1"]},
+    {"type": "length", "refs": ["e0"], "value": 12.0, "label": [-18, -30]},
+    {"type": "diameter", "refs": ["e2"], "value": 6.0},
+    {"type": "hdistance", "refs": ["o", "p1"], "value": 12.0}
   ]
 }
 ```
 
-Seite `i` geht von Punkt `i` nach Punkt `i+1` (zyklisch), der Winkel an Punkt `i` liegt zwischen Seite `i-1` und `i`.
-Beim Laden werden die Punkte als Startlage genommen und die Constraints gelöst, das Modell nutzt immer die gelöste Kontur.
+Ein Bogen hat `"points": [Mitte, Start, Ende]`, die Linien des Zahnrads haben `"role": "gear"`. Vollständige Skizzen mit
+Zahnrad stehen in `examples/sketch_rectangle_dimensions.json` und `examples/sketch_trapezoid_motor.json`.
+
+- `points` ist der Punktpool. Jedes Element besitzt eigene Punkte (Linie zwei, Kreis die Mitte, Bogen Mitte, Start und
+  Ende, Punkt einen), Verbindungen sind Koinzident Beziehungen wie in Onshape
+- Referenzen sind Texte. `p3` Punkt 3, `e2` Element 2, `o` Ursprung (fest)
+- `value` gibt es nur bei Maßen, `label` ist die Lage der Maßzahl (nur Anzeige), `enabled` schaltet aus, `name` ist ein
+  freier Name, `at` die Lage eines fixierten Punktes
+- Beim Laden werden die Punkte als Startlage genommen und die Beziehungen gelöst, das Modell nutzt immer die gelöste Skizze
 
 Regeln und Grenzen
-- Die Kontur muss konvex sein (Voraussetzung der Kollisionsprüfung). Nicht konvexe Konturen werden gemeldet, "Konvexe Hülle" repariert sie
-- Das Zahnrad darf nicht ins Gehäuse ragen (Warnung in der Skizze, Fehler in der Konfiguration), der Abstand der Stange zum Gehäuse muss `motor.own_clearance` einhalten
-- Mit Skizze werden `width`, `depth`, `shaft_x`, `gear_gap` und `outline` ignoriert, `width` und `depth` zeigen dann die Bounding Box
-- Höchstens 40 Punkte und 150 Constraints, der Solver bricht nach 3 s ab
-- Der Solver ist reines Python (Levenberg Marquardt mit Minimum Norm Schritten) und liegt im Paket `sketch/`, die UI ruft ihn über `/api/sketch/solve`, `from-motor`, `hull`, `insert` und `delete` auf
-- SVG Import erzeugt eine Skizze ohne Constraints, die Kontur wird wie ein Umriss zum Zahnrad gesetzt
+- Das Gehäuse ist immer konvex (Hülle). Das Zahnrad darf nicht ins Gehäuse ragen (Warnung in der Skizze, Fehler in der
+  Konfiguration), der Abstand der Stange zum Gehäuse muss `motor.own_clearance` einhalten
+- Höchstens 400 Punkte, 200 Elemente und 400 Beziehungen, der Solver bricht nach 3 s ab
+- Der Solver ist reines Python (Levenberg Marquardt mit Minimum Norm Schritten, Rang und Freiheitsgrade über den
+  Zeilenraum) im Paket `sketch/`. Die UI ruft ihn über `/api/sketch/solve` (mit optionalem Ziehen) und
+  `/api/sketch/from-motor` auf. Strukturänderungen (Element löschen samt Beziehungen) macht die UI, der Kern prüft jede
+  Skizze vollständig
+- SVG Import erzeugt eine geschlossene Linienkette ohne Maße plus Zahnrad aus den Motorfeldern
 
 ## Optimierer
 
@@ -397,7 +448,7 @@ Weitere Felder ohne Tabellenzeile
 - `stack.max_per_plane` maximale Motoranzahl je Ebene, zum Beispiel `{"1": 6}`
 - `stack.plane_angles` erlaubte Winkel je Ebene, zum Beispiel `{"3": [0, 90, 180, 270]}`
 - `motor.outline` konvexes Polygon des Gehäuses im lokalen Motorsystem, ersetzt das Rechteck
-- `motor.sketch` parametrische Kontur mit Constraints im Stangenrahmen, ersetzt Rechteck und `outline` (siehe Abschnitt Motor Skizze)
+- `motor.sketch` Skizze aus Linien, Kreisen und Bögen mit Beziehungen und Maßen im Stangenrahmen, ersetzt Rechteck, `outline` und die Zahnradfelder (siehe Abschnitt Motor Skizze)
 - `search.custom_tile` eigene Kachel (`width`, `height`, `holes` [[x, y], ...], `scalable`) für das Muster `custom`
 - `holes` feste Löcher von G0 [[x, y], ...] in mm für den Optimierer `fixed_holes`
 - `obstacles` feste Hindernisse (`shape` rect oder circle, `x`, `y`, `w`, `h`, `r`, `angle`, optional `z0`, `z1`, `plane` für eine Sperrzone nur auf einer Motorebene)
@@ -411,8 +462,8 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `repeating_tile.json` wiederholendes Muster Würfel Fünf
 - `pattern_hex_spread.json` hexagonales Muster gleichmäßig über den Bauraum verteilt
 - `fixed_holes_grid.json` feste Löcher 3 x 3, Motorlage je Loch wird bestimmt
-- `sketch_trapezoid_motor.json` Trapez Motor mit Parallelität, Winkel, Länge und Abstand zur Stange
-- `sketch_rectangle_dimensions.json` Rechteck als bemaßte Skizze
+- `sketch_trapezoid_motor.json` Trapez Motor als Skizze mit Parallel, Winkel, Länge, Abstand und Zahnrad
+- `sketch_rectangle_dimensions.json` Rechteck als voll bemaßte Skizze mit Zahnrad
 - `three_levels_mixed_gaps.json` ungleiche Ebenenabstände mit Hindernis
 - `bottom_mount_two_levels.json` Motoren unter den Ebenen
 - `area_too_small.json` Bauraum zu klein, ehrliche Teillösung
@@ -438,7 +489,7 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 - Hilfe. Komplexere Felder und Bereiche haben einen i Knopf mit einer Erklärung (Texte in den Katalogen, Felder unter `field.<pfad>.help`, Bereiche unter `ui.help.*` mit `data-help` in `index.html`)
 - Reiter Geometrie. Formulare mit Tooltips, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
   SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
-- Reiter Motor Skizze. Kontur zeichnen und bemaßen (siehe oben), Zahnradachse ziehen
+- Reiter Motor Skizze. Motor wie in Onshape zeichnen, Beziehungen und Maße setzen, Zahnrad und Achsabstand (siehe oben)
 - Reiter Ebenen. Abstandsmodi, Tabelle je Ebene (erlaubt, Kapazität, Winkel, Dicke), berechnete Stangenlängen und Seitenschnitt
 - Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
 - Reiter Lochbild. Generator für feste Löcher und eigene Kacheln (siehe oben)
@@ -455,7 +506,7 @@ begrenzt die Größe von Anfragen. Fehlerantworten haben immer die Form `{"error
 - Das Zahnrad ist ein Quader als Einhüllende, ohne Zahngeometrie. Der Eingriff steckt nur im Achsabstand. Ob das reale Zahnrad
   in das reale Gewinde passt, muss mit den echten Bauteilen geprüft werden
 - Standardwerte sind Platzhalter, keine Herstellerdaten
-- Gehäuse sind konvex (Rechteck, konvexes Polygon oder Skizze). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
+- Gehäuse sind konvex (Rechteck, konvexes Polygon oder Hülle der Skizze). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
 - Die Stange gilt über den ganzen Verfahrweg als Zylinder, auch eingefahren unterhalb des Motors. Das ist konservativ
 - Bauraum ist ein Rechteck, Ebenen sind keine Platinen mit Leiterbahnen, Kabel und Stecker fehlen
 - Die Suche ist heuristisch. Sehr große Aufgaben brauchen mehr Zeit. Bei kompakter Anordnung wird nur ein Fenster um die Mitte des Bauraums gerastert

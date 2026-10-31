@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0
+Neue Funktionen
+- Motor Skizze neu nach dem Vorbild von Onshape. Elemente Linie (als Kette), Rechteck, Kreis, Bogen und Zahnrad,
+  Konstruktionsgeometrie (Q). Beim Zeichnen rastet der Mauszeiger auf Punkte, Ursprung, Linien und Kreise ein und setzt
+  Koinzident, fast waagerechte oder senkrechte Linien bekommen Horizontal oder Vertikal
+- Beziehungen Koinzident, Horizontal, Vertikal, Parallel, Senkrecht, Gleich, Mittelpunkt, Konzentrisch und Fixieren. Erst
+  auswählen und dann die Beziehung, oder erst die Beziehung (bleibt aktiv) und dann die Elemente. Symbole an den Elementen
+- Ein Bemaßungswerkzeug für Länge, Abstand (auch waagerecht oder senkrecht), Winkel, Durchmesser und Radius. Maßzahl mit
+  der Maus platzieren, Wert eintippen, Doppelklick ändert, Maßzahlen lassen sich verschieben
+- Ziehen von Punkten, Linien und Kreisen hält alle Beziehungen ein. Farben wie in Onshape (blau frei, schwarz bestimmt,
+  rot Widerspruch), Statuszeile mit Freiheitsgraden, einklappbare Liste der Beziehungen
+- Das Zahnrad wird in der Skizze gezeichnet. Durchmesser, Breite und Achsabstand kommen aus der Skizze, der Achsabstand
+  ist ein Maß vom Ursprung zur Zahnradmitte. Das Gehäuse ist die konvexe Hülle aller normalen Elemente
+
+Änderungen
+- Neues Skizzenformat `motor.sketch` mit `points`, `entities` und `constraints` (Referenzen `p3`, `e2`, `o`). Die alten
+  Polygon Skizzen mit Seiten Constraints werden nicht mehr gelesen, die Beispiele sind umgestellt
+- Mit Skizze sind auch `gear_diameter`, `gear_width` und `center_distance` gesperrt und kommen aus der Skizze
+- Die Seiten und Punkte Tabellen und die Werkzeugleiste links entfallen. API nur noch `/api/sketch/solve` und
+  `/api/sketch/from-motor`, `hull`, `insert` und `delete` entfallen
+- SVG Import erzeugt eine Linienkette plus Zahnrad im neuen Format
+
 ## 0.5.0
 Neue Funktionen
 - Wiederholendes Muster (`periodic_tile`) neu. Regelmäßige Lochbilder Quadrat, Würfel Fünf, Hexagonal (auch 90 Grad gedreht),

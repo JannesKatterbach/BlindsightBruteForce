@@ -108,7 +108,7 @@
  "field.motor.axis_height.help": "Höhe der Abtriebswelle über der Montagefläche des Motors. Daraus folgt die Höhe des Zahnrads und damit, wo es auf der Stange greift und ob es zwischen die Ebenen passt.",
  "field.motor.axis_height.label": "Achshöhe über Montagefläche",
  "field.motor.axis_height.tip": "Höhe der Abtriebsachse über der Montagefläche",
- "field.motor.center_distance.help": "Abstand zwischen Zahnradachse und Stangenachse. Er legt fest, wo der Motor relativ zur Stange sitzt. Das Zahnrad greift über diesen Abstand ins Gewinde, eine Zahnform wird nicht modelliert. Den echten Eingriff bitte mit den realen Teilen prüfen.",
+ "field.motor.center_distance.help": "Abstand zwischen Zahnradachse und Stangenachse. Er legt fest, wo der Motor relativ zur Stange sitzt. Das Zahnrad greift über diesen Abstand ins Gewinde, eine Zahnform wird nicht modelliert. Den echten Eingriff bitte mit den realen Teilen prüfen. Mit Motor Skizze kommt der Wert aus dem Maß vom Ursprung zur Zahnradmitte.",
  "field.motor.center_distance.label": "Achsabstand Zahnrad zu Stange",
  "field.motor.center_distance.tip": "Abstand der Abtriebsachse zur Stangenachse. Der Eingriff ist nur über diesen Abstand modelliert",
  "field.motor.center_distance_max.help": "Optional. Obergrenze des variablen Achsabstands, nur zusammen mit dem Minimum. Der Nennwert muss zwischen min und max liegen.",

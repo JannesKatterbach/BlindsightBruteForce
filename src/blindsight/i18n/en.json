@@ -108,7 +108,7 @@
  "field.motor.axis_height.help": "Height of the output shaft above the mounting face of the motor. It sets the height of the gear and thus where it engages on the rod and whether it fits between the layers.",
  "field.motor.axis_height.label": "Shaft height above mounting face",
  "field.motor.axis_height.tip": "Height of the output shaft above the mounting face",
- "field.motor.center_distance.help": "Distance between gear axis and rod axis. It sets where the motor sits relative to the rod. The gear engages the thread at this distance, no tooth shape is modelled. Please check the real mesh with the real parts.",
+ "field.motor.center_distance.help": "Distance between gear axis and rod axis. It sets where the motor sits relative to the rod. The gear engages the thread at this distance, no tooth shape is modelled. Please check the real mesh with the real parts. With a motor sketch the value comes from the dimension from the origin to the gear centre.",
  "field.motor.center_distance.label": "Gear to rod centre distance",
  "field.motor.center_distance.tip": "Distance of the output shaft to the rod axis. The mesh is modelled by this distance only",
  "field.motor.center_distance_max.help": "Optional. Upper limit of the variable centre distance, only together with the minimum. The nominal value must lie between min and max.",
