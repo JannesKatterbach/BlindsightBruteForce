@@ -7,7 +7,7 @@ from .model import Model
 
 
 def analyze(project: Project) -> dict:
-    """Layers with heights, rod geometry and problems, plus unit radius and safety clearance."""
+    """Layers with heights, rod geometry and problems, unit radius, safety clearance and the motor outline."""
     model = Model(project)
     planes = []
     for plane in model.stack.planes:
@@ -20,4 +20,8 @@ def analyze(project: Project) -> dict:
             entry["problems"] = model.plane_problems(plane.index)
             entry["free_above"] = model.stack.free_height_above(plane.index)
         planes.append(entry)
-    return {"planes": planes, "unit_radius": model.unit_radius, "required_gap": model.gap}
+    motor = project.motor
+    cd, r, h = motor.center_distance, motor.gear_radius, motor.gear_width / 2.0
+    shape = {"housing": [list(p) for p in model.housing_nominal],
+             "gear": [[-cd - r, -h], [-cd + r, -h], [-cd + r, h], [-cd - r, h]]}  # rod frame, nominal centre distance
+    return {"planes": planes, "unit_radius": model.unit_radius, "required_gap": model.gap, "motor": shape}

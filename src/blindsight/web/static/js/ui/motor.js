@@ -2,15 +2,16 @@
 // Motor preview on the Geometry tab (display only, editing happens on the Motor sketch tab),
 // motor library in the browser and SVG import.
 
-// Fields that have no effect when a sketch exists and are locked
-const SKETCH_OVERRIDDEN = ["motor.width", "motor.depth", "motor.shaft_x", "motor.gear_gap"];
+// Fields that a sketch determines. They are locked and filled from the sketch
+const SKETCH_OVERRIDDEN = ["motor.width", "motor.depth", "motor.shaft_x", "motor.gear_gap", "motor.gear_diameter", "motor.gear_width", "motor.center_distance"];
 const LIBRARY_KEY = "blindsight.motors";
+let motorShape = null;  // housing and gear in the rod frame from the last analysis (needed for sketches)
 
-const hasSketch = (motor) => !!(motor.sketch && motor.sketch.points && motor.sketch.points.length >= 3);
+const hasSketch = (motor) => !!(motor.sketch && Array.isArray(motor.sketch.entities) && motor.sketch.entities.length);
 
-/** Housing outline in the rod frame (origin = rod axis, y up). */
+/** Housing outline in the rod frame (origin = rod axis, y up). With a sketch it comes from the analysis. */
 function motorPolygonRod(m) {
-  if (hasSketch(m)) return m.sketch.points;
+  if (hasSketch(m)) return motorShape ? motorShape.housing : [];
   const hasOutline = m.outline && m.outline.length >= 3;
   const top = hasOutline ? Math.max(...m.outline.map((p) => p[1])) : m.depth / 2;
   const rx = m.shaft_x + m.center_distance;
@@ -20,13 +21,15 @@ function motorPolygonRod(m) {
   return poly.map(([x, y]) => [x - rx, y - ry]);
 }
 
-function drawMotor() {
+function drawMotor(shape) {
+  if (shape) motorShape = shape;
   const svg = $("#motorPreview");
   svg.innerHTML = "";
   const m = cfg.motor, r = cfg.rod.diameter / 2;
   updateSketchLock();
   if (![m.width, m.depth, cfg.rod.diameter, m.gear_diameter, m.gear_width].every((v) => v > 0)) return;
   const poly = motorPolygonRod(m), gr = m.gear_diameter / 2, gh = m.gear_width / 2, cd = m.center_distance;
+  if (poly.length < 3) return;
   const xs = poly.map((p) => p[0]).concat([-cd - gr, -cd + gr, r, -r]);
   const ys = poly.map((p) => p[1]).concat([-gh, gh, r, -r]);
   const pad = 8, x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
@@ -134,7 +137,7 @@ async function importSvgMotor(svgText) {
       body.mm_per_unit = scale;
       continue;
     }
-    Object.assign(cfg.motor, { outline: null, sketch: { points: data.sketch.points, constraints: [] }, width: data.width, depth: data.depth });
+    Object.assign(cfg.motor, { outline: null, sketch: data.sketch, width: data.width, depth: data.depth });
     motorChanged();
     message.textContent = t("ui.svg.imported", { width: data.width.toFixed(2), depth: data.depth.toFixed(2), notes: data.notes.join(" ") });
     return;

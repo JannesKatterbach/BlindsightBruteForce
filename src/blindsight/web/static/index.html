@@ -38,7 +38,7 @@
         <h2 data-i18n="ui.geometry.preview" data-help="ui.help.preview">Motor Vorschau, Draufsicht</h2>
         <svg id="motorPreview" viewBox="0 0 100 100"></svg>
         <p class="hint" data-i18n="ui.geometry.preview_hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehäuse.</p>
-        <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Kontur kommt aus der Motor Skizze. Breite, Tiefe, Achsversatz und Zahnradabstand werden ignoriert.</span>
+        <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Form kommt aus der Motor Skizze. Breite, Tiefe, Zahnrad und Achsabstand werden aus der Skizze übernommen.</span>
           <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button></div>
         <div class="toolbar"><button id="btnOpenSketch" class="primary" data-i18n="ui.geometry.open_sketch">Kontur in der Motor Skizze bearbeiten</button></div>
         <details><summary data-i18n="ui.geometry.svg_import" data-help="ui.help.svg_import">SVG Import</summary>
@@ -55,47 +55,59 @@
   </section>
   <section id="tab-sketch" class="tab">
     <div id="skRoot">
-      <aside id="skLeft">
-        <h2 data-i18n="ui.sketch.tools" data-help="ui.help.sketch_tools">Werkzeuge</h2>
-        <div class="toolbar">
-          <button id="skDraw" data-i18n="ui.sketch.draw" data-i18n-title="ui.sketch.draw_tip">Polygon zeichnen</button>
-          <button id="skFromMotor" data-i18n="ui.sketch.from_rect" data-i18n-title="ui.sketch.from_rect_tip">Aus Rechteck</button>
-          <button id="skHull" data-i18n="ui.sketch.hull" data-i18n-title="ui.sketch.hull_tip">Konvexe Hülle</button>
+      <div id="skToolbar" class="skToolbar" role="toolbar">
+        <div class="skGroup">
+          <button data-sk-tool="select" data-i18n-title="ui.sk.tool.select"></button>
         </div>
-        <div class="toolbar">
-          <button id="skUndo" data-i18n="ui.sketch.undo" data-i18n-title="ui.sketch.undo_tip">Rückgängig</button><button id="skRedo" data-i18n="ui.sketch.redo" data-i18n-title="ui.sketch.redo_tip">Wiederholen</button>
-          <button id="skFit" data-i18n="ui.sketch.fit">Einpassen</button>
+        <div class="skGroup">
+          <button data-sk-tool="line" data-i18n-title="ui.sk.tool.line"></button>
+          <button data-sk-tool="rect" data-i18n-title="ui.sk.tool.rect"></button>
+          <button data-sk-tool="circle" data-i18n-title="ui.sk.tool.circle"></button>
+          <button data-sk-tool="arc" data-i18n-title="ui.sk.tool.arc"></button>
+          <button data-sk-tool="gear" data-i18n-title="ui.sk.tool.gear"></button>
         </div>
-        <h2 data-i18n="ui.sketch.relations" data-help="ui.help.sketch_relations">Beziehungen und Maße</h2>
-        <p class="hint" data-i18n="ui.sketch.relations_hint">Punkte oder Seiten anklicken (Umschalt für mehrere), dann ein Werkzeug wählen.</p>
-        <div class="toolbar skCons" id="skConsBar">
-          <button data-sk-add="length" data-i18n="ui.sketch.tool.length">Länge</button><button data-sk-add="angle" data-i18n="ui.sketch.tool.angle">Winkel</button>
-          <button data-sk-add="parallel" data-i18n="ui.sketch.tool.parallel">Parallel</button><button data-sk-add="perpendicular" data-i18n="ui.sketch.tool.perpendicular">Rechtwinklig</button>
-          <button data-sk-add="equal" data-i18n="ui.sketch.tool.equal">Gleich lang</button><button data-sk-add="horizontal" data-i18n="ui.sketch.tool.horizontal">Horizontal</button>
-          <button data-sk-add="vertical" data-i18n="ui.sketch.tool.vertical">Vertikal</button><button data-sk-add="fix" data-i18n="ui.sketch.tool.fix">Fixieren</button>
-          <button data-sk-add="dist_rod" data-i18n="ui.sketch.tool.dist_rod">Abstand Stange</button><button data-sk-add="dist_gear" data-i18n="ui.sketch.tool.dist_gear">Abstand Zahnrad</button>
+        <div class="skGroup">
+          <button data-sk-act="construction" data-i18n-title="ui.sk.tool.construction"></button>
+          <button data-sk-tool="dimension" data-i18n-title="ui.sk.tool.dimension"></button>
         </div>
-        <h2 data-i18n="ui.sketch.sides">Seiten</h2><div id="skSides"></div>
-        <h2 data-i18n="ui.sketch.points">Punkte</h2><div id="skPoints"></div>
-      </aside>
-      <div id="skCenter">
-        <div class="toolbar">
-          <label><span data-i18n="ui.sketch.rotation">Drehvorschau</span> <input type="range" id="skRot" min="0" max="360" step="1" value="0"> <span id="skRotVal">0</span> <span data-i18n="ui.unit.degrees">Grad</span></label>
-          <label><input type="checkbox" id="skSweep"> <span data-i18n="ui.sketch.sweep">Hüllkurve</span></label>
-          <label><input type="checkbox" id="skShowMeasures" checked> <span data-i18n="ui.sketch.measures">Maße</span></label>
-          <label><span data-i18n="ui.sketch.snap">Raster</span> <select id="skSnap"><option value="0.5">0.5 mm</option><option value="1">1 mm</option><option value="0.1">0.1 mm</option><option value="0" data-i18n="ui.sketch.snap_off">aus</option></select></label>
-          <button id="skZoomIn">+</button><button id="skZoomOut">-</button>
+        <div class="skGroup">
+          <button data-sk-rel="coincident" data-i18n-title="ui.sk.rel.coincident"></button>
+          <button data-sk-rel="horizontal" data-i18n-title="ui.sk.rel.horizontal"></button>
+          <button data-sk-rel="vertical" data-i18n-title="ui.sk.rel.vertical"></button>
+          <button data-sk-rel="parallel" data-i18n-title="ui.sk.rel.parallel"></button>
+          <button data-sk-rel="perpendicular" data-i18n-title="ui.sk.rel.perpendicular"></button>
+          <button data-sk-rel="equal" data-i18n-title="ui.sk.rel.equal"></button>
+          <button data-sk-rel="midpoint" data-i18n-title="ui.sk.rel.midpoint"></button>
+          <button data-sk-rel="concentric" data-i18n-title="ui.sk.rel.concentric"></button>
+          <button data-sk-rel="fix" data-i18n-title="ui.sk.rel.fix"></button>
         </div>
-        <div id="skCanvasWrap"><svg id="skCanvas"></svg><input id="skInput" type="text" hidden></div>
-        <div id="skStatus" class="statusBox"></div>
+        <div class="skGroup">
+          <button data-sk-act="undo" data-i18n-title="ui.sk.tool.undo"></button>
+          <button data-sk-act="redo" data-i18n-title="ui.sk.tool.redo"></button>
+          <button data-sk-act="delete" data-i18n-title="ui.sk.tool.delete"></button>
+          <button data-sk-act="fit" data-i18n-title="ui.sk.tool.fit"></button>
+        </div>
+        <details class="skView"><summary data-i18n="ui.sk.view">Ansicht</summary>
+          <div class="skViewBox">
+            <label><span data-i18n="ui.sketch.rotation">Drehvorschau</span> <input type="range" id="skRot" min="0" max="360" step="1" value="0"> <span id="skRotVal">0</span>°</label>
+            <label><input type="checkbox" id="skSweep"> <span data-i18n="ui.sketch.sweep">Hüllkurve</span></label>
+            <label><input type="checkbox" id="skShowHull" checked> <span data-i18n="ui.sk.show_hull">Gehäusehülle</span></label>
+            <label><span data-i18n="ui.sketch.snap">Raster</span> <select id="skSnap"><option value="0.5">0.5 mm</option><option value="1">1 mm</option><option value="0.1">0.1 mm</option><option value="0" data-i18n="ui.sketch.snap_off">aus</option></select></label>
+          </div>
+        </details>
+        <span class="skSpacer"></span>
+        <button id="skListToggle" data-sk-act="list" data-i18n="ui.sk.list" data-i18n-title="ui.sk.list_tip">Beziehungen</button>
+        <span data-help="ui.help.sketch_tools" data-help-title="ui.tab.sketch"></span>
       </div>
-      <aside id="skRight">
-        <h2 data-i18n="ui.sketch.constraints" data-help="ui.help.sketch_constraints">Constraints</h2><div id="skCons"></div>
-        <h2 data-i18n="ui.sketch.center_distance" data-help="ui.help.sketch_cd">Achsabstand</h2>
-        <div class="form" id="skCd"></div>
-        <p class="hint" data-i18n="ui.sketch.cd_hint">Das Zahnrad liegt bei (-Achsabstand, 0), die Welle zeigt in y Richtung. Das Gehäuse sitzt dahinter. Der ganze Motor dreht um die Stange im Ursprung.</p>
-        <button id="skDrop" data-i18n="ui.sketch.drop">Skizze verwerfen (zurück zum Rechteck)</button>
-      </aside>
+      <div id="skMain">
+        <div id="skCanvasWrap"><svg id="skCanvas"></svg><input id="skInput" type="text" hidden><div id="skHint" class="skHint"></div></div>
+        <aside id="skList" hidden>
+          <h2 data-i18n="ui.sketch.constraints" data-help="ui.help.sketch_constraints">Beziehungen</h2>
+          <div id="skCons"></div>
+          <button id="skDrop" data-i18n="ui.sketch.drop">Skizze verwerfen (zurück zum Rechteck)</button>
+        </aside>
+      </div>
+      <div id="skStatus" class="statusBox"></div>
     </div>
   </section>
   <section id="tab-levels" class="tab">
@@ -238,6 +250,7 @@
 <script src="/static/js/sketch/client.js"></script>
 <script src="/static/js/sketch/render.js"></script>
 <script src="/static/js/sketch/panels.js"></script>
+<script src="/static/js/sketch/tools.js"></script>
 <script src="/static/js/sketch/constraints.js"></script>
 <script src="/static/js/sketch/events.js"></script>
 <script src="/static/js/sketch/index.js"></script>

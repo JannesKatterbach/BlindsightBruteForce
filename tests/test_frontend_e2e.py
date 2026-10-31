@@ -94,7 +94,7 @@ def test_zone_add_with_null_zones_does_not_crash(page):
 
 def test_tooltip_returns_after_dropping_the_sketch(page):
     tip = page.get_attribute("#in-motor-width", "title")
-    page.evaluate("cfg.motor.sketch = {points: [[-20,-10],[-2,-10],[-2,10],[-20,10]], constraints: []}; drawMotor()")
+    page.evaluate("cfg.motor.sketch = {points: [[-20,-10],[-2,-10]], entities: [{type: 'line', points: [0, 1]}], constraints: []}; drawMotor()")
     assert page.is_disabled("#in-motor-width")
     page.click("#btnDropSketch")
     page.wait_for_function("!document.querySelector('#in-motor-width').disabled")
@@ -145,9 +145,9 @@ def test_sketch_drag_with_slow_server_answers(page):
         route.continue_()
 
     page.click("[data-tab=sketch]")
-    page.wait_for_function("__sk.sk.points.length >= 3 && __sk.res && __sk.busy === 0")
+    page.wait_for_function("__sk.sk.entities.length && __sk.res && __sk.busy === 0")
     page.route("**/api/sketch/solve", slow)
-    handle = page.locator("#skCanvas circle[data-sk-point='0']").bounding_box()
+    handle = page.locator("#skCanvas circle[data-sk-ref='p2']").bounding_box()  # top right corner of the housing
     x, y = handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2
     page.mouse.move(x, y)
     page.mouse.down()

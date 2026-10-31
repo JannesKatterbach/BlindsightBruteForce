@@ -44,8 +44,8 @@ class Builder:
         """Reference of the start (0) or end (1) point of a line."""
         return f"p{self.entities[line]['points'][which]}"
 
-    def constrain(self, type_: str, refs: list[str], value: Optional[float] = None) -> None:
-        self.constraints.append({"type": type_, "refs": refs, "value": value, "at": None, "enabled": True, "name": "", "label": None})
+    def constrain(self, type_: str, refs: list[str], value: Optional[float] = None, label: Optional[list[float]] = None) -> None:
+        self.constraints.append({"type": type_, "refs": refs, "value": value, "at": None, "enabled": True, "name": "", "label": label})
 
     def closed(self, pts: list, role: str = "") -> list[int]:
         """Closed chain of lines through pts, consecutive ends coincident."""
@@ -73,9 +73,10 @@ class Builder:
         centre = self.point_entity(-cd, 0.0, ROLE_GEAR)
         self.constrain("midpoint", [f"e{centre}", f"e{diagonal}"])
         self.constrain("horizontal", [f"e{centre}", ORIGIN])
-        self.constrain("distance", [ORIGIN, f"e{centre}"], cd)
-        self.constrain("length", [f"e{lines[0]}"], diameter)
-        self.constrain("length", [f"e{lines[3]}"], width)
+        # Dimension texts above the gear, out of the way of a housing below it
+        self.constrain("distance", [ORIGIN, f"e{centre}"], cd, [-cd / 2.0, y1 + 5.0])
+        self.constrain("length", [f"e{lines[2]}"], diameter, [-cd, y1 + 2.5])
+        self.constrain("length", [f"e{lines[3]}"], width, [x0 - 2.5, 0.0])
 
     def as_dict(self) -> dict:
         return {"points": self.points, "entities": self.entities, "constraints": self.constraints}
@@ -92,10 +93,11 @@ def sketch_from_motor(motor: Any) -> dict:
     rx, ry = _housing_offset(motor, motor.depth / 2.0)
     x0, y0 = -motor.width / 2.0 - rx, -motor.depth / 2.0 - ry
     lines = b.rectangle(x0, y0, x0 + motor.width, y0 + motor.depth)
-    b.constrain("length", [f"e{lines[0]}"], motor.width)
-    b.constrain("length", [f"e{lines[3]}"], motor.depth)
-    b.constrain("hdistance", [ORIGIN, b.end(lines[0], 0)], abs(x0))
-    b.constrain("vdistance", [ORIGIN, b.end(lines[0], 0)], abs(y0))
+    x1, y1 = x0 + motor.width, y0 + motor.depth
+    b.constrain("length", [f"e{lines[0]}"], motor.width, [(x0 + x1) / 2.0, y0 - 3.0])
+    b.constrain("length", [f"e{lines[3]}"], motor.depth, [x0 - 3.0, (y0 + y1) / 2.0])
+    b.constrain("hdistance", [ORIGIN, b.end(lines[0], 0)], abs(x0), [x0 / 2.0, y0 - 7.0])
+    b.constrain("vdistance", [ORIGIN, b.end(lines[0], 0)], abs(y0), [max(x1, 0.0) + 4.0, y0 / 2.0])
     b.gear(motor.center_distance, motor.gear_diameter, motor.gear_width)
     return b.as_dict()
 

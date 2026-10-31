@@ -1,15 +1,14 @@
 "use strict";
-// Motor sketch. Mouse and keyboard on the canvas.
+// Motor sketch. Mouse and keyboard on the canvas, shortcuts like Onshape.
 
 (() => {
   const DOUBLE_CLICK_MS = 400;
   const DOUBLE_CLICK_PX = 6;
-  const DRAG_START_PX = 4;  // from this movement on a point is dragged
-  const PAN_START_PX = 3;
-  const INSERT_T_MIN = 0.05, INSERT_T_MAX = 0.95;  // inserted points not directly on a corner
+  const DRAG_START_PX = 4;  // from this movement on a click becomes a drag
   const WHEEL_ZOOM = 1.15;
+  // Shortcuts. Tools and relations (Onshape uses the same letters for most of them)
+  const KEYS = { l: "line", r: "rect", c: "circle", a: "arc", g: "gear", d: "dimension", s: "select", i: "coincident", h: "horizontal", v: "vertical", e: "equal" };
 
-  const snap = (v) => { const grid = parseFloat($("#skSnap").value); return grid > 0 ? Math.round(v / grid) * grid : v; };
   const pointerMm = (ev) => svgPoint($("#skCanvas"), ev);
   const closest = (ev, selector) => (ev.target.closest ? ev.target.closest(selector) : null);
 
@@ -24,65 +23,71 @@
   function onPointerDown(ev) {
     if (ev.button === 2) return;
     const svg = $("#skCanvas");
-    const [mx, my] = pointerMm(ev);
+    const p = pointerMm(ev);
     const double = isDoubleClick(ev);
-    if (SK.tool === "draw") {
-      if (double) Sketch.finishDraw();
-      else { SK.drawPts.push([snap(mx), snap(my)]); Sketch.render(); }
+    const dimText = closest(ev, "[data-sk-dim]");
+    if (dimText && (SK.tool === "select" || SK.tool === "dimension")) {
+      const k = +dimText.dataset.skDim;
+      if (double) { Sketch.editDimension(k); ev.preventDefault(); return; }
+      svg.setPointerCapture(ev.pointerId);
+      SK.drag = { type: "label", k, sx: ev.clientX, sy: ev.clientY, moved: false };
       return;
     }
-    const pointNode = closest(ev, "[data-sk-point]");
-    if (double && !pointNode) {
-      const hit = Sketch.nearestSide(mx, my);
-      if (hit) { Sketch.structural("insert", { side: hit.i, t: Math.max(INSERT_T_MIN, Math.min(INSERT_T_MAX, hit.t)) }); return; }
+    if (DRAW_TOOLS.includes(SK.tool)) {
+      if (double && SK.tool === "line") { Sketch.finishDraft(); return; }
+      Sketch.drawClick(p);
+      return;
     }
-    const dimension = closest(ev, "[data-sk-dim]");
-    if (dimension) { Sketch.openDimension(dimension.dataset.skDim); ev.preventDefault(); return; }
+    const glyph = closest(ev, ".skglyph");
+    if (glyph) {
+      toggleSelection(glyph.dataset.skRef, true);
+      return;
+    }
+    const ref = Sketch.hit(p);
+    if (SK.tool === "dimension") {
+      if (ref) Sketch.pickForDimension(ref);
+      else if (Sketch.placeDimension(p)) ev.preventDefault();
+      return;
+    }
+    if (RELATIONS.includes(SK.tool)) {
+      if (ref) Sketch.pickForRelation(ref);
+      return;
+    }
     svg.setPointerCapture(ev.pointerId);
-    if (closest(ev, "[data-sk-gear]")) { SK.drag = { type: "gear", moved: false }; return; }
-    if (pointNode) {
-      const i = +pointNode.dataset.skPoint;
-      if (!ev.shiftKey && !SK.sel.p.has(i)) skClearSelection();
-      if (ev.shiftKey && SK.sel.p.has(i)) SK.sel.p.delete(i);
-      else SK.sel.p.add(i);
-      SK.drag = { type: "point", i, moved: false, before: JSON.stringify(SK.sk), pushed: false, sx: ev.clientX, sy: ev.clientY };
-      Sketch.renderAll();
+    if (ref && ref !== "o") {
+      const e = ref[0] === "e" ? SK.sk.entities[+ref.slice(1)] : null;
+      SK.drag = { type: "geometry", ref, grab: p, before: JSON.stringify(SK.sk), pushed: false, moved: false, sx: ev.clientX, sy: ev.clientY,
+                  mode: e && e.type === "circle" ? "radius" : "move", additive: ev.shiftKey || ev.ctrlKey || ev.metaKey };
       return;
     }
-    const sideNode = closest(ev, "[data-sk-side]");
-    if (sideNode) {
-      const i = +sideNode.dataset.skSide;
-      if (!ev.shiftKey) skClearSelection();
-      if (ev.shiftKey && SK.sel.s.has(i)) SK.sel.s.delete(i);
-      else SK.sel.s.add(i);
-      SK.drag = { type: "none" };
-      Sketch.renderAll();
-      return;
-    }
-    if (!ev.shiftKey) skClearSelection();
-    SK.drag = { type: "pan", sx: ev.clientX, sy: ev.clientY, cx: SK.view.cx, cy: SK.view.cy, moved: false };
-    Sketch.renderAll();
+    SK.drag = { type: "pan", ref, sx: ev.clientX, sy: ev.clientY, cx: SK.view.cx, cy: SK.view.cy, moved: false };
   }
 
   function onPointerMove(ev) {
-    const [mx, my] = pointerMm(ev);
-    if (SK.tool === "draw") { SK.cursor = [snap(mx), snap(my)]; Sketch.render(); return; }
+    const p = pointerMm(ev);
+    SK.cursor = p;
     const d = SK.drag;
-    if (!d) return;
+    if (!d) {
+      if (DRAW_TOOLS.includes(SK.tool)) SK.snap = Sketch.infer(p);
+      else {
+        const glyph = closest(ev, ".skglyph");
+        SK.hover = glyph ? glyph.dataset.skRef : Sketch.hit(p);
+      }
+      Sketch.render();
+      return;
+    }
+    const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) < DRAG_START_PX) return;
+    d.moved = true;
     if (d.type === "pan") {
-      const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy;
-      if (Math.hypot(dx, dy) > PAN_START_PX) d.moved = true;
       SK.view.cx = d.cx - dx * SK.view.k;
       SK.view.cy = d.cy + dy * SK.view.k;
       Sketch.render();
-    } else if (d.type === "point") {
-      if (!d.moved && Math.hypot(ev.clientX - d.sx, ev.clientY - d.sy) < DRAG_START_PX) return;
-      d.moved = true;
-      Sketch.dragSolve(d, [snap(mx), snap(my)]);
-    } else if (d.type === "gear") {
-      d.moved = true;
-      const cd = Math.max(0, Math.round(-snap(mx) * 1000) / 1000);
-      if (cd !== cfg.motor.center_distance) { cfg.motor.center_distance = cd; writeInputs(); Sketch.render(); }
+    } else if (d.type === "label") {
+      SK.sk.constraints[d.k].label = p;
+      Sketch.render();
+    } else {
+      Sketch.dragSolve(d, p);
     }
   }
 
@@ -90,10 +95,32 @@
     const d = SK.drag;
     SK.drag = null;
     if (!d) return;
-    if (d.type === "gear" && d.moved) await Sketch.resolve();
-    else if (d.type === "point" && d.moved) { await Sketch.dragDone(); Sketch.sync(); Sketch.renderAll(); }
-    else if (d.type === "pan") Sketch.renderAll();
+    if (d.type === "label") {
+      if (d.moved) { const label = SK.sk.constraints[d.k].label; await Sketch.commit((s) => { s.constraints[d.k].label = label; }); }
+      else toggleSelection(`c${d.k}`, true);
+      return;
+    }
+    if (d.type === "geometry" && d.moved) { await Sketch.dragDone(); Sketch.sync(); Sketch.renderAll(); return; }
+    if (d.type === "geometry") { toggleSelection(d.ref, true); return; }
+    if (!d.moved) { SK.sel.clear(); Sketch.renderAll(); }  // click into free space clears the selection
   });
+
+  /** Click on an element in the select tool adds it to the selection or removes it again (like Onshape). */
+  function toggleSelection(ref, additive) {
+    if (!additive) SK.sel.clear();
+    if (SK.sel.has(ref)) SK.sel.delete(ref);
+    else SK.sel.add(ref);
+    Sketch.renderAll();
+  }
+
+  /** Esc steps back. Draft, then dimension or relation tool, then the selection. */
+  function escape() {
+    $("#skInput").hidden = true;
+    if (SK.draft || SK.dimPlace || SK.pick.length) { SK.draft = null; SK.dimPlace = null; SK.pick = []; Sketch.renderAll(); return; }
+    if (SK.tool !== "select") { Sketch.setTool("select"); return; }
+    SK.sel.clear();
+    Sketch.renderAll();
+  }
 
   function onKeyDown(ev) {
     if (!$("#tab-sketch").classList.contains("active")) return;
@@ -102,9 +129,17 @@
     const key = ev.key.toLowerCase(), ctrl = ev.ctrlKey || ev.metaKey;
     if (ctrl && key === "z" && !ev.shiftKey) { ev.preventDefault(); Sketch.undo(); }
     else if (ctrl && (key === "y" || (ev.shiftKey && key === "z"))) { ev.preventDefault(); Sketch.redo(); }
-    else if (ev.key === "Escape") { SK.tool = null; SK.drawPts = []; skClearSelection(); Sketch.renderAll(); }
-    else if (ev.key === "Enter" && SK.tool === "draw") Sketch.finishDraw();
-    else if ((ev.key === "Delete" || ev.key === "Backspace") && SK.sel.p.size) Sketch.deletePoint(Math.max(...SK.sel.p));
+    else if (ctrl) return;
+    else if (ev.key === "Escape") escape();
+    else if (ev.key === "Enter" && SK.draft) Sketch.finishDraft();
+    else if (ev.key === "Delete" || ev.key === "Backspace") { ev.preventDefault(); Sketch.deleteSelection(); }
+    else if (key === "q") Sketch.toggleConstruction();
+    else if (key === "f") { Sketch.fit(); Sketch.render(); }
+    else if (KEYS[key]) {
+      ev.preventDefault();
+      if (RELATIONS.includes(KEYS[key])) Sketch.relation(KEYS[key]);
+      else Sketch.setTool(KEYS[key]);
+    }
   }
 
   function initCanvas() {
@@ -118,12 +153,10 @@
     svg.addEventListener("pointermove", onPointerMove);
     svg.addEventListener("pointerup", onPointerUp);
     svg.addEventListener("pointercancel", onPointerUp);
-    svg.addEventListener("contextmenu", (ev) => {
-      const pointNode = closest(ev, "[data-sk-point]");
-      if (pointNode) { ev.preventDefault(); Sketch.deletePoint(+pointNode.dataset.skPoint); }
-    });
+    svg.addEventListener("pointerleave", () => { SK.cursor = null; SK.snap = null; SK.hover = null; if (!SK.drag) Sketch.render(); });
+    svg.addEventListener("contextmenu", (ev) => ev.preventDefault());
     document.addEventListener("keydown", onKeyDown);
   }
 
-  Object.assign(Sketch, { initCanvas });
+  Object.assign(Sketch, { initCanvas, toggleSelection, escape });
 })();

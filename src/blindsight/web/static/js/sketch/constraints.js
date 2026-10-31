@@ -1,40 +1,145 @@
 "use strict";
-// Motor sketch. Selection, constraint tools and value input directly at the drawing.
+// Motor sketch. Relations and dimensions like Onshape. Select first and click a relation, or click the relation
+// first and then the elements (the tool stays active). The dimension tool measures one or two elements, the
+// text is placed with the mouse and the value typed in.
 
 (() => {
-  const counts = () => ({ ps: SK.sel.p.size, ss: SK.sel.s.size });
-  const sortedPoints = () => [...SK.sel.p].sort((a, b) => a - b);
-  const sortedSides = () => [...SK.sel.s].sort((a, b) => a - b);
+  const typeInfo = (type) => (schema.sketch_constraints || []).find((t) => t.name === type);
 
-  // Tool -> {can: does the selection fit?, run: create the constraint}. A new tool is an entry here and a
-  // button with data-sk-add (and data-i18n) in index.html. Types and values are known to the core (CONSTRAINT_TYPES).
-  const TOOLS = {
-    length: { can: ({ ps, ss }) => ss === 1 || (ps === 2 && !ss && Sketch.adjacentSide(sortedPoints()) !== null), run: addLength },
-    angle: { can: ({ ps, ss }) => (ps === 1 && !ss) || (ss === 2 && !ps), run: addAngle },
-    parallel: { can: ({ ps, ss }) => ss === 2 && !ps, run: () => addPair("parallel") },
-    perpendicular: { can: ({ ps, ss }) => ss === 2 && !ps, run: () => addPair("perpendicular") },
-    equal: { can: ({ ps, ss }) => ss === 2 && !ps, run: () => addPair("equal") },
-    horizontal: { can: ({ ps, ss }) => ss >= 1 && !ps, run: () => addPerSide("horizontal") },
-    vertical: { can: ({ ps, ss }) => ss >= 1 && !ps, run: () => addPerSide("vertical") },
-    fix: { can: ({ ps, ss }) => ps >= 1 && !ss, run: addFix },
-    dist_rod: { can: ({ ps, ss }) => (ps === 1 && !ss) || (ss === 1 && !ps), run: () => addDistance("rod") },
-    dist_gear: { can: ({ ps, ss }) => (ps === 1 && !ss) || (ss === 1 && !ps), run: () => addDistance("gear") },
-  };
+  /** References sorted to a signature of the type, or null if the elements do not fit. */
+  function fits(type, refs) {
+    const info = typeInfo(type);
+    if (!info || new Set(refs).size !== refs.length) return null;
+    const kinds = refs.map(Sketch.kindOf);
+    for (const sig of info.signatures) {
+      if (sig.length !== refs.length) continue;
+      if (sig.every((k, i) => k === kinds[i])) return refs.slice();
+      if (refs.length === 2 && sig.every((k, i) => k === kinds[1 - i])) return refs.slice().reverse();
+    }
+    return null;
+  }
 
-  function select(kind, i, additive) {
-    const before = kind === "p" ? SK.sel.p : SK.sel.s;
-    const wasSelected = before.has(i);
-    if (!additive) skClearSelection();
-    const target = kind === "p" ? SK.sel.p : SK.sel.s;
-    if (additive && wasSelected) target.delete(i);
-    else target.add(i);
+  /** Constraints a relation creates for a selection (several lines at once like Onshape), or null. */
+  function planRelation(type, refs) {
+    const lines = refs.filter((r) => Sketch.kindOf(r) === "line");
+    const points = refs.filter((r) => Sketch.kindOf(r) === "point");
+    if ((type === "horizontal" || type === "vertical") && lines.length && lines.length === refs.length) return lines.map((r) => [r]);
+    if (type === "fix" && points.length && points.length === refs.length) return points.filter((r) => r !== "o").map((r) => [r]);
+    if (["parallel", "perpendicular", "equal"].includes(type) && refs.length > 2 && refs.every((r) => Sketch.kindOf(r) === Sketch.kindOf(refs[0]))) {
+      return refs.slice(1).map((r) => fits(type, [refs[0], r])).every(Boolean) ? refs.slice(1).map((r) => [refs[0], r]) : null;
+    }
+    if (type === "coincident" && refs.length > 2 && points.length === refs.length) return refs.slice(1).map((r) => [refs[0], r]);
+    const single = fits(type, refs);
+    return single ? [single] : null;
+  }
+
+  function addRelations(type, plan) {
+    return Sketch.commit((sk) => {
+      plan.forEach((refs) => {
+        const at = type === "fix" ? Sketch.point(refs[0]).slice() : null;
+        sk.constraints.push(makeConstraint(type, refs, { at }));
+      });
+    });
+  }
+
+  /** Toolbar click on a relation. Apply to the selection or arm the tool and collect clicks. */
+  function relation(type) {
+    const refs = [...SK.sel].filter((r) => r[0] !== "c");
+    const plan = refs.length ? planRelation(type, refs) : null;
+    if (plan) {
+      SK.sel.clear();
+      addRelations(type, plan);
+      return;
+    }
+    Sketch.setTool(type);
+    SK.pick = refs;
+    SK.sel.clear();
     Sketch.renderAll();
   }
 
-  const canAdd = (tool) => !!TOOLS[tool] && TOOLS[tool].can(counts());
+  /** A click while a relation tool is armed. */
+  function pickForRelation(ref) {
+    const i = SK.pick.indexOf(ref);
+    if (i >= 0) SK.pick.splice(i, 1);
+    else SK.pick.push(ref);
+    const plan = fits(SK.tool, SK.pick);
+    if (plan) {
+      const type = SK.tool;
+      SK.pick = [];
+      addRelations(type, [plan]);
+      return;
+    }
+    if (SK.pick.length >= 2) SK.pick = [ref];  // the elements do not fit, start again with the last one
+    Sketch.renderAll();
+  }
 
-  function addConstraint(tool) {
-    if (canAdd(tool)) TOOLS[tool].run();
+  // --- Dimensions --------------------------------------------------------------------------------------------
+  const parallelLines = (a, b) => {
+    const [p, q] = Sketch.ends(Sketch.entityIndex(a)), [r, s] = Sketch.ends(Sketch.entityIndex(b));
+    const d1 = [q[0] - p[0], q[1] - p[1]], d2 = [s[0] - r[0], s[1] - r[1]];
+    return Math.abs(d1[0] * d2[1] - d1[1] * d2[0]) < 1e-6 * (Math.hypot(...d1) * Math.hypot(...d2) || 1);
+  };
+
+  /** Type of the dimension for the picked elements, or null. */
+  function dimensionFor(refs) {
+    const kinds = refs.map(Sketch.kindOf);
+    if (refs.length === 1) {
+      if (kinds[0] === "line") return { type: "length", refs };
+      if (kinds[0] === "curve") return { type: SK.sk.entities[Sketch.entityIndex(refs[0])].type === "arc" ? "radius" : "diameter", refs };
+      return null;
+    }
+    if (kinds.includes("curve")) return null;
+    if (kinds[0] === "line" && kinds[1] === "line") return { type: parallelLines(refs[0], refs[1]) ? "distance" : "angle", refs };
+    if (kinds[0] === "line") return { type: "distance", refs: [refs[1], refs[0]] };
+    return { type: "distance", refs };
+  }
+
+  /** A click on an element with the dimension tool. */
+  function pickForDimension(ref) {
+    if (SK.pick.includes(ref)) return;
+    const refs = SK.pick.length === 1 ? [SK.pick[0], ref] : [ref];
+    let dim = dimensionFor(refs);
+    if (!dim) { SK.pick = [ref]; dim = dimensionFor([ref]); }
+    else SK.pick = refs;
+    SK.dimPlace = dim;
+    Sketch.renderAll();
+  }
+
+  /** Distance between two points measured horizontally or vertically when the text lies beside them. */
+  function placedType(dim, label) {
+    if (dim.type !== "distance") return dim.type;
+    const kinds = dim.refs.map(Sketch.kindOf);
+    if (kinds[0] !== "point" || kinds[1] !== "point") return dim.type;
+    const a = Sketch.point(dim.refs[0]), b = Sketch.point(dim.refs[1]);
+    const inX = label[0] > Math.min(a[0], b[0]) && label[0] < Math.max(a[0], b[0]);
+    const inY = label[1] > Math.min(a[1], b[1]) && label[1] < Math.max(a[1], b[1]);
+    if (inX && !inY) return "hdistance";
+    if (inY && !inX) return "vdistance";
+    return "distance";
+  }
+
+  /** Click on free space while a dimension waits for its position. Ask for the value and add it. */
+  function placeDimension(label) {
+    const dim = SK.dimPlace;
+    if (!dim) return false;
+    const type = placedType(dim, label);
+    const current = Sketch.measure(type, dim.refs);
+    SK.dimPlace = null;
+    SK.pick = [];
+    askValue(t(`ui.sk.dim.${type}`), type === "angle" ? fmtDeg(current) : fmtLen(current), label, (value) => {
+      Sketch.commit((sk) => { sk.constraints.push(makeConstraint(type, dim.refs, { value, label })); });
+    });
+    Sketch.renderAll();
+    return true;
+  }
+
+  /** Change the value of dimension k (double click on its text). */
+  function editDimension(k) {
+    const c = SK.sk.constraints[k];
+    if (!c || c.value === null) return;
+    askValue(typeInfo(c.type) ? typeInfo(c.type).label : c.type, c.type === "angle" ? fmtDeg(c.value) : fmtLen(c.value), c.label || Sketch.defaultLabel(c), (value) => {
+      Sketch.commit((sk) => { sk.constraints[k].value = value; });
+    });
   }
 
   /** Input field at the position at (mm) of the drawing. Enter accepts, Esc or leaving cancels. */
@@ -45,96 +150,27 @@
     input.value = initial;
     input.title = label;
     input.placeholder = label;
-    input.style.left = Math.max(4, Math.min(W - 110, sx - 45)) + "px";
-    input.style.top = Math.max(4, Math.min(H - 30, sy - 12)) + "px";
-    input.focus();
-    input.select();
+    input.style.left = Math.max(4, Math.min(W - 110, sx - 48)) + "px";
+    input.style.top = Math.max(4, Math.min(H - 30, sy - 14)) + "px";
     const done = (accept) => {
       input.hidden = true;
       input.onkeydown = null;
       input.onblur = null;
-      if (!accept) return;
+      if (!accept) { Sketch.renderAll(); return; }
       const value = parseFloat(String(input.value).replace(",", "."));
       if (Number.isFinite(value)) onValue(value);
     };
     input.onkeydown = (e) => {
       if (e.key === "Enter") { e.preventDefault(); done(true); } else if (e.key === "Escape") { e.preventDefault(); done(false); }
     };
-    input.onblur = () => done(false);
+    // Focus after the mouse down of this click, its default action would blur the field again
+    setTimeout(() => {
+      if (input.hidden) return;
+      input.focus();
+      input.select();
+      input.onblur = () => done(false);
+    }, 0);
   }
 
-  function addLength() {
-    const sides = sortedSides();
-    const i = sides.length ? sides[0] : Sketch.adjacentSide(sortedPoints());
-    askValue(t("ui.sk.ask.length", { a: `S${i + 1}` }), fmtLen(Sketch.sideLen(i)), Sketch.sideMid(i), (v) => {
-      if (v > 0) Sketch.commit((s) => Sketch.upsert(s, "length", (c) => c.a === i, { a: i, value: v }));
-    });
-  }
-
-  function addAngle() {
-    const points = sortedPoints();
-    if (points.length === 1) {
-      const i = points[0];
-      askValue(t("ui.sk.ask.angle", { a: `P${i + 1}` }), fmtDeg(Sketch.interiorAngle(i)), Sketch.point(i), (v) => {
-        if (v > 0 && v < 180) Sketch.commit((s) => Sketch.upsert(s, "angle", (c) => c.a === i, { a: i, value: v }));
-      });
-      return;
-    }
-    const [a, b] = sortedSides();
-    askValue(t("ui.sk.ask.angle_sides", { a: `S${a + 1}`, b: `S${b + 1}` }), fmtDeg(Sketch.angleBetweenSides(a, b)), Sketch.sideMid(a), (v) => {
-      if (v >= 0 && v <= 180) Sketch.commit((s) => Sketch.upsert(s, "angle_sides", (c) => c.a === a && c.b === b, { a, b, value: v }));
-    });
-  }
-
-  function addPair(type) {
-    const [a, b] = sortedSides();
-    const exists = SK.sk.constraints.some((c) => c.type === type && ((c.a === a && c.b === b) || (c.a === b && c.b === a)));
-    if (exists) { SK.msg = t("ui.sk.exists"); Sketch.renderAll(); return; }
-    Sketch.commit((s) => s.constraints.push(makeConstraint(type, { a, b })));
-  }
-
-  function addPerSide(type) {
-    const sides = sortedSides();
-    Sketch.commit((s) => sides.forEach((i) => {
-      if (!s.constraints.some((c) => c.type === type && c.a === i)) s.constraints.push(makeConstraint(type, { a: i }));
-    }));
-  }
-
-  function addFix() {
-    const points = sortedPoints();
-    Sketch.commit((s) => points.forEach((i) => {
-      if (!s.constraints.some((c) => c.type === "fix" && c.a === i)) s.constraints.push(makeConstraint("fix", { a: i, value: s.points[i][0], value2: s.points[i][1] }));
-    }));
-  }
-
-  function addDistance(ref) {
-    const word = t("ui.sk.ref." + ref);
-    const points = sortedPoints();
-    if (points.length === 1) {
-      const i = points[0], q = Sketch.point(i), r = Sketch.refPos(ref);
-      askValue(t("ui.sk.ask.distance", { a: `P${i + 1}`, ref: word }), fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), q, (v) => {
-        if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_point", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
-      });
-      return;
-    }
-    const i = sortedSides()[0];
-    askValue(t("ui.sk.ask.distance", { a: `S${i + 1}`, ref: word }), fmtLen(Sketch.distanceSideRef(i, ref)), Sketch.sideMid(i), (v) => {
-      if (v >= 0) Sketch.commit((s) => Sketch.upsert(s, "dist_side", (c) => c.a === i && c.ref === ref, { a: i, ref, value: v }));
-    });
-  }
-
-  /** Click on a dimension. Length and angle create a constraint, existing values are edited. */
-  function openDimension(key) {
-    const [kind, index] = key.split(":"), i = +index;
-    if (kind === "length") { SK.sel = { p: new Set(), s: new Set([i]) }; Sketch.renderAll(); addConstraint("length"); return; }
-    if (kind === "angle") { SK.sel = { p: new Set([i]), s: new Set() }; Sketch.renderAll(); addConstraint("angle"); return; }
-    const c = SK.sk.constraints[i], valueKind = Sketch.valueKind(c);
-    if (kind !== "cons" || !valueKind) return;
-    const at = c.type === "dist_point" ? Sketch.point(c.a) : Sketch.sideMid(c.a ?? 0);
-    askValue(Sketch.constraintText(c), valueKind === "len" ? fmtLen(c.value) : fmtDeg(c.value), at, (v) => {
-      Sketch.commit((s) => { s.constraints[i].value = v; });
-    });
-  }
-
-  Object.assign(Sketch, { select, canAdd, addConstraint, openDimension });
+  Object.assign(Sketch, { fits, planRelation, relation, pickForRelation, pickForDimension, placeDimension, editDimension, askValue, typeInfo });
 })();

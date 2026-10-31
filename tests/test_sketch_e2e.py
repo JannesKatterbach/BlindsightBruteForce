@@ -1,6 +1,6 @@
-"""End to end test of the motor sketch in the browser. Skipped when Playwright or Chromium is missing.
+"""End to end test of the Onshape like motor sketch in the browser. Skipped when Playwright or Chromium is missing.
 
-The results are measured again in Python independently of the solver (lengths, parallelism, angles)."""
+The results are measured again in Python independently of the solver (lengths, parallelism, relations)."""
 
 import math
 import os
@@ -43,18 +43,12 @@ def page(browser, base_url):
     pg.goto(base_url)
     pg.wait_for_selector("#in-motor-width")
     pg.click("[data-tab=sketch]")
-    pg.wait_for_function("__sk.sk.points.length >= 3 && __sk.res")
+    pg.wait_for_function("__sk.res && __sk.sk.entities.length && __sk.busy === 0")
+    # A view with free space right of the motor for drawing
+    pg.evaluate("__sk.view = {cx: 8, cy: -12, k: 0.05}; skRender()")
     yield pg
+    assert pg.errors == []
     pg.close()
-
-
-def pts(pg):
-    return pg.evaluate("__sk.sk.points")
-
-
-def side(p, i):
-    n = len(p)
-    return p[(i + 1) % n][0] - p[i][0], p[(i + 1) % n][1] - p[i][1]
 
 
 def screen(pg, mx, my):
@@ -63,298 +57,251 @@ def screen(pg, mx, my):
     return box["x"] + w / 2 + (mx - cx) / k, box["y"] + h / 2 - (my - cy) / k
 
 
-def draw_trapezoid(pg):
-    pg.click("#skDraw")
-    for p in [(-14, -30), (6, -30), (2, -8), (-12, -6)]:
-        pg.mouse.click(*screen(pg, *p))
-    pg.keyboard.press("Enter")
-    pg.wait_for_function("__sk.tool === null && __sk.sk.points[2][0] === 2")
+def click(pg, x, y):
+    pg.mouse.click(*screen(pg, x, y))
 
 
 def settle(pg):
-    pg.wait_for_function("__sk.res && __sk.busy === 0 && !document.querySelector('#skInput:not([hidden])')")
-    pg.wait_for_timeout(250)
+    pg.wait_for_function("__sk.res && __sk.busy === 0")
 
 
-def test_rod_is_drawn_at_the_origin_and_motor_rotates_about_it(page):
-    rod = page.locator("#skRod")
-    assert rod.count() == 1
-    assert float(rod.get_attribute("r")) == pytest.approx(2.0) and float(rod.get_attribute("cx")) == 0 and float(rod.get_attribute("cy")) == 0
-    page.fill("#skRot", "50")
-    page.dispatch_event("#skRot", "input")
-    assert "rotate(50)" in page.locator("#skCanvas g[opacity]").first.get_attribute("transform")
-    # the rod stays in place while rotating
-    assert float(page.locator("#skRod").get_attribute("cx")) == 0
-    assert page.locator("#skCanvas").inner_html().count("Stange") >= 1
+def sk(pg):
+    return pg.evaluate("__sk.sk")
 
 
-def test_draw_polygon_set_length_parallel_and_angle(page):
-    draw_trapezoid(page)
-    p = pts(page)
-    assert len(p) == 4
-    # length via the table
-    page.fill("[data-sk-len='0']", "18")
-    page.dispatch_event("[data-sk-len='0']", "change")
+def ends(s, k):
+    a, b = s["entities"][k]["points"]
+    return s["points"][a], s["points"][b]
+
+
+def new_constraints(before, after, types=None):
+    return [c for c in after["constraints"][len(before["constraints"]):] if types is None or c["type"] in types]
+
+
+def draw_rect(pg, a, b):
+    before = sk(pg)
+    pg.keyboard.press("r")
+    click(pg, *a)
+    click(pg, *b)
+    settle(pg)
+    return before
+
+
+def draw_line(pg, a, b):
+    pg.keyboard.press("l")
+    click(pg, *a)
+    click(pg, *b)
+    settle(pg)
+    pg.keyboard.press("Escape")
+    pg.keyboard.press("Escape")
+    return len(sk(pg)["entities"]) - 1
+
+
+def test_toolbar_and_preview(page):
+    assert page.locator("#skToolbar button svg").count() >= 20
+    assert page.evaluate("[__sk.res.state, __sk.attached]") == ["full", False]
+    assert "Voll bestimmt" in page.inner_text("#skStatus") and "Achsabstand 5 mm" in page.inner_text("#skStatus")
+    assert page.get_attribute("[data-sk-tool=line]", "title") == "Linie (L)"
+
+
+def test_rectangle_tool_draws_lines_with_relations(page):
+    before = draw_rect(page, (12, -25), (24, -12))
+    after = sk(page)
+    assert len(after["entities"]) == len(before["entities"]) + 4
+    added = new_constraints(before, after)
+    assert sorted(c["type"] for c in added) == ["coincident"] * 4 + ["horizontal"] * 2 + ["vertical"] * 2
+    assert page.evaluate("__sk.attached && cfg.motor.sketch.entities.length") == len(after["entities"])
+    # The housing hull now covers the new rectangle
+    assert page.evaluate("__sk.res.profile.bbox.xmax") == pytest.approx(24, abs=0.01)
+
+
+def test_line_chain_closes_on_the_start_point(page):
+    before = sk(page)
+    page.keyboard.press("l")
+    for p in [(12, -25), (26, -25), (20, -12), (12, -25)]:
+        click(page, *p)
+        settle(page)
+    after = sk(page)
+    assert len(after["entities"]) == len(before["entities"]) + 3
+    added = new_constraints(before, after)
+    assert sum(c["type"] == "coincident" for c in added) == 3
+    assert any(c["type"] == "horizontal" for c in added)  # the first line was drawn horizontally
+    assert page.evaluate("__sk.draft") is None
+    first = len(before["entities"])
+    assert ends(after, first)[0] == pytest.approx(ends(after, first + 2)[1], abs=1e-6)
+
+
+def test_relations_by_selection_and_with_an_armed_tool(page):
+    a = draw_line(page, (12, -26), (25, -22))
+    b = draw_line(page, (12, -16), (24, -11))
+    page.keyboard.press("s")
+    click(page, 18.5, -24)  # middle of line a
+    click(page, 18, -13.5)  # middle of line b
+    assert page.evaluate("[...__sk.sel]") == [f"e{a}", f"e{b}"]
+    page.click("[data-sk-rel=parallel]")
     settle(page)
-    p = pts(page)
-    assert math.hypot(*side(p, 0)) == pytest.approx(18.0, abs=1e-6)
-    # parallelism via the table
-    page.select_option("[data-sk-par='0']", "2")
+    s = sk(page)
+    (p, q), (r, t) = ends(s, a), ends(s, b)
+    assert abs((q[0] - p[0]) * (t[1] - r[1]) - (q[1] - p[1]) * (t[0] - r[0])) < 1e-6
+    # Armed tool. Click the relation first, then the element
+    page.click("[data-sk-rel=horizontal]")
+    assert page.evaluate("__sk.tool") == "horizontal"
+    p, q = ends(sk(page), a)
+    click(page, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
     settle(page)
-    p = pts(page)
-    a, b = side(p, 0), side(p, 2)
-    assert abs(a[0] * b[1] - a[1] * b[0]) / (math.hypot(*a) * math.hypot(*b)) < 1e-7
-    assert math.hypot(*side(p, 0)) == pytest.approx(18.0, abs=1e-6)
-    # angle via the toolbar and the input field at the sketch
-    page.evaluate("skSelect([1], [])")
-    page.click("[data-sk-add=angle]")
-    page.fill("#skInput", "80")
-    page.press("#skInput", "Enter")
-    settle(page)
-    p = pts(page)
-    u, v = (p[0][0] - p[1][0], p[0][1] - p[1][1]), (p[2][0] - p[1][0], p[2][1] - p[1][1])
-    ang = math.degrees(math.atan2(abs(u[0] * v[1] - u[1] * v[0]), u[0] * v[0] + u[1] * v[1]))
-    assert ang == pytest.approx(80.0, abs=1e-5)
-    # everything together is in the configuration sent to the server
-    cfg_cons = page.evaluate("cfg.motor.sketch.constraints.map(c => c.type)")
-    assert cfg_cons == ["length", "parallel", "angle"]
-    assert page.errors == []
+    s = sk(page)
+    for k in (a, b):  # line b follows through parallel
+        p, q = ends(s, k)
+        assert abs(p[1] - q[1]) < 1e-6
 
 
-def test_dragging_a_point_keeps_all_constraints(page):
-    draw_trapezoid(page)
-    page.fill("[data-sk-len='0']", "18")
-    page.dispatch_event("[data-sk-len='0']", "change")
-    page.select_option("[data-sk-par='0']", "2")
+def test_dimension_tool_sets_a_length_and_double_click_edits_it(page):
+    k = draw_line(page, (12, -26), (25, -22))
+    page.keyboard.press("d")
+    p, q = ends(sk(page), k)
+    click(page, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+    click(page, 18, -29)
+    page.wait_for_selector("#skInput:not([hidden])")
+    page.fill("#skInput", "15")
+    page.keyboard.press("Enter")
     settle(page)
-    p = pts(page)
-    x, y = screen(page, *p[2])
+    p, q = ends(sk(page), k)
+    assert math.dist(p, q) == pytest.approx(15, abs=1e-5)
+    index = len(sk(page)["constraints"]) - 1
+    box = page.locator(f"[data-sk-dim='{index}']").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.click(x, y)
+    page.mouse.click(x, y)
+    page.wait_for_selector("#skInput:not([hidden])")
+    page.fill("#skInput", "18")
+    page.keyboard.press("Enter")
+    settle(page)
+    p, q = ends(sk(page), k)
+    assert math.dist(p, q) == pytest.approx(18, abs=1e-5)
+
+
+def test_dragging_a_corner_keeps_the_rectangle(page):
+    before = draw_rect(page, (12, -25), (24, -12))
+    first = len(before["entities"])
+    page.keyboard.press("s")
+    corner = sk(page)["points"][sk(page)["entities"][first + 1]["points"][1]]  # top right corner
+    x, y = screen(page, *corner)
     page.mouse.move(x, y)
     page.mouse.down()
-    page.mouse.move(x + 70, y - 50, steps=8)
+    page.mouse.move(x + 40, y - 30, steps=6)
     page.mouse.up()
     settle(page)
-    p2 = pts(page)
-    assert p2[2] != p[2]
-    a, b = side(p2, 0), side(p2, 2)
-    assert abs(a[0] * b[1] - a[1] * b[0]) / (math.hypot(*a) * math.hypot(*b)) < 1e-6
-    assert math.hypot(*a) == pytest.approx(18.0, abs=1e-6)
-    assert page.errors == []
+    s = sk(page)
+    for k in (first, first + 2):
+        p, q = ends(s, k)
+        assert abs(p[1] - q[1]) < 1e-6
+    for k in (first + 1, first + 3):
+        p, q = ends(s, k)
+        assert abs(p[0] - q[0]) < 1e-6
+    assert s["points"][s["entities"][first + 1]["points"][1]][0] > corner[0] + 1
 
 
-def test_undo_redo(page):
-    draw_trapezoid(page)
-    page.fill("[data-sk-len='0']", "18")
-    page.dispatch_event("[data-sk-len='0']", "change")
+def test_delete_undo_and_redo(page):
+    before = draw_rect(page, (12, -25), (24, -12))
+    n = len(sk(page)["entities"])
+    page.keyboard.press("s")
+    click(page, 18, -25)  # bottom line
+    page.keyboard.press("Delete")
     settle(page)
-    page.click("#skUndo")
+    after = sk(page)
+    assert len(after["entities"]) == n - 1
+    assert len(after["constraints"]) == len(before["constraints"]) + 8 - 3  # two corners and its horizontal are gone
+    page.keyboard.press("Control+z")
     settle(page)
-    p = pts(page)
-    assert math.hypot(*side(p, 0)) != pytest.approx(18.0, abs=1e-3)
-    assert page.evaluate("cfg.motor.sketch.constraints.length") == 0
-    page.click("#skRedo")
+    assert len(sk(page)["entities"]) == n
+    page.keyboard.press("Control+y")
     settle(page)
-    assert math.hypot(*side(pts(page), 0)) == pytest.approx(18.0, abs=1e-6)
+    assert len(sk(page)["entities"]) == n - 1
 
 
-def test_conflict_is_shown_and_blocks_analysis(page):
-    draw_trapezoid(page)
-    page.fill("[data-sk-len='0']", "18")
-    page.dispatch_event("[data-sk-len='0']", "change")
+def test_construction_does_not_count_for_the_housing(page):
+    page.keyboard.press("c")
+    click(page, 20, -15)
+    click(page, 24, -15)
     settle(page)
-    page.evaluate("skSelect([], [0, 1])")
-    page.click("[data-sk-add=equal]")
+    k = len(sk(page)["entities"]) - 1
+    assert page.evaluate("__sk.res.profile.bbox.xmax") == pytest.approx(24, abs=0.3)
+    page.keyboard.press("s")
+    click(page, 24, -15)
+    page.keyboard.press("q")
     settle(page)
-    page.fill("[data-sk-len='1']", "9")
-    page.dispatch_event("[data-sk-len='1']", "change")
-    settle(page)
-    assert page.evaluate("__sk.res.state") == "conflict"
-    assert "Widerspruch" in page.inner_text("#skStatus")
-    assert page.locator(".skcons.conflict").count() >= 1
-    page.wait_for_selector("#banner:not([hidden])")
-    assert "widerspricht" in page.inner_text("#banner")
+    assert sk(page)["entities"][k]["construction"] is True
+    assert page.evaluate("__sk.res.profile.bbox.xmax") == pytest.approx(1.0, abs=1e-6)
+    assert page.locator(f"#skCanvas circle.construction[data-sk-ref='e{k}']").count() == 1
 
 
-def test_insert_and_delete_point(page):
-    page.evaluate("__sk.sk.points.length")
-    n0 = page.evaluate("__sk.sk.points.length")
-    p = pts(page)
-    a, b = p[1], p[2]
-    page.mouse.dblclick(*screen(page, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
-    page.wait_for_function(f"__sk.sk.points.length === {n0 + 1}")
-    page.click("[data-sk-del='1']")
-    page.wait_for_function(f"__sk.sk.points.length === {n0}")
-
-
-def test_geometry_tab_shows_rod_and_sketch_note_and_disables_legacy_fields(page):
-    draw_trapezoid(page)
-    page.fill("[data-sk-len='0']", "18")
-    page.dispatch_event("[data-sk-len='0']", "change")
+def test_circle_arc_and_diameter(page):
+    page.keyboard.press("c")
+    click(page, 20, -15)
+    click(page, 23, -15)
     settle(page)
+    k = len(sk(page)["entities"]) - 1
+    page.keyboard.press("d")
+    click(page, 23, -15)
+    click(page, 27, -10)
+    page.wait_for_selector("#skInput:not([hidden])")
+    page.fill("#skInput", "10")
+    page.keyboard.press("Enter")
+    settle(page)
+    assert sk(page)["entities"][k]["radius"] == pytest.approx(5, abs=1e-5)
+    assert sk(page)["constraints"][-1]["type"] == "diameter"
+    page.keyboard.press("a")
+    for p in [(14, -26), (18, -26), (14, -22)]:
+        click(page, *p)
+    settle(page)
+    arc = sk(page)["entities"][-1]
+    assert arc["type"] == "arc"
+    c, s, e = (sk(page)["points"][i] for i in arc["points"])
+    assert math.dist(c, s) == pytest.approx(math.dist(c, e), abs=1e-6)
+
+
+def test_gear_dimensions_drive_the_motor(page):
+    page.keyboard.press("f")  # fit, the label of the centre distance lies above the motor
+    cons = sk(page)["constraints"]
+    index = next(i for i, c in enumerate(cons) if c["type"] == "distance" and "o" in c["refs"])
+    box = page.locator(f"[data-sk-dim='{index}']").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.click(x, y)
+    page.mouse.click(x, y)
+    page.wait_for_selector("#skInput:not([hidden])")
+    page.fill("#skInput", "7")
+    page.keyboard.press("Enter")
+    settle(page)
+    page.wait_for_function("cfg.motor.center_distance > 6.99 && cfg.motor.sketch")
+    assert "Achsabstand 7 mm" in page.inner_text("#skStatus")
     page.click("[data-tab=geometry]")
-    page.wait_for_selector("#sketchNote:not([hidden])")
-    assert page.locator("#previewRod").count() == 1
-    assert page.is_disabled("#in-motor-width") and page.is_disabled("#in-motor-gear_gap")
-    page.click("#btnDropSketch")
-    page.wait_for_selector("#sketchNote", state="hidden")
-    assert not page.is_disabled("#in-motor-width")
+    page.wait_for_function("document.querySelector('#in-motor-center_distance').value === '7'")  # written debounced
+    assert page.locator("#in-motor-center_distance").is_disabled()
+    page.click("[data-tab=sketch]")
+    page.keyboard.press("g")
+    click(page, -20, 10)
+    assert "schon ein Zahnrad" in page.inner_text("#skStatus")
 
 
-def test_sketch_motor_runs_through_the_optimizer(page):
-    draw_trapezoid(page)
-    page.fill("[data-sk-len='0']", "14")
-    page.dispatch_event("[data-sk-len='0']", "change")
+def test_constraint_list_and_language(page):
+    page.click("#skListToggle")
+    rows = page.locator("#skCons .skcons")
+    assert rows.count() == len(sk(page)["constraints"])
+    n = rows.count()
+    page.click("#skCons [data-sk-cons-del='0']")
     settle(page)
-    page.click("[data-tab=geometry]")
-    page.fill("#in-target_count", "6")
-    page.dispatch_event("#in-target_count", "change")
+    assert page.locator("#skCons .skcons").count() == n - 1
+    page.select_option("#langSel", "en")
+    page.wait_for_function("document.querySelector('[data-sk-tool=line]').title === 'Line (L)'")
+    page.wait_for_function("document.querySelector('#skStatus').innerText.includes('Under defined')")
+
+
+def test_sketch_motor_is_used_by_the_optimization(page):
+    draw_rect(page, (8, -26), (14, -18))  # widens the housing hull
+    page.wait_for_function("cfg.motor.width > 20")
     page.click("[data-tab=optim]")
-    page.fill("#in-search-time_limit_s", "3")
+    page.fill("#in-search-time_limit_s", "4")
     page.dispatch_event("#in-search-time_limit_s", "change")
     page.click("#btnStart")
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
-    assert "6 von 6" in page.inner_text("#statusBox")
-    assert "Keine Kollisionen" in page.inner_text("#collisions")
-    assert page.errors == []
-
-
-def cross2(a, b):
-    return a[0] * b[1] - a[1] * b[0]
-
-
-def test_toolbar_constraints_parallel_equal_horizontal_fix(page):
-    draw_trapezoid(page)
-    page.evaluate("skSelect([], [0])")
-    page.click("[data-sk-add=horizontal]")
-    settle(page)
-    page.evaluate("skSelect([], [0, 2])")
-    page.click("[data-sk-add=parallel]")
-    settle(page)
-    page.evaluate("skSelect([], [1, 3])")
-    page.click("[data-sk-add=equal]")
-    settle(page)
-    page.evaluate("skSelect([0], [])")
-    fixed_at = pts(page)[0]
-    page.click("[data-sk-add=fix]")
-    settle(page)
-    p = pts(page)
-    assert abs(side(p, 0)[1]) < 1e-7
-    assert abs(cross2(side(p, 0), side(p, 2))) < 1e-6 * math.hypot(*side(p, 0)) * math.hypot(*side(p, 2))
-    assert math.hypot(*side(p, 1)) == pytest.approx(math.hypot(*side(p, 3)), abs=1e-6)
-    assert p[0] == pytest.approx(fixed_at, abs=1e-6)
-    # the same relation twice is not possible
-    page.evaluate("skSelect([], [0, 2])")
-    page.click("[data-sk-add=parallel]")
-    settle(page)
-    assert "existiert bereits" in page.inner_text("#skStatus")
-    # a fixed point stays when another point is dragged
-    x, y = screen(page, *p[2])
-    page.mouse.move(x, y)
-    page.mouse.down()
-    page.mouse.move(x + 50, y + 30, steps=6)
-    page.mouse.up()
-    settle(page)
-    assert pts(page)[0] == pytest.approx(fixed_at, abs=1e-6)
-    assert page.errors == []
-
-
-def test_double_click_finishes_polygon(page):
-    page.click("#skDraw")
-    for p in [(-12, -30), (6, -30), (4, -8)]:
-        page.mouse.click(*screen(page, *p))
-    page.mouse.dblclick(*screen(page, -10, -8))
-    page.wait_for_function("__sk.tool === null && __sk.sk.points.length === 4")
-    assert len(pts(page)) == 4
-
-
-def test_nonconvex_polygon_is_flagged_and_hull_repairs_it(page):
-    page.click("#skDraw")
-    for p in [(-14, -30), (8, -30), (-10, -16), (-14, -6)]:
-        page.mouse.click(*screen(page, *p))
-    page.keyboard.press("Enter")
-    page.wait_for_function("__sk.tool === null && __sk.res")
-    settle(page)
-    assert page.evaluate("__sk.res.convex") is False
-    assert "nicht konvex" in page.inner_text("#skStatus")
-    page.wait_for_selector("#banner:not([hidden])")
-    page.click("#skHull")
-    page.wait_for_function("__sk.sk.points.length === 3 && __sk.res.convex")
-    settle(page)
-    page.wait_for_selector("#banner", state="hidden")
-
-
-def test_distance_to_rod_dimension_is_measured_from_the_origin(page):
-    draw_trapezoid(page)
-    page.evaluate("skSelect([], [3])")
-    page.click("[data-sk-add=dist_rod]")
-    page.fill("#skInput", "7")
-    page.press("#skInput", "Enter")
-    settle(page)
-    p = pts(page)
-    d = side(p, 3)
-    dist = abs(cross2(d, (-p[3][0], -p[3][1]))) / math.hypot(*d)
-    assert dist == pytest.approx(7.0, abs=1e-6)
-    assert page.evaluate("cfg.motor.sketch.constraints[0].type") == "dist_side"
-
-
-def test_dragging_the_gear_changes_the_center_distance(page):
-    before = page.evaluate("cfg.motor.center_distance")
-    x, y = screen(page, -before, 0)
-    page.mouse.move(x, y)
-    page.mouse.down()
-    page.mouse.move(x - 30, y, steps=5)
-    page.mouse.up()
-    settle(page)
-    after = page.evaluate("cfg.motor.center_distance")
-    assert after > before
-    assert float(page.locator("#skCdIn").input_value()) == pytest.approx(after, abs=1e-6)
-
-
-def test_tables_work_in_millimetres(page):
-    # The program works in mm only, there is no unit selection
-    assert page.locator("#unitSel").count() == 0
-    draw_trapezoid(page)
-    assert "[mm]" in page.inner_text("#skSides")
-    page.fill("[data-sk-len='0']", "15")
-    page.dispatch_event("[data-sk-len='0']", "change")
-    settle(page)
-    assert math.hypot(*side(pts(page), 0)) == pytest.approx(15.0, abs=1e-6)
-
-
-def test_svg_import_creates_a_sketch(page, tmp_path):
-    f = tmp_path / "motor.svg"
-    f.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="30mm" viewBox="0 0 20 30"><path d="M0 0 L20 0 L20 20 L10 30 L0 20 Z"/></svg>')
-    page.click("[data-tab=geometry]")
-    page.set_input_files("#svgMotor", str(f))
-    page.wait_for_function("cfg.motor.sketch && cfg.motor.sketch.points.length === 5")
-    page.click("[data-tab=sketch]")
-    page.wait_for_function("__sk.sk.points.length === 5 && __sk.attached")
-    assert page.evaluate("__sk.res.convex") is True
-    assert page.evaluate("__sk.res.errors.length") == 0
-    page.wait_for_selector("#banner", state="hidden")
-    assert page.errors == []
-
-
-def test_from_rectangle_resets_to_dimensioned_rectangle(page):
-    draw_trapezoid(page)
-    page.click("#skFromMotor")
-    page.wait_for_function("__sk.sk.points.length === 4 && __sk.sk.constraints.length === 6")
-    settle(page)
-    p = pts(page)
-    assert math.hypot(*side(p, 0)) == pytest.approx(page.evaluate("cfg.motor.width"), abs=1e-6)
-    for i in range(4):
-        a, b = side(p, i), side(p, (i + 1) % 4)
-        assert abs(a[0] * b[0] + a[1] * b[1]) < 1e-6 * math.hypot(*a) * math.hypot(*b)
-
-
-def test_example_with_sketch_loads_into_the_editor(page):
-    page.select_option("#exampleSel", "sketch_trapezoid_motor")
-    page.wait_for_function("cfg.motor.sketch && cfg.motor.sketch.constraints.length === 6")
-    page.click("[data-tab=sketch]")
-    page.wait_for_function("__sk.attached && __sk.sk.constraints.length === 6 && __sk.res.ok")
-    assert page.evaluate("__sk.res.convex") is True
-    assert page.locator(".skcons").count() == 6
-    assert "Abstand linke Flanke zur Stange" in page.inner_text("#skCons")
-    p = pts(page)
-    assert math.hypot(*side(p, 0)) == pytest.approx(16.0, abs=1e-6)
-    assert page.errors == []
+    page.wait_for_function("document.querySelector('#collisions').innerText.includes('Keine Kollisionen')")

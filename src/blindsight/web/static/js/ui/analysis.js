@@ -17,6 +17,7 @@ async function refresh() {
     return;
   }
   showFieldErrors([]);
+  if (response.data.motor) drawMotor(response.data.motor);
   renderLevelInfo(response.data);
   drawSectionPreview(response.data);
 }

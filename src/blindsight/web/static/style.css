@@ -42,22 +42,9 @@ table.grid input,table.grid select{width:100%;min-width:48px;padding:3px 4px}
 .handle{cursor:grab}
 [hidden]{display:none!important}
 /* Motor sketch */
-#skRoot{display:grid;grid-template-columns:300px minmax(0,1fr) 290px;gap:14px;align-items:start}
-#skLeft,#skRight{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 12px 12px}
-#skCanvasWrap{position:relative}
-#skCanvas{height:68vh;min-height:420px;touch-action:none;cursor:default;user-select:none}
-#skInput{position:absolute;width:90px;z-index:5;border:2px solid var(--ac)}
-#skStatus{margin-top:8px;line-height:1.7}
-.skcons{display:grid;grid-template-columns:18px 1fr 70px 20px 24px;gap:4px;align-items:center;padding:2px 0;border-bottom:1px solid var(--bd);font-size:12px}
-.skcons .dot{color:var(--ac)}.skcons.conflict .dot{color:var(--bad)}.skcons.redundant .dot{color:var(--warn)}.skcons.disabled{opacity:.5}
-.skcons input.skval{width:70px;padding:2px 4px}.skcons button{padding:0 6px}
-.skcons:not(:has(.skval)){grid-template-columns:18px 1fr 20px 24px}
 table.grid tr.sel{background:color-mix(in srgb,var(--sel) 22%,transparent)}
 table.grid input.driven{border-color:var(--ac);font-weight:600}
 table.grid td button{padding:0 5px;margin-left:2px}
-.skCons button{font-size:12px;padding:3px 6px}
-@media (max-width:1100px){#skRoot{grid-template-columns:1fr}}
-#skCd{grid-template-columns:1fr 90px}
 .grid tr.bad td:first-child{color:var(--bad);font-weight:600}
 .helpBtn{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;padding:0;margin:0 0 0 6px;border-radius:50%;border:1px solid var(--ac);color:var(--ac);background:var(--card);font:italic 700 11px/1 Georgia,serif;vertical-align:middle;cursor:help;flex:none}
 .helpBtn::before{content:"i"}
@@ -65,3 +52,26 @@ table.grid td button{padding:0 5px;margin-left:2px}
 .helpPop{position:absolute;z-index:50;background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;box-shadow:0 6px 24px #0004;font-size:13px;line-height:1.5}
 .helpPop p{margin:6px 0 0}.helpHead{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
 .helpClose{border:0;background:none;padding:0 4px;font-size:16px;line-height:1;cursor:pointer;color:var(--mut)}
+#skToolbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;margin-bottom:8px}
+.skGroup{display:flex;gap:2px;padding-right:6px;border-right:1px solid var(--bd)}
+.skGroup button{width:34px;height:32px;padding:4px;display:inline-flex;align-items:center;justify-content:center}
+.skGroup button svg{width:22px;height:22px;border:0;background:none;border-radius:0;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.skGroup button.active{background:var(--ac);color:#fff;border-color:var(--ac)}
+.skGroup button.armed{outline:2px solid var(--sel);outline-offset:-2px}
+.skSpacer{flex:1}
+.skView{margin:0;position:relative}.skView summary{cursor:pointer;padding:6px 8px;border:1px solid var(--bd);border-radius:6px}
+.skViewBox{position:absolute;z-index:20;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 10px;display:grid;gap:6px;margin-top:4px;box-shadow:0 6px 18px #0003}
+#skMain{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}
+#skCanvasWrap{position:relative}
+#skCanvas{height:70vh;min-height:440px;touch-action:none;cursor:crosshair;user-select:none;color:var(--fg)}
+#skCanvas.select{cursor:default}
+#skInput{position:absolute;width:96px;z-index:5;border:2px solid var(--ac)}
+.skHint{position:absolute;left:10px;top:8px;font-size:12px;color:var(--mut);pointer-events:none;max-width:70%}
+#skList{width:300px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:4px 10px 10px;max-height:70vh;overflow:auto}
+#skStatus{margin-top:8px;line-height:1.7}
+.skcons{display:grid;grid-template-columns:20px 1fr 64px 18px 22px;gap:4px;align-items:center;padding:2px 0;border-bottom:1px solid var(--bd);font-size:12px}
+.skcons .dot{color:var(--ac)}.skcons.conflict .dot{color:var(--bad)}.skcons.redundant .dot{color:var(--warn)}.skcons.disabled{opacity:.5}
+.skcons.sel{background:color-mix(in srgb,var(--sel) 18%,transparent)}
+.skcons input.skval{width:64px;padding:2px 4px}.skcons button{padding:0 6px}
+.skcons:not(:has(.skval)){grid-template-columns:20px 1fr 18px 22px}
+@media (max-width:1100px){#skMain{grid-template-columns:1fr}#skList{width:auto}}

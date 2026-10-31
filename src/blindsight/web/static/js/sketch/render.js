@@ -1,25 +1,23 @@
 "use strict";
-// Motor sketch. Canvas (grid, gear, housing, rod, dimensions, constraint symbols, points).
-// Drawing happens in mm in the rod frame (y up). px() converts sizes in screen pixels.
+// Motor sketch. Canvas. Grid, rod, housing hull, gear, entities, points, relation symbols, dimensions and
+// the preview of the active tool. Drawing happens in mm in the rod frame (y up). px() converts screen pixels.
 
 (() => {
   const MIN_GRID_PX = 22;  // smallest distance of the grid lines on the screen
-  // Symbols of relations at a side
-  const SIDE_GLYPHS = [["parallel", "∥"], ["perpendicular", "⊥"], ["equal", "="], ["horizontal", "H"], ["vertical", "V"], ["angle_sides", "∠"], ["dist_side", "⇥"]];
+  const GLYPHS = { coincident: "◆", horizontal: "H", vertical: "V", parallel: "∥", perpendicular: "⊥", equal: "=", midpoint: "M", concentric: "◎", fix: "⚓" };
+  const DIMENSIONS = new Set(["distance", "hdistance", "vdistance", "length", "angle", "diameter", "radius"]);
 
   function canvasSize() {
     const canvas = $("#skCanvas");
     return [Math.max(200, canvas.clientWidth), Math.max(200, canvas.clientHeight)];
   }
 
-  /** Set the view so that outline, gear and rod are visible. */
+  /** View so that all geometry, the gear and the rod are visible. */
   function fit() {
-    const d = cfg.rod.diameter;
-    const points = SK.sk.points.concat(Sketch.gearBox(), [[d, d], [-d, -d]]);
-    const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const b = Sketch.bounds(), d = cfg.rod.diameter;
+    const x0 = Math.min(b.x0, -d), x1 = Math.max(b.x1, d), y0 = Math.min(b.y0, -d), y1 = Math.max(b.y1, d);
     const [W, H] = canvasSize();
-    SK.view.k = Math.max((x1 - x0) / (W - 140), (y1 - y0) / (H - 140), 0.01);
+    SK.view.k = Math.max((x1 - x0) / (W - 160), (y1 - y0) / (H - 160), 0.01);
     SK.view.cx = (x0 + x1) / 2;
     SK.view.cy = (y0 + y1) / 2;
     SK.fitted = true;
@@ -43,42 +41,49 @@
     svg.setAttribute("viewBox", `${v.cx - (W * k) / 2} ${-(v.cy + (H * k) / 2)} ${W * k} ${H * k}`);
     const root = el("g", { transform: "scale(1,-1)" }, svg);
     const px = (a) => a * k;
-    const text = (x, y, content, o = {}) => {
-      let rot = o.rot || 0;
-      if (rot > 90) rot -= 180;
-      if (rot < -90) rot += 180;  // text never upside down
-      return svgText(root, {
-        transform: `translate(${x} ${y}) rotate(${rot}) scale(1 -1)`, "font-size": px(o.size || 12), fill: o.fill || "currentColor",
-        "text-anchor": o.anchor || "middle", "dominant-baseline": "middle", "pointer-events": o.dim ? "all" : "none", ...(o.attrs || {}),
-      }, content);
-    };
+    const text = (x, y, content, o = {}) => svgText(o.parent || root, {
+      transform: `translate(${x} ${y}) scale(1 -1)`, "font-size": px(o.size || 12), fill: o.fill || "currentColor",
+      "text-anchor": o.anchor || "middle", "dominant-baseline": "middle", "pointer-events": o.events ? "all" : "none", ...(o.attrs || {}),
+    }, content);
     const line = (a, b, o = {}) => el("line", {
       x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: o.stroke || "currentColor", "stroke-width": px(o.w || 1),
       ...(o.dash ? { "stroke-dasharray": `${px(o.dash)} ${px(o.dash)}` } : {}), "pointer-events": "none", ...(o.attrs || {}),
-    }, root);
-    const dimText = (x, y, content, status, attrs, rot = 0) => text(x, y, content, { size: 12, fill: statusColor(status), rot, dim: true, attrs });
+    }, o.parent || root);
     const bounds = { x0: v.cx - (W * k) / 2, x1: v.cx + (W * k) / 2, y0: v.cy - (H * k) / 2, y1: v.cy + (H * k) / 2 };
-    const bad = SK.res && (SK.res.state === "conflict" || !SK.res.ok);
-    const outlineColor = bad ? SK_COLORS.conflict : SK.res && SK.res.state === "full" ? SK_COLORS.full : SK_COLORS.ok;
-    return { root, k, px, text, line, dimText, bounds, outlineColor };
+    return { root, k, px, text, line, bounds };
+  }
+
+  // --- Colours ----------------------------------------------------------------------------------------------
+  /** Entities that take part in a conflicting constraint. */
+  function conflictRefs() {
+    const out = new Set();
+    SK.sk.constraints.forEach((c, k) => { if (constraintStatus(k) === "conflict") c.refs.forEach((r) => out.add(r)); });
+    return out;
+  }
+
+  function entityColor(k, conflicts) {
+    const ref = `e${k}`;
+    if (SK.sel.has(ref) || SK.pick.includes(ref)) return SK_COLORS.sel;
+    if (SK.hover === ref) return SK_COLORS.hover;
+    if (conflicts.has(ref)) return SK_COLORS.conflict;
+    const defined = SK.res && SK.res.defined_entities && SK.res.defined_entities[k];
+    return defined ? SK_COLORS.defined : SK_COLORS.free;
   }
 
   function render() {
     const svg = $("#skCanvas");
     if (!svg) return;
     svg.innerHTML = "";
+    svg.classList.toggle("select", SK.tool === "select");
     const ctx = context(svg);
     drawGrid(ctx);
+    drawHull(ctx);
     drawRotationPreview(ctx);
-    drawGear(ctx);
-    drawHousing(ctx);
     drawRod(ctx);
-    const showMeasures = $("#skShowMeasures").checked;
-    drawSideDimensions(ctx, showMeasures);
-    drawAngles(ctx, showMeasures);
-    drawReferenceDistances(ctx);
+    drawEntities(ctx);
     drawPoints(ctx);
-    drawDrawingTool(ctx);
+    drawConstraints(ctx);
+    drawPreview(ctx);
   }
 
   function drawGrid({ k, px, text, line, bounds: { x0, x1, y0, y1 } }) {
@@ -94,148 +99,304 @@
 
   const pointsAttr = (points) => points.map((p) => p.join(",")).join(" ");
 
+  /** Housing hull (light) and gear (orange) from the last solve. */
+  function drawHull({ root, px }) {
+    const prof = (SK.res && SK.res.profile) || {};
+    if ($("#skShowHull").checked && prof.housing && prof.housing.length >= 3) {
+      el("polygon", { id: "skHull", points: pointsAttr(prof.housing), fill: SK_COLORS.hull, "fill-opacity": 0.13, stroke: SK_COLORS.hull, "stroke-width": px(1), "stroke-dasharray": `${px(4)} ${px(3)}`, "pointer-events": "none" }, root);
+    }
+    if (prof.gear) {
+      const g = prof.gear;
+      el("rect", { id: "skGear", x: g.xmin, y: g.ymin, width: g.diameter, height: g.width, fill: SK_COLORS.gear, "fill-opacity": 0.35, "pointer-events": "none" }, root);
+    }
+  }
+
   /** Sweep envelope (circle around the rod) and rotated preview of the motor. */
   function drawRotationPreview({ root, px, text }) {
-    const poly = SK.sk.points, gear = Sketch.gearBox();
-    const R = Math.max(...poly.map((p) => Math.hypot(p[0], p[1])), ...gear.map((p) => Math.hypot(p[0], p[1])));
+    const prof = (SK.res && SK.res.profile) || {};
+    const pts = (prof.housing || []).concat(prof.gear ? [[prof.gear.xmin, prof.gear.ymin], [prof.gear.xmax, prof.gear.ymax], [prof.gear.xmin, prof.gear.ymax], [prof.gear.xmax, prof.gear.ymin]] : []);
+    if (!pts.length) return;
+    const R = Math.max(...pts.map((p) => Math.hypot(p[0], p[1])));
     if ($("#skSweep").checked) el("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: "#8a6", "stroke-width": px(1), "stroke-dasharray": `${px(5)} ${px(4)}`, "pointer-events": "none" }, root);
     if (!SK.rot) return;
     const group = el("g", { transform: `rotate(${SK.rot})`, opacity: 0.45, "pointer-events": "none" }, root);
-    el("polygon", { points: pointsAttr(poly), fill: "#c8a", stroke: SK_COLORS.rotation, "stroke-width": px(1), "stroke-dasharray": `${px(4)} ${px(3)}` }, group);
-    el("polygon", { points: pointsAttr(gear), fill: "#f9c27a", stroke: SK_COLORS.gearDark, "stroke-width": px(1) }, group);
+    if (prof.housing) el("polygon", { points: pointsAttr(prof.housing), fill: "#c8a", stroke: SK_COLORS.rotation, "stroke-width": px(1), "stroke-dasharray": `${px(4)} ${px(3)}` }, group);
+    if (prof.gear) el("rect", { x: prof.gear.xmin, y: prof.gear.ymin, width: prof.gear.diameter, height: prof.gear.width, fill: "#f9c27a" }, group);
     const a = (SK.rot * Math.PI) / 180, ar = Math.min(R * 0.5, px(70));
     el("path", { d: `M ${ar} 0 A ${ar} ${ar} 0 ${SK.rot > 180 ? 1 : 0} 1 ${ar * Math.cos(a)} ${ar * Math.sin(a)}`, fill: "none", stroke: SK_COLORS.rotation, "stroke-width": px(1.5) }, root);
     text(ar * 1.2 * Math.cos(a / 2), ar * 1.2 * Math.sin(a / 2), `${SK.rot}°`, { size: 12, fill: SK_COLORS.rotation });
   }
 
-  function drawGear({ root, px, text, line }) {
-    const m = cfg.motor, cd = m.center_distance;
-    el("polygon", { id: "skGear", points: pointsAttr(Sketch.gearBox()), fill: SK_COLORS.gear, "fill-opacity": 0.8, stroke: "#333", "stroke-width": px(1), "pointer-events": "none" }, root);
-    line([-cd, -m.gear_width / 2 - px(14)], [-cd, m.gear_width / 2 + px(14)], { stroke: SK_COLORS.gearDark, w: 1, dash: 4 });
-    const handle = el("circle", { id: "skGearHandle", cx: -cd, cy: 0, r: px(5), fill: SK_COLORS.gear, stroke: "#fff", "stroke-width": px(1.5), class: "handle", "data-sk-gear": "1" }, root);
-    el("title", {}, handle).textContent = t("ui.sk.gear_handle");
-    text(-cd, m.gear_width / 2 + px(22), t("ui.sk.gear"), { size: 11, fill: SK_COLORS.gearDark });
-  }
-
-  /** Outline and invisibly wide sides for clicking. */
-  function drawHousing({ root, px, line, outlineColor }) {
-    el("polygon", { id: "skPoly", points: pointsAttr(SK.sk.points), fill: outlineColor, "fill-opacity": 0.16, stroke: outlineColor, "stroke-width": px(2), "pointer-events": "none" }, root);
-    for (let i = 0; i < skCount(); i++) {
-      const a = Sketch.point(i), b = Sketch.point(i + 1);
-      const hovered = SK.hover && SK.hover.sides && SK.hover.sides.includes(i);
-      if (SK.sel.s.has(i) || hovered) line(a, b, { stroke: SK_COLORS.sel, w: 4.5 });
-      el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], stroke: "transparent", "stroke-width": px(12), "data-sk-side": i, class: "skside" }, root);
-    }
-  }
-
-  function drawRod({ root, px, text, line }) {
+  /** Rod at the origin with its hole and the own clearance of the housing. The origin can be selected. */
+  function drawRod({ root, px, text }) {
     const rodR = cfg.rod.diameter / 2, m = cfg.motor;
-    const tooClose = Sketch.housingClearance() < m.own_clearance - SK_EPS;
     el("circle", { cx: 0, cy: 0, r: rodR + cfg.rod.hole_clearance, fill: "none", stroke: "currentColor", "stroke-width": px(1), "stroke-dasharray": `${px(4)} ${px(3)}`, "pointer-events": "none" }, root);
-    el("circle", { cx: 0, cy: 0, r: rodR + m.own_clearance, fill: "none", stroke: tooClose ? SK_COLORS.conflict : SK_COLORS.redundant, "stroke-width": px(tooClose ? 2 : 1), "stroke-dasharray": `${px(3)} ${px(3)}`, "pointer-events": "none" }, root);
-    el("circle", { id: "skRod", cx: 0, cy: 0, r: rodR, fill: "#222", "pointer-events": "none", "data-rod": "1" }, root);
-    line([-rodR * 2.2, 0], [rodR * 2.2, 0], { stroke: "#fff", w: 1 });
-    line([0, -rodR * 2.2], [0, rodR * 2.2], { stroke: "#fff", w: 1 });
-    text(rodR + px(10), -rodR - px(10), t("ui.sk.rod", { d: fmtLen(cfg.rod.diameter) }), { size: 12, anchor: "start" });
+    el("circle", { cx: 0, cy: 0, r: rodR + m.own_clearance, fill: "none", stroke: SK_COLORS.redundant, "stroke-width": px(1), "stroke-dasharray": `${px(3)} ${px(3)}`, "pointer-events": "none" }, root);
+    el("circle", { id: "skRod", cx: 0, cy: 0, r: rodR, fill: SK_COLORS.rod, "fill-opacity": 0.85, "pointer-events": "none" }, root);
+    const origin = SK.sel.has("o") || SK.pick.includes("o") ? SK_COLORS.sel : SK.hover === "o" ? SK_COLORS.hover : "#fff";
+    el("circle", { cx: 0, cy: 0, r: px(4), fill: origin, stroke: "#222", "stroke-width": px(1.2), "data-sk-ref": "o", "pointer-events": "none" }, root);
+    text(rodR + px(10), -rodR - px(10), t("ui.sk.rod", { d: fmtLen(cfg.rod.diameter) }), { size: 11, anchor: "start", fill: "#888" });
   }
 
-  /** Length dimensions (as a dimension with a constraint, otherwise grey) and relation symbols per side. */
-  function drawSideDimensions(ctx, showMeasures) {
-    const { root, px, text, line, dimText } = ctx;
-    const constraints = SK.sk.constraints;
-    for (let i = 0; i < skCount(); i++) {
-      const a = Sketch.point(i), b = Sketch.point(i + 1), d = Sketch.sideVec(i), L = Math.hypot(...d) || 1;
-      const nx = d[1] / L, ny = -d[0] / L;  // outer normal (outline counter clockwise)
-      const angle = (Math.atan2(d[1], d[0]) * 180) / Math.PI;
-      const mid = Sketch.sideMid(i), off = px(18);
-      const ci = constraints.findIndex((c) => c.type === "length" && c.a === i);
-      if (ci >= 0) {
-        const status = constraintStatus(ci), color = statusColor(status);
-        const A = [a[0] + nx * off, a[1] + ny * off], B = [b[0] + nx * off, b[1] + ny * off];
-        line(a, [a[0] + nx * off * 1.3, a[1] + ny * off * 1.3], { stroke: color, w: 0.8 });
-        line(b, [b[0] + nx * off * 1.3, b[1] + ny * off * 1.3], { stroke: color, w: 0.8 });
-        line(A, B, { stroke: color, w: 1 });
-        for (const [Q, dir] of [[A, 1], [B, -1]]) drawArrow(root, px, Q, [(d[0] / L) * dir, (d[1] / L) * dir], [nx, ny], color);
-        const shown = SK.res && SK.res.measures ? SK.res.measures.sides[i] : L;
-        dimText(mid[0] + nx * (off + px(10)), mid[1] + ny * (off + px(10)), fmtLen(shown), status, { "data-sk-dim": `length:${i}` }, angle);
-      } else if (showMeasures) {
-        text(mid[0] + nx * px(12), mid[1] + ny * px(12), fmtLen(L), { size: 10.5, fill: "#888", rot: angle, dim: true, attrs: { "data-sk-dim": `length:${i}`, class: "skmeasure" } });
-      }
-      const related = (type) => constraints.some((c) => c.enabled && c.type === type && (c.a === i || c.b === i));
-      const glyphs = SIDE_GLYPHS.filter(([type]) => related(type)).map(([, g]) => g).join("");
-      if (glyphs) text(mid[0] - nx * px(12), mid[1] - ny * px(12), glyphs, { size: 14, fill: SK_COLORS.ok, rot: angle });
-    }
-  }
-
-  function drawArrow(root, px, tip, along, normal, color) {
-    const [ux, uy] = along, [nx, ny] = normal;
-    const p1 = [tip[0] + ux * px(9) + nx * px(3), tip[1] + uy * px(9) + ny * px(3)];
-    const p2 = [tip[0] + ux * px(9) - nx * px(3), tip[1] + uy * px(9) - ny * px(3)];
-    el("polygon", { points: pointsAttr([tip, p1, p2]), fill: color, "pointer-events": "none" }, root);
-  }
-
-  /** Interior angle as an arc. Coloured and editable with a constraint, otherwise grey. */
-  function drawAngles({ root, px, text, dimText }, showMeasures) {
-    for (let i = 0; i < skCount(); i++) {
-      const ci = SK.sk.constraints.findIndex((c) => c.type === "angle" && c.a === i);
-      if (ci < 0 && !showMeasures) continue;
-      const q = Sketch.point(i), next = Sketch.point(i + 1), angle = Sketch.interiorAngle(i);
-      const status = ci >= 0 ? constraintStatus(ci) : "ok";
-      const color = ci < 0 ? "#999" : statusColor(status);
-      const rr = px(ci >= 0 ? 26 : 20);
-      // Arc from the direction to the next point counter clockwise to the previous point
-      const start = Math.atan2(next[1] - q[1], next[0] - q[0]), end = start + (angle * Math.PI) / 180;
-      el("path", { d: `M ${q[0] + rr * Math.cos(start)} ${q[1] + rr * Math.sin(start)} A ${rr} ${rr} 0 ${angle > 180 ? 1 : 0} 1 ${q[0] + rr * Math.cos(end)} ${q[1] + rr * Math.sin(end)}`, fill: "none", stroke: color, "stroke-width": px(ci >= 0 ? 1.4 : 0.8), "pointer-events": "none" }, root);
-      const mid = start + (angle * Math.PI) / 360;
-      const tx = q[0] + (rr + px(14)) * Math.cos(mid), ty = q[1] + (rr + px(14)) * Math.sin(mid);
-      if (ci >= 0) dimText(tx, ty, `${fmtDeg(angle)}°`, status, { "data-sk-dim": `angle:${i}` });
-      else text(tx, ty, `${fmtDeg(angle)}°`, { size: 10, fill: "#999", dim: true, attrs: { "data-sk-dim": `angle:${i}`, class: "skmeasure" } });
-    }
-  }
-
-  /** Distance dimensions to the rod or the gear and coordinate dimensions. */
-  function drawReferenceDistances({ px, line, dimText }) {
-    SK.sk.constraints.forEach((c, ci) => {
-      if (!c.enabled) return;
-      const status = constraintStatus(ci), color = statusColor(status), attrs = { "data-sk-dim": `cons:${ci}` };
-      if (c.type === "dist_point") {
-        const q = Sketch.point(c.a), r = Sketch.refPos(c.ref);
-        line(r, q, { stroke: color, w: 1, dash: 5 });
-        dimText((q[0] + r[0]) / 2, (q[1] + r[1]) / 2 + px(10), fmtLen(Math.hypot(q[0] - r[0], q[1] - r[1])), status, attrs);
-      } else if (c.type === "dist_side") {
-        const a = Sketch.point(c.a), d = Sketch.sideVec(c.a), L = Math.hypot(...d) || 1, r = Sketch.refPos(c.ref);
-        const t = ((r[0] - a[0]) * d[0] + (r[1] - a[1]) * d[1]) / (L * L), foot = [a[0] + t * d[0], a[1] + t * d[1]];
-        line(r, foot, { stroke: color, w: 1, dash: 5 });
-        dimText((r[0] + foot[0]) / 2, (r[1] + foot[1]) / 2 + px(10), fmtLen(Math.hypot(foot[0] - r[0], foot[1] - r[1])), status, attrs);
-      } else if (c.type === "coord_x" || c.type === "coord_y") {
-        const q = Sketch.point(c.a);
-        dimText(q[0] + px(12), q[1] - px(14), (c.type === "coord_x" ? "x " : "y ") + fmtLen(c.value), status, attrs);
+  function drawEntities({ root, px }) {
+    const conflicts = conflictRefs();
+    SK.sk.entities.forEach((e, k) => {
+      if (e.type === "point") return;
+      const color = entityColor(k, conflicts);
+      const gear = e.role === "gear";
+      const style = {
+        stroke: gear && color === SK_COLORS.defined ? SK_COLORS.gearDark : color, "stroke-width": px(e.construction ? 1.2 : 2), fill: "none",
+        "data-sk-ref": `e${k}`, "pointer-events": "none", class: e.construction ? "construction" : "",
+        ...(e.construction ? { "stroke-dasharray": `${px(6)} ${px(4)}` } : {}),
+      };
+      if (e.type === "line") {
+        const [a, b] = Sketch.ends(k);
+        el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], ...style }, root);
+      } else if (e.type === "circle") {
+        const { c, r } = Sketch.curve(k);
+        el("circle", { cx: c[0], cy: c[1], r, ...style }, root);
+      } else if (e.type === "arc") {
+        const { c, r } = Sketch.curve(k), { a0, sweep } = Sketch.arcAngles(k);
+        const s = [c[0] + r * Math.cos(a0), c[1] + r * Math.sin(a0)], t = [c[0] + r * Math.cos(a0 + sweep), c[1] + r * Math.sin(a0 + sweep)];
+        el("path", { d: `M ${s[0]} ${s[1]} A ${r} ${r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${t[0]} ${t[1]}`, ...style }, root);
       }
     });
   }
 
-  function drawPoints({ root, px, text, outlineColor }) {
-    for (let i = 0; i < skCount(); i++) {
-      const q = Sketch.point(i);
-      const highlighted = SK.sel.p.has(i) || (SK.hover && SK.hover.points && SK.hover.points.includes(i));
-      el("circle", { cx: q[0], cy: q[1], r: px(highlighted ? 7 : 5.5), fill: highlighted ? SK_COLORS.sel : "#fff", stroke: outlineColor, "stroke-width": px(2), class: "handle", "data-sk-point": i }, root);
-      if (SK.sk.constraints.some((c) => c.enabled && c.type === "fix" && c.a === i)) drawLock(root, px, q);
-      text(q[0] - px(11), q[1] + px(11), `P${i + 1}`, { size: 10.5, fill: "#666" });
+  /** End points, centres and sketch points. Coloured like their entity, selected points orange. */
+  function drawPoints({ root, px }) {
+    const conflicts = conflictRefs();
+    SK.sk.entities.forEach((e, k) => {
+      const base = entityColor(k, conflicts);
+      e.points.forEach((p, j) => {
+        const ref = e.type === "point" ? `e${k}` : `p${p}`;
+        const q = SK.sk.points[p];
+        const selected = SK.sel.has(ref) || SK.pick.includes(ref);
+        const defined = SK.res && SK.res.defined_points && SK.res.defined_points[p];
+        const color = selected ? SK_COLORS.sel : SK.hover === ref ? SK_COLORS.hover : base === SK_COLORS.sel ? (defined ? SK_COLORS.defined : SK_COLORS.free) : base;
+        const r = px(e.type === "point" ? 4.5 : selected || SK.hover === ref ? 4.5 : 3);
+        const centre = e.type !== "line" && e.type !== "point" && j === 0;
+        el(centre ? "rect" : "circle", centre
+          ? { x: q[0] - r, y: q[1] - r, width: 2 * r, height: 2 * r, fill: "#fff", stroke: color, "stroke-width": px(1.4), "data-sk-ref": ref, "pointer-events": "none" }
+          : { cx: q[0], cy: q[1], r, fill: selected || e.type === "point" ? color : "#fff", stroke: color, "stroke-width": px(1.4), "data-sk-ref": ref, "pointer-events": "none" }, root);
+      });
+    });
+  }
+
+  // --- Relations and dimensions -------------------------------------------------------------------------------
+  /** Where a relation symbol of an entity or point is drawn (several symbols of one anchor are stacked). */
+  function anchorOf(ref, ctx) {
+    if (Sketch.isPointRef(ref)) { const p = Sketch.point(ref); return { at: p, dir: [1, 0] }; }
+    const k = Sketch.entityIndex(ref), e = SK.sk.entities[k];
+    if (e.type === "line") {
+      const [a, b] = Sketch.ends(k), d = [b[0] - a[0], b[1] - a[1]], n = Math.hypot(...d) || 1;
+      return { at: Sketch.midpoint(a, b), dir: [d[0] / n, d[1] / n], normal: [-d[1] / n, d[0] / n] };
+    }
+    const { c, r } = Sketch.curve(k);
+    return { at: [c[0] + r * Math.SQRT1_2, c[1] + r * Math.SQRT1_2], dir: [1, 0] };
+  }
+
+  function drawConstraints(ctx) {
+    const stacks = new Map();
+    SK.sk.constraints.forEach((c, k) => {
+      if (DIMENSIONS.has(c.type)) drawDimension(ctx, c, k);
+      else drawRelation(ctx, c, k, stacks);
+    });
+  }
+
+  function constraintColor(k) {
+    const ref = `c${k}`;
+    if (SK.sel.has(ref)) return SK_COLORS.sel;
+    if (SK.hover === ref) return SK_COLORS.hover;
+    const status = constraintStatus(k);
+    if (status === "disabled") return "#999";
+    return status === "ok" ? SK_COLORS.dimension : statusColor(status);
+  }
+
+  /** Symbols that would only clutter the drawing are left out (they stay in the list and show when selected). */
+  function hiddenRelation(c, k) {
+    if (SK.sel.has(`c${k}`) || SK.hover === `c${k}`) return false;
+    if (c.type === "coincident" && c.refs.every((r) => Sketch.isPointRef(r)) && !c.refs.includes("o")) return true;  // corners
+    const gearRef = (r) => {
+      if (r === "o") return true;
+      if (r[0] === "e") return SK.sk.entities[+r.slice(1)].role === "gear";
+      const owner = Sketch.ownerOf(+r.slice(1));
+      return owner >= 0 && SK.sk.entities[owner].role === "gear";
+    };
+    return c.refs.every(gearRef);  // the inner relations of the gear
+  }
+
+  function drawRelation({ root, px, text }, c, k, stacks) {
+    const glyph = GLYPHS[c.type];
+    if (!glyph || hiddenRelation(c, k)) return;
+    // Relations to the origin or between two points are drawn at the first non origin reference
+    const refs = c.refs.filter((r) => r !== "o");
+    const anchorRef = refs.find((r) => !Sketch.isPointRef(r)) || refs[0] || "o";
+    const anchor = anchorOf(anchorRef);
+    const n = stacks.get(anchorRef) || 0;
+    stacks.set(anchorRef, n + 1);
+    const normal = anchor.normal || [0.7, 0.7];
+    const off = px(14), along = px(14) * n;
+    const x = anchor.at[0] + normal[0] * off + anchor.dir[0] * along, y = anchor.at[1] + normal[1] * off + anchor.dir[1] * along;
+    const color = constraintColor(k);
+    const g = el("g", { "data-sk-ref": `c${k}`, class: "skglyph" }, root);
+    el("rect", { x: x - px(7), y: y - px(7), width: px(14), height: px(14), rx: px(3), fill: "#fff", stroke: color, "stroke-width": px(1) }, g);
+    text(x, y, glyph, { size: 10, fill: color, parent: g, events: true });
+  }
+
+  function arrow(parent, px, tip, dir, color) {
+    const n = Math.hypot(...dir) || 1, u = [dir[0] / n, dir[1] / n], q = [-u[1], u[0]];
+    const p1 = [tip[0] - u[0] * px(8) + q[0] * px(3), tip[1] - u[1] * px(8) + q[1] * px(3)];
+    const p2 = [tip[0] - u[0] * px(8) - q[0] * px(3), tip[1] - u[1] * px(8) - q[1] * px(3)];
+    el("polygon", { points: pointsAttr([tip, p1, p2]), fill: color, "pointer-events": "none" }, parent);
+  }
+
+  /** Dimension line between a and b (extension lines from the measured points), text at label. */
+  function linearDimension(ctx, g, a, b, label, color, from, to) {
+    const { px, line } = ctx;
+    line(from || a, a, { stroke: color, w: 0.8, parent: g });
+    line(to || b, b, { stroke: color, w: 0.8, parent: g });
+    line(a, b, { stroke: color, w: 1, parent: g });
+    arrow(g, px, a, [a[0] - b[0], a[1] - b[1]], color);
+    arrow(g, px, b, [b[0] - a[0], b[1] - a[1]], color);
+    if (label) line(Sketch.midpoint(a, b), label, { stroke: color, w: 0.6, dash: 2, parent: g });
+  }
+
+  /** Default position of the dimension text. */
+  function defaultLabel(c) {
+    const r = c.refs, px = SK.view.k;
+    if (c.type === "length") { const a = anchorOf(r[0]); return [a.at[0] - a.normal[0] * px * 24, a.at[1] - a.normal[1] * px * 24]; }
+    if (c.type === "diameter" || c.type === "radius") { const { c: m, r: rad } = Sketch.curve(Sketch.entityIndex(r[0])); return [m[0] + rad * 1.2, m[1] + rad * 0.6]; }
+    if (c.type === "angle") { const p = Sketch.lineIntersection(r[0], r[1]); return [p[0] + px * 30, p[1] + px * 30]; }
+    const pts = r.map((ref) => (Sketch.isPointRef(ref) ? Sketch.point(ref) : anchorOf(ref).at));
+    const m = Sketch.midpoint(pts[0], pts[1]);
+    if (c.type === "hdistance") return [m[0], Math.min(pts[0][1], pts[1][1]) - px * 24];
+    if (c.type === "vdistance") return [Math.max(pts[0][0], pts[1][0]) + px * 24, m[1]];
+    return [m[0] + px * 16, m[1] + px * 16];
+  }
+
+  function dimensionText(c) {
+    if (c.type === "angle") return `${fmtDeg(c.value)}°`;
+    if (c.type === "diameter") return `⌀${fmtLen(c.value)}`;
+    if (c.type === "radius") return `R${fmtLen(c.value)}`;
+    return fmtLen(c.value);
+  }
+
+  /** Draw a dimension (also used for the preview while placing one, then k is null). */
+  function drawDimension(ctx, c, k, preview = false) {
+    const { root, px, text } = ctx;
+    const color = preview ? SK_COLORS.snap : k === null ? SK_COLORS.free : constraintColor(k);
+    const label = c.label || defaultLabel(c);
+    const g = el("g", k === null ? { opacity: 0.8 } : { "data-sk-ref": `c${k}`, class: "skdim" }, root);
+    drawDimensionGeometry(ctx, g, c, label, color);
+    const content = preview ? (c.type === "angle" ? `${fmtDeg(c.value)}°` : dimensionText(c)) : dimensionText(c);
+    const box = text(label[0], label[1], content, { size: 12, fill: color, parent: g, events: true, attrs: k === null ? {} : { "data-sk-dim": k } });
+    box.setAttribute("font-weight", "600");
+    // A halo in the background colour keeps the number readable on top of lines
+    box.setAttribute("stroke", "var(--card)");
+    box.setAttribute("stroke-width", px(4));
+    box.setAttribute("paint-order", "stroke");
+  }
+
+  function drawDimensionGeometry(ctx, g, c, label, color) {
+    const { px, line } = ctx;
+    const r = c.refs;
+    if (c.type === "diameter" || c.type === "radius") {
+      const { c: m, r: rad } = Sketch.curve(Sketch.entityIndex(r[0]));
+      const d = [label[0] - m[0], label[1] - m[1]], n = Math.hypot(...d) || 1, u = [d[0] / n, d[1] / n];
+      const edge = [m[0] + u[0] * rad, m[1] + u[1] * rad];
+      const start = c.type === "diameter" ? [m[0] - u[0] * rad, m[1] - u[1] * rad] : m;
+      line(start, label, { stroke: color, w: 0.8, parent: g });
+      arrow(g, px, edge, u, color);
+      if (c.type === "diameter") arrow(g, px, start, [-u[0], -u[1]], color);
+      return;
+    }
+    if (c.type === "angle") {
+      const corner = Sketch.lineIntersection(r[0], r[1]);
+      const rad = Math.max(px(12), Math.hypot(label[0] - corner[0], label[1] - corner[1]) * 0.85);
+      const dirs = r.map((ref) => {
+        const [a, b] = Sketch.ends(Sketch.entityIndex(ref));
+        const far = Math.hypot(a[0] - corner[0], a[1] - corner[1]) > Math.hypot(b[0] - corner[0], b[1] - corner[1]) ? a : b;
+        return Math.atan2(far[1] - corner[1], far[0] - corner[0]);
+      });
+      let sweep = dirs[1] - dirs[0];
+      while (sweep > Math.PI) sweep -= 2 * Math.PI;
+      while (sweep < -Math.PI) sweep += 2 * Math.PI;
+      const s = [corner[0] + rad * Math.cos(dirs[0]), corner[1] + rad * Math.sin(dirs[0])];
+      const e = [corner[0] + rad * Math.cos(dirs[0] + sweep), corner[1] + rad * Math.sin(dirs[0] + sweep)];
+      el("path", { d: `M ${s[0]} ${s[1]} A ${rad} ${rad} 0 0 ${sweep > 0 ? 1 : 0} ${e[0]} ${e[1]}`, fill: "none", stroke: color, "stroke-width": px(1), "pointer-events": "none" }, g);
+      return;
+    }
+    if (c.type === "length") {
+      const [a, b] = Sketch.ends(Sketch.entityIndex(r[0]));
+      offsetDimension(ctx, g, a, b, label, color);
+      return;
+    }
+    const kinds = r.map(Sketch.kindOf);
+    if (kinds[0] === "point" && kinds[1] === "point") {
+      const a = Sketch.point(r[0]), b = Sketch.point(r[1]);
+      if (c.type === "hdistance") linearDimension(ctx, g, [a[0], label[1]], [b[0], label[1]], null, color, a, b);
+      else if (c.type === "vdistance") linearDimension(ctx, g, [label[0], a[1]], [label[0], b[1]], null, color, a, b);
+      else offsetDimension(ctx, g, a, b, label, color);
+      return;
+    }
+    // Point to line or line to line. Perpendicular from the point (or the midpoint of the second line)
+    const lineRef = kinds[0] === "line" ? r[0] : r[1];
+    const otherRef = lineRef === r[0] ? r[1] : r[0];
+    const p = Sketch.isPointRef(otherRef) ? Sketch.point(otherRef) : Sketch.midpoint(...Sketch.ends(Sketch.entityIndex(otherRef)));
+    const [a, b] = Sketch.ends(Sketch.entityIndex(lineRef)), d = [b[0] - a[0], b[1] - a[1]], l2 = d[0] * d[0] + d[1] * d[1] || 1;
+    const tFoot = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / l2;
+    const foot = [a[0] + tFoot * d[0], a[1] + tFoot * d[1]];
+    linearDimension(ctx, g, p, foot, label, color);
+  }
+
+  /** Aligned dimension between a and b, shifted parallel towards the label. */
+  function offsetDimension(ctx, g, a, b, label, color) {
+    const d = [b[0] - a[0], b[1] - a[1]], n = Math.hypot(...d) || 1, nn = [-d[1] / n, d[0] / n];
+    const off = (label[0] - a[0]) * nn[0] + (label[1] - a[1]) * nn[1];
+    const A = [a[0] + nn[0] * off, a[1] + nn[1] * off], B = [b[0] + nn[0] * off, b[1] + nn[1] * off];
+    linearDimension(ctx, g, A, B, null, color, a, b);
+  }
+
+  // --- Preview of the active tool -----------------------------------------------------------------------------
+  function drawPreview(ctx) {
+    const { root, px, text } = ctx;
+    const cur = SK.cursor;
+    if (!cur) return;
+    const snap = SK.snap;
+    const style = { stroke: SK_COLORS.free, "stroke-width": px(1.5), fill: "none", "stroke-dasharray": `${px(5)} ${px(3)}`, "pointer-events": "none" };
+    const pt = snap ? [snap.x, snap.y] : cur;
+    const draft = SK.draft;
+    if (draft && draft.clicks.length) {
+      const a = [draft.clicks[0].x, draft.clicks[0].y];
+      if (draft.tool === "line") {
+        el("line", { x1: draft.clicks[draft.clicks.length - 1].x, y1: draft.clicks[draft.clicks.length - 1].y, x2: pt[0], y2: pt[1], ...style }, root);
+        const axis = Sketch.axisInference([draft.clicks[draft.clicks.length - 1].x, draft.clicks[draft.clicks.length - 1].y], pt);
+        if (axis) text(pt[0] + px(16), pt[1] + px(14), axis === "horizontal" ? "H" : "V", { size: 11, fill: SK_COLORS.snap });
+      } else if (draft.tool === "rect" || draft.tool === "gear") {
+        const y0 = draft.tool === "gear" ? -Math.abs(pt[1] - a[1]) / 2 : a[1], y1 = draft.tool === "gear" ? Math.abs(pt[1] - a[1]) / 2 : pt[1];
+        el("rect", { x: Math.min(a[0], pt[0]), y: Math.min(y0, y1), width: Math.abs(pt[0] - a[0]), height: Math.abs(y1 - y0), ...style, ...(draft.tool === "gear" ? { stroke: SK_COLORS.gearDark } : {}) }, root);
+      } else if (draft.tool === "circle" || draft.tool === "arc") {
+        const r = Math.hypot(pt[0] - a[0], pt[1] - a[1]);
+        if (draft.tool === "circle" || draft.clicks.length === 1) el("circle", { cx: a[0], cy: a[1], r, ...style, ...(draft.tool === "arc" ? { opacity: 0.5 } : {}) }, root);
+        else {
+          const s = [draft.clicks[1].x, draft.clicks[1].y], rs = Math.hypot(s[0] - a[0], s[1] - a[1]);
+          const a0 = Math.atan2(s[1] - a[1], s[0] - a[0]), a1 = Math.atan2(pt[1] - a[1], pt[0] - a[0]);
+          let sweep = (a1 - a0) % (2 * Math.PI); if (sweep <= 0) sweep += 2 * Math.PI;
+          const e = [a[0] + rs * Math.cos(a1), a[1] + rs * Math.sin(a1)];
+          el("path", { d: `M ${s[0]} ${s[1]} A ${rs} ${rs} 0 ${sweep > Math.PI ? 1 : 0} 1 ${e[0]} ${e[1]}`, ...style }, root);
+        }
+      }
+    }
+    if (SK.dimPlace) {
+      const c = { ...SK.dimPlace, label: cur, value: Sketch.measure(SK.dimPlace.type, SK.dimPlace.refs) };
+      drawDimension(ctx, c, null, true);
+    }
+    if (DRAW_TOOLS.includes(SK.tool) && snap && snap.ref) {
+      el("circle", { cx: snap.x, cy: snap.y, r: px(6), fill: "none", stroke: SK_COLORS.snap, "stroke-width": px(2), "pointer-events": "none", class: "sksnap" }, root);
+      text(snap.x + px(14), snap.y - px(14), snap.kind === "point" ? GLYPHS.coincident : "⊙", { size: 11, fill: SK_COLORS.snap });
     }
   }
 
-  /** Lock symbol for fixed points. */
-  function drawLock(root, px, q) {
-    el("rect", { x: q[0] + px(7), y: q[1] + px(5), width: px(8), height: px(6), fill: SK_COLORS.ok, "pointer-events": "none" }, root);
-    el("path", { d: `M ${q[0] + px(9)} ${q[1] + px(11)} v ${px(3)} a ${px(2)} ${px(2)} 0 0 1 ${px(4)} 0 v ${-px(3)}`, fill: "none", stroke: SK_COLORS.ok, "stroke-width": px(1.3), "pointer-events": "none" }, root);
-  }
-
-  function drawDrawingTool({ root, px }) {
-    if (SK.tool !== "draw") return;
-    const points = SK.drawPts.concat(SK.cursor ? [SK.cursor] : []);
-    if (points.length > 1) el("polyline", { points: pointsAttr(points), fill: "none", stroke: "#e00", "stroke-width": px(1.5), "stroke-dasharray": `${px(5)} ${px(3)}`, "pointer-events": "none" }, root);
-    SK.drawPts.forEach((p) => el("circle", { cx: p[0], cy: p[1], r: px(4.5), fill: "#e00", "pointer-events": "none" }, root));
-  }
-
-  Object.assign(Sketch, { canvasSize, fit, zoom, render });
+  Object.assign(Sketch, { canvasSize, fit, zoom, render, defaultLabel, DIMENSIONS, GLYPHS });
 })();
