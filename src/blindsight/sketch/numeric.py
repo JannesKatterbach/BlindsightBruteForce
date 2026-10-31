@@ -29,6 +29,7 @@ PIVOT_MIN = 1e-300  # smallest pivot of the Gaussian elimination
 FD_STEP = 1e-6  # relative step size of the numerical derivative
 RANK_ROW_MIN = 1e-9  # Jacobian rows with a smaller norm have no effect
 RANK_REL_TOL = 1e-6  # relative residual norm from which a row is linearly independent
+DETERMINED_TOL = 1e-6  # tolerance of determined_variables
 
 
 def solve_linear(A: Matrix, b: Vector) -> Optional[Vector]:
@@ -143,6 +144,20 @@ def constraint_rank(fns: list[Residuals], x: Vector) -> tuple[int, list[bool]]:
 
     Returns (rank, redundant per constraint). A constraint is redundant if none of its rows adds
     anything new to the basis of the previous ones."""
+    basis, redundant = row_space(fns, x)
+    return len(basis), redundant
+
+
+def determined_variables(basis: list[Vector], n: int) -> list[bool]:
+    """True for every unknown that the constraints fix completely.
+
+    An unknown j is fixed if the unit vector e_j lies in the row space of the Jacobian, that is if the
+    squared components of the orthonormal basis vectors at j add up to 1."""
+    return [sum(b[j] * b[j] for b in basis) > 1.0 - DETERMINED_TOL for j in range(n)]
+
+
+def row_space(fns: list[Residuals], x: Vector) -> tuple[list[Vector], list[bool]]:
+    """Orthonormal basis of the row space of the joint Jacobian and redundant per constraint."""
     basis: list[Vector] = []
     redundant: list[bool] = []
     for fn in fns:
@@ -162,4 +177,4 @@ def constraint_rank(fns: list[Residuals], x: Vector) -> tuple[int, list[bool]]:
                 basis.append([q / rest for q in v])
                 dependent = False
         redundant.append(dependent)
-    return len(basis), redundant
+    return basis, redundant

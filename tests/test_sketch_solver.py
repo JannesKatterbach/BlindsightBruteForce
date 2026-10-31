@@ -1,510 +1,352 @@
-"""Solver of the motor sketch. All checks measure the result again independently of the solver."""
+"""Solver of the motor sketch (Onshape like entities). All checks measure the result independently of the solver."""
 
 import math
 import random
 
 import pytest
+
 from blindsight import sketch as S
+from blindsight.sketch.constraints import measured_angle
+
+TOL = 1e-5
 
 
-def C(t, a=None, b=None, value=None, value2=None, ref="rod", enabled=True, name=""):
-    return {"type": t, "a": a, "b": b, "value": value, "value2": value2, "ref": ref, "enabled": enabled, "name": name}
+def c(t, refs, value=None, at=None, enabled=True):
+    return {"type": t, "refs": refs, "value": value, "at": at, "enabled": enabled, "name": "", "label": None}
 
 
-def side(pts, i):
-    n = len(pts)
-    return pts[(i + 1) % n][0] - pts[i][0], pts[(i + 1) % n][1] - pts[i][1]
+def pt(sk, ref):
+    if ref == "o":
+        return (0.0, 0.0)
+    i = int(ref[1:])
+    if ref[0] == "e":
+        i = sk["entities"][i]["points"][0]
+    return tuple(sk["points"][i])
 
 
-def length(pts, i):
-    return math.hypot(*side(pts, i))
+def ends(sk, k):
+    a, b = sk["entities"][k]["points"]
+    return tuple(sk["points"][a]), tuple(sk["points"][b])
 
 
-def interior(pts, i):
-    n = len(pts)
-    p, q, r = pts[i - 1], pts[i], pts[(i + 1) % n]
-    a, b = (p[0] - q[0], p[1] - q[1]), (r[0] - q[0], r[1] - q[1])
-    ang = math.degrees(math.atan2(b[0] * a[1] - b[1] * a[0], a[0] * b[0] + a[1] * b[1]))
-    return ang % 360.0
+def length(sk, k):
+    a, b = ends(sk, k)
+    return math.hypot(b[0] - a[0], b[1] - a[1])
 
 
-def cross(u, v):
-    return u[0] * v[1] - u[1] * v[0]
+def radius(sk, k):
+    e = sk["entities"][k]
+    if e["type"] == "circle":
+        return e["radius"]
+    centre, start = (sk["points"][p] for p in e["points"][:2])
+    return math.hypot(start[0] - centre[0], start[1] - centre[1])
 
 
-RECT = [[-14, -20], [10, -20], [10, 2], [-14, 2]]
-TRAP = [[0, 0], [20, 0], [16, 9], [3, 8]]
-PENT = [[1, 1], [10, 0], [14, 7], [6, 13], [-3, 7]]
+def line_distance(p, a, b):
+    return abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / math.hypot(b[0] - a[0], b[1] - a[1])
 
 
-def run(points, cons, **kw):
-    r = S.solve({"points": points, "constraints": cons}, **kw)
-    return r
+def free_lines(n=2):
+    """n loose lines in general position."""
+    b = S.Builder()
+    for i in range(n):
+        b.line((i * 3.0, i * 2.0), (i * 3.0 + 7.0, i * 2.0 + 3.0 + i))
+    return b
 
 
-# ---- Single constraint types -------------------------------------------------------------
-def test_length():
-    r = run(RECT, [C("length", 0, value=30.0)])
-    assert r.ok and math.isclose(length(r.sketch["points"], 0), 30.0, abs_tol=1e-8)
+def solved(sk):
+    res = S.solve(sk)
+    assert res.ok, res.errors
+    return res.sketch, res
 
 
-def test_angle_adjacent():
-    r = run(TRAP, [C("angle", 1, value=75.0)])
-    assert r.ok and math.isclose(interior(r.sketch["points"], 1), 75.0, abs_tol=1e-6)
+# ---- single constraint types ------------------------------------------------------------------------
+def test_coincident_point_point_line_and_curve():
+    b = free_lines(2)
+    circle_centre = len(b.points)
+    b.points.append([20.0, 0.0])
+    b.entities.append({"type": "circle", "points": [circle_centre], "radius": 4.0, "construction": False, "role": ""})
+    b.constrain("coincident", ["p1", "p2"])  # end of line 0 on start of line 1
+    b.constrain("coincident", ["p3", "e0"])  # end of line 1 on line 0
+    b.constrain("coincident", ["p0", "e2"])  # start of line 0 on the circle
+    sk, _ = solved(b.as_dict())
+    assert math.dist(pt(sk, "p1"), pt(sk, "p2")) < TOL
+    assert line_distance(pt(sk, "p3"), *ends(sk, 0)) < TOL
+    assert abs(math.dist(pt(sk, "p0"), pt(sk, "p4")) - sk["entities"][2]["radius"]) < TOL
 
 
-def test_angle_sides_any_two():
-    r = run(TRAP, [C("angle_sides", 0, 2, value=20.0)])
-    p = r.sketch["points"]
-    a, b = side(p, 0), side(p, 2)
-    ang = math.degrees(math.atan2(abs(cross(a, b)), a[0] * b[0] + a[1] * b[1]))
-    assert r.ok and math.isclose(ang, 20.0, abs_tol=1e-6)
+def test_horizontal_vertical_parallel_perpendicular_equal():
+    b = free_lines(3)
+    b.constrain("horizontal", ["e0"])
+    b.constrain("perpendicular", ["e0", "e1"])
+    b.constrain("parallel", ["e2", "e0"])
+    b.constrain("equal", ["e1", "e2"])
+    b.constrain("vertical", ["p0", "p4"])  # two points
+    sk, _ = solved(b.as_dict())
+    (a0, b0), (a1, b1), (a2, b2) = ends(sk, 0), ends(sk, 1), ends(sk, 2)
+    assert abs(a0[1] - b0[1]) < TOL and abs(b1[0] - a1[0]) < TOL and abs(b2[1] - a2[1]) < TOL
+    assert abs(length(sk, 1) - length(sk, 2)) < TOL
+    assert abs(pt(sk, "p0")[0] - pt(sk, "p4")[0]) < TOL
 
 
-def test_parallel():
-    r = run(TRAP, [C("parallel", 1, 3)])
-    p = r.sketch["points"]
-    a, b = side(p, 1), side(p, 3)
-    assert r.ok and abs(cross(a, b)) / (math.hypot(*a) * math.hypot(*b)) < 1e-8
+def test_midpoint_and_concentric_with_origin():
+    b = free_lines(1)
+    b.point_entity(3.0, 4.0)
+    b.points.append([5.0, 5.0])
+    b.entities.append({"type": "circle", "points": [3], "radius": 2.0, "construction": False, "role": ""})
+    b.constrain("midpoint", ["e1", "e0"])
+    b.constrain("concentric", ["e2", "o"])
+    sk, _ = solved(b.as_dict())
+    a, e = ends(sk, 0)
+    assert math.dist(pt(sk, "e1"), ((a[0] + e[0]) / 2, (a[1] + e[1]) / 2)) < TOL
+    assert math.dist(pt(sk, "p3"), (0.0, 0.0)) < TOL
 
 
-def test_parallel_trapezoid_opposite_sides():
-    """Trapezoid. Sides 0 and 2 parallel, lengths and angles set."""
-    r = run(TRAP, [C("parallel", 0, 2), C("length", 0, value=20.0), C("length", 2, value=12.0), C("angle", 0, value=80.0), C("angle", 1, value=80.0)])
-    p = r.sketch["points"]
-    assert r.ok
-    assert abs(cross(side(p, 0), side(p, 2))) < 1e-7
-    assert math.isclose(length(p, 2), 12.0, abs_tol=1e-7)
-    assert math.isclose(interior(p, 0), 80.0, abs_tol=1e-6) and math.isclose(interior(p, 1), 80.0, abs_tol=1e-6)
-    assert r.convex
+def test_dimensions_are_met():
+    b = free_lines(3)
+    b.points.append([20.0, 0.0])
+    b.entities.append({"type": "circle", "points": [6], "radius": 4.0, "construction": False, "role": ""})
+    b.constrain("length", ["e0"], 12.0)
+    b.constrain("angle", ["e0", "e1"], 35.0)
+    b.constrain("distance", ["p4", "e0"], 6.5)
+    b.constrain("distance", ["o", "p0"], 3.0)
+    b.constrain("hdistance", ["o", "p2"], 9.0)
+    b.constrain("vdistance", ["o", "p5"], 4.0)
+    b.constrain("diameter", ["e3"], 7.0)
+    sk, _ = solved(b.as_dict())
+    assert abs(length(sk, 0) - 12.0) < TOL
+    assert abs(measured_angle(S.Vars(sk), S.Vars(sk).vector(), "e0", "e1") - 35.0) < 1e-4
+    assert abs(line_distance(pt(sk, "p4"), *ends(sk, 0)) - 6.5) < TOL
+    assert abs(math.dist(pt(sk, "p0"), (0, 0)) - 3.0) < TOL
+    assert abs(abs(pt(sk, "p2")[0]) - 9.0) < TOL and abs(abs(pt(sk, "p5")[1]) - 4.0) < TOL
+    assert abs(2 * sk["entities"][3]["radius"] - 7.0) < TOL
 
 
-def test_perpendicular_equal():
-    r = run(TRAP, [C("perpendicular", 0, 3), C("equal", 0, 1)])
-    p = r.sketch["points"]
-    assert r.ok
-    a, b = side(p, 0), side(p, 3)
-    assert abs(a[0] * b[0] + a[1] * b[1]) < 1e-6
-    assert math.isclose(length(p, 0), length(p, 1), abs_tol=1e-7)
+def test_angle_at_a_corner_is_the_angle_between_the_lines():
+    b = S.Builder()
+    b.line((0, 0), (10, 0))
+    b.line((10, 0), (8, 9))
+    b.constrain("coincident", ["p1", "p2"])
+    b.constrain("angle", ["e0", "e1"], 60.0)
+    sk, _ = solved(b.as_dict())
+    d0 = (pt(sk, "p0")[0] - pt(sk, "p1")[0], pt(sk, "p0")[1] - pt(sk, "p1")[1])
+    d1 = (pt(sk, "p3")[0] - pt(sk, "p2")[0], pt(sk, "p3")[1] - pt(sk, "p2")[1])
+    corner = math.degrees(math.acos((d0[0] * d1[0] + d0[1] * d1[1]) / (math.hypot(*d0) * math.hypot(*d1))))
+    assert abs(corner - 60.0) < 1e-4
 
 
-def test_horizontal_vertical():
-    r = run(TRAP, [C("horizontal", 0), C("vertical", 3)])
-    p = r.sketch["points"]
-    assert r.ok and abs(side(p, 0)[1]) < 1e-8 and abs(side(p, 3)[0]) < 1e-8
+def test_arc_keeps_one_radius_and_takes_dimensions():
+    b = S.Builder()
+    b.points += [[0.0, 0.0], [5.0, 0.0], [0.0, 6.0]]
+    b.entities.append({"type": "arc", "points": [0, 1, 2], "radius": None, "construction": False, "role": ""})
+    b.constrain("radius", ["e0"], 8.0)
+    sk, _ = solved(b.as_dict())
+    assert abs(math.dist(pt(sk, "p0"), pt(sk, "p1")) - 8.0) < TOL
+    assert abs(math.dist(pt(sk, "p0"), pt(sk, "p2")) - 8.0) < TOL
 
 
-def test_fix_and_coords():
-    r = run(TRAP, [C("fix", 0, value=-3.0, value2=-4.0), C("coord_x", 1, value=17.0), C("coord_y", 2, value=11.0)])
-    p = r.sketch["points"]
-    assert r.ok and p[0] == pytest.approx([-3.0, -4.0], abs=1e-8) and p[1][0] == pytest.approx(17.0, abs=1e-8) and p[2][1] == pytest.approx(11.0, abs=1e-8)
+def test_fix_keeps_a_point():
+    b = free_lines(1)
+    b.constraints.append(c("fix", ["p0"], at=[1.5, -2.0]))
+    sk, _ = solved(b.as_dict())
+    assert math.dist(pt(sk, "p0"), (1.5, -2.0)) < TOL
 
 
-def test_distance_to_rod_and_gear():
-    r = run(PENT, [C("dist_point", 0, value=12.0, ref="rod"), C("dist_point", 1, value=15.0, ref="gear")], cd=6.0)
-    p = r.sketch["points"]
-    assert r.ok
-    assert math.isclose(math.hypot(*p[0]), 12.0, abs_tol=1e-7)
-    assert math.isclose(math.hypot(p[1][0] + 6.0, p[1][1]), 15.0, abs_tol=1e-7)
+# ---- degrees of freedom, redundancy, conflict ------------------------------------------------------------
+def test_motor_sketch_is_fully_defined_and_black():
+    res = S.solve(S.sketch_from_motor(S_motor()))
+    assert res.state == "full" and res.dof == 0
+    assert all(res.defined_entities) and all(res.defined_points)
 
 
-def test_distance_side_to_rod_keeps_side_of_line():
-    """Rectangle to the right of the rod. Side 3 (left) shall be 4 mm from the rod."""
-    box = [[4, -10], [16, -10], [16, 10], [4, 10]]
-    r = run(box, [C("dist_side", 3, value=7.0, ref="rod")])
-    p = r.sketch["points"]
-    # perpendicular distance of the line through side 3 to the origin
-    d = side(p, 3)
-    dist = abs(cross(d, (0 - p[3][0], 0 - p[3][1]))) / math.hypot(*d)
-    assert r.ok and math.isclose(dist, 7.0, abs_tol=1e-7)
-    assert p[3][0] > 0 and p[0][0] > 0  # the side stays to the right of the rod
+def S_motor():
+    from blindsight.config import MotorSpec
+
+    return MotorSpec()
 
 
-# ---- Order, orientation --------------------------------------------------------------
-def test_clockwise_input_is_reoriented_with_constraints_remapped():
-    cw = [list(reversed(RECT))[i] for i in range(4)]
-    n = 4
-    # constraint on the side that would be "side 0" in CCW order. In CW order it is side n-2-0 = 2
-    r = run(cw, [C("length", 2, value=31.0)])
-    p = r.sketch["points"]
-    assert r.reoriented and r.ok
-    assert S.signed_area(p) > 0
-    assert math.isclose(length(p, 0), 31.0, abs_tol=1e-7)
+def test_free_rectangle_has_four_degrees_of_freedom():
+    b = S.Builder()
+    b.rectangle(0, 0, 10, 6)
+    res = S.solve(b.as_dict())
+    assert res.state == "under" and res.dof == 4
+    assert not any(res.defined_entities)
+    b.constrain("length", ["e0"], 10.0)
+    b.constrain("length", ["e1"], 6.0)
+    b.constrain("coincident", ["p0", "o"])
+    res = S.solve(b.as_dict())
+    assert res.state == "full" and res.dof == 0 and all(res.defined_entities)
 
 
-# ---- Degrees of freedom, redundancy, conflict ----------------------------------------------------
-def test_dof_counting():
-    r = run(RECT, [])
-    assert r.dof == 8 and r.state == "under"
-    r = run(RECT, [C("fix", i, value=RECT[i][0], value2=RECT[i][1]) for i in range(4)])
-    assert r.dof == 0 and r.state == "full"
-    r = run(RECT, [C("length", 0, value=24.0), C("length", 1, value=22.0)])
-    assert r.dof == 6
+def test_partially_defined_entities_are_reported():
+    b = S.Builder()
+    b.line((0, 0), (10, 0))
+    b.line((0, 5), (10, 5))
+    b.constrain("coincident", ["p0", "o"])
+    b.constrain("horizontal", ["e0"])
+    b.constrain("length", ["e0"], 10.0)
+    res = S.solve(b.as_dict())
+    assert res.defined_entities == [True, False]
+    assert res.defined_points[:2] == [True, True]
 
 
-def test_fully_defined_rectangle_with_dimensions():
-    cons = [C("horizontal", 0), C("length", 0, value=12.0), C("length", 1, value=24.0), C("angle", 1, value=90.0),
-            C("parallel", 0, 2), C("parallel", 1, 3), C("fix", 0, value=-6.0, value2=-20.0)]
-    r = run([[-6.5, -19], [6, -20.5], [5.5, 4], [-7, 4.5]], cons)
-    assert r.ok and r.state == "full" and r.dof == 0
-    p = r.sketch["points"]
-    assert p[1] == pytest.approx([6.0, -20.0], abs=1e-6) and p[2] == pytest.approx([6.0, 4.0], abs=1e-6) and p[3] == pytest.approx([-6.0, 4.0], abs=1e-6)
-
-
-def test_redundant_constraint_marked_not_failing():
-    cons = [C("angle", 0, value=90.0), C("angle", 1, value=90.0), C("angle", 2, value=90.0), C("angle", 3, value=90.0)]
-    r = run(RECT, cons)
-    assert r.ok and r.state == "over"
-    assert [c["status"] for c in r.constraints].count("redundant") >= 1
-
-
-def test_duplicate_constraint_is_redundant():
-    r = run(RECT, [C("length", 0, value=20.0), C("length", 0, value=20.0)])
-    assert r.ok and r.constraints[1]["status"] == "redundant"
-
-
-def test_conflict_names_the_first_offending_constraint():
-    cons = [C("length", 0, value=20.0), C("parallel", 0, 2), C("length", 0, value=7.0)]
-    r = run(TRAP, cons)
-    assert not r.ok and r.state == "conflict"
-    assert r.constraints[2]["status"] == "conflict" and r.constraints[0]["status"] == "ok"
-    assert "Nr. 3" in r.errors[0]
-    # the result is the last consistent solution
-    assert math.isclose(length(r.sketch["points"], 0), 20.0, abs_tol=1e-6)
-
-
-def test_conflicting_angles_in_triangle():
-    tri = [[0, 0], [10, 0], [4, 8]]
-    r = run(tri, [C("angle", 0, value=100.0), C("angle", 1, value=100.0)])
-    assert not r.ok and r.state == "conflict"
+def test_redundant_and_conflicting_constraints():
+    b = S.Builder()
+    b.rectangle(0, 0, 10, 6)
+    b.constrain("parallel", ["e0", "e2"])  # already given by two horizontals
+    res = S.solve(b.as_dict())
+    assert res.state == "over" and res.constraints[-1]["status"] == "redundant"
+    b.constraints.pop()
+    b.constrain("length", ["e0"], 10.0)
+    b.constrain("length", ["e2"], 12.0)  # the opposite side of a rectangle cannot be longer
+    res = S.solve(b.as_dict())
+    assert res.state == "conflict" and not res.ok
+    assert res.constraints[-1]["status"] == "conflict" and res.errors
 
 
 def test_disabled_constraint_is_ignored():
-    r = run(RECT, [C("length", 0, value=3.0, enabled=False)])
-    assert r.ok and r.constraints[0]["status"] == "disabled" and math.isclose(length(r.sketch["points"], 0), 24.0)
+    b = free_lines(1)
+    b.constraints.append(c("length", ["e0"], 3.0, enabled=False))
+    sk, res = solved(b.as_dict())
+    assert res.constraints[0]["status"] == "disabled"
+    assert abs(length(sk, 0) - 3.0) > 1.0
 
 
-# ---- Dragging --------------------------------------------------------------------------------
-def test_drag_free_vertex_follows_target():
-    r = run(RECT, [], drag={"point": 2, "target": [20.0, 10.0]})
-    assert r.ok and r.sketch["points"][2] == pytest.approx([20.0, 10.0], abs=1e-6)
+# ---- dragging ------------------------------------------------------------------------------------------------
+def test_dragging_a_point_keeps_constraints():
+    b = S.Builder()
+    b.rectangle(0, 0, 10, 6)
+    res = S.solve(b.as_dict(), drag={"ref": "p4", "target": [14.0, 9.0]})
+    sk = res.sketch
+    assert res.ok and math.dist(pt(sk, "p4"), (14.0, 9.0)) < 0.2
+    for k in (0, 2):
+        a, e = ends(sk, k)
+        assert abs(a[1] - e[1]) < TOL
 
 
-def test_drag_keeps_constraints():
-    cons = [C("parallel", 0, 2), C("parallel", 1, 3), C("angle", 1, value=90.0), C("length", 0, value=24.0)]
-    r = run(RECT, cons, drag={"point": 2, "target": [30.0, 15.0]})
-    p = r.sketch["points"]
-    assert r.ok
-    assert abs(cross(side(p, 0), side(p, 2))) < 1e-6 * length(p, 0) * length(p, 2)
-    assert math.isclose(interior(p, 1), 90.0, abs_tol=1e-5)
-    assert math.isclose(length(p, 0), 24.0, abs_tol=1e-6)
-    # the rectangle was lengthened in y (the target lies above), the width stayed
-    assert p[2][1] > 2.0
+def test_dragging_a_line_moves_it_and_a_circle_radius():
+    b = free_lines(1)
+    b.points.append([20.0, 0.0])
+    b.entities.append({"type": "circle", "points": [2], "radius": 3.0, "construction": False, "role": ""})
+    sk0 = b.as_dict()
+    res = S.solve(sk0, drag={"ref": "e0", "grab": [3.5, 1.5], "target": [5.5, 0.5]})
+    assert math.dist(pt(res.sketch, "p0"), (2.0, -1.0)) < 0.05
+    res = S.solve(sk0, drag={"ref": "e1", "grab": [23.0, 0.0], "target": [25.0, 0.0], "mode": "radius"})
+    assert abs(res.sketch["entities"][1]["radius"] - 5.0) < 0.05
 
 
-def test_drag_fully_defined_does_not_move():
-    cons = [C("fix", i, value=RECT[i][0], value2=RECT[i][1]) for i in range(4)]
-    r = run(RECT, cons, drag={"point": 1, "target": [50.0, 50.0]})
-    assert r.ok and r.sketch["points"][1] == pytest.approx(RECT[1], abs=1e-6)
+@pytest.mark.parametrize("drag", [{"ref": "o", "target": [1, 1]}, {"ref": "p99", "target": [1, 1]}, {"ref": "p0"}, {"target": [1, 1]}])
+def test_bad_drag_is_rejected(drag):
+    res = S.solve(free_lines(1).as_dict(), drag=drag)
+    assert res.state == "invalid" and res.errors
 
 
-def test_drag_rejects_bad_arguments():
-    assert not run(RECT, [], drag={"point": 9, "target": [1, 1]}).ok
-    assert not run(RECT, [], drag={"point": 1, "target": ["a", 1]}).ok
-    assert not run(RECT, [], drag={"target": [1, 1]}).ok
-
-
-# ---- Structure and edge cases --------------------------------------------------------------------
-@pytest.mark.parametrize("points", [[[0, 0], [1, 0]], [[0, 0]] * 3, [[0, 0], [1, 0], [float("nan"), 1]], [[0, 0], [1, 0], [float("inf"), 1]], [[0, 0], [1], [2, 2]], [[0, 0], ["a", 0], [1, 1]]])
-def test_bad_points_are_reported(points):
-    r = run(points, [])
-    assert not r.ok and r.errors
-
-
-def test_too_many_points():
-    pts = [[math.cos(2 * math.pi * i / 41) * 10, math.sin(2 * math.pi * i / 41) * 10] for i in range(41)]
-    assert not run(pts, []).ok
-    assert run(pts[:40], []).ok
-
-
-@pytest.mark.parametrize("bad", [
-    C("nope", 0), C("length", 9, value=1.0), C("length", -1, value=1.0), C("length", 0), C("length", 0, value=0.0), C("length", 0, value=float("nan")),
-    C("angle", 0, value=0.0), C("angle", 0, value=180.0), C("angle", 0, value=-5.0), C("parallel", 0, 0), C("parallel", 0), C("fix", 0, value=1.0),
-    C("dist_point", 0, value=-1.0), C("dist_point", 0, value=1.0, ref="moon"), C("length", True, value=1.0), C("length", 0.5, value=1.0),
+# ---- structure ---------------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("change, needle", [
+    (lambda s: s["entities"].append({"type": "spline", "points": [], "radius": None, "construction": False, "role": ""}), "type"),
+    (lambda s: s["entities"].append({"type": "line", "points": [0, 9], "radius": None, "construction": False, "role": ""}), "points"),
+    (lambda s: s["entities"].append({"type": "circle", "points": [], "radius": 1, "construction": False, "role": ""}), "points"),
+    (lambda s: s["constraints"].append(c("parallel", ["e0", "p0"])), "refs"),
+    (lambda s: s["constraints"].append(c("length", ["e0"], -1.0)), "value"),
+    (lambda s: s["constraints"].append(c("length", ["e0"])), "value"),
+    (lambda s: s["constraints"].append(c("nope", ["e0"])), "type"),
+    (lambda s: s["constraints"].append(c("equal", ["e0", "e0"])), "refs"),
+    (lambda s: s["entities"][0].update(role="motor"), "role"),
 ])
-def test_bad_constraints_are_reported(bad):
-    r = run(RECT, [bad])
-    assert not r.ok and r.errors
-    assert "constraints[0]" in r.errors[0]
+def test_structure_errors_name_the_field(change, needle):
+    sk = free_lines(1).as_dict()
+    change(sk)
+    res = S.solve(sk)
+    assert res.state == "invalid" and any(needle in e for e in res.errors), res.errors
 
 
-def test_degenerate_polygon_flagged_not_crashing():
-    sq = [[0, 0], [10, 0], [10, 0], [0, 10]]
-    r = run(sq, [])
-    assert r.warnings and not r.convex
-
-
-def test_point_on_reference_can_still_be_dimensioned():
-    tri = [[0, 0], [10, 0], [5, 8]]
-    r = run(tri, [C("dist_point", 0, value=4.0, ref="rod")])
-    assert r.ok and math.isclose(math.hypot(*r.sketch["points"][0]), 4.0, abs_tol=1e-7)
-
-
-def test_nonconvex_detected():
-    dart = [[0, 0], [10, 0], [3, 3], [0, 10]]
-    r = run(dart, [])
-    assert r.ok and not r.convex and r.warnings
-
-
-def test_self_intersection_detected():
-    bow = [[0, 0], [10, 10], [10, 0], [0, 10]]
-    rep = S.polygon_report(S.normalize_orientation({"points": bow, "constraints": []})[0]["points"])
-    assert not rep["simple"]
-
-
-def test_determinism():
-    cons = [C("parallel", 0, 2), C("angle", 0, value=77.0), C("length", 1, value=11.0)]
-    a = run(TRAP, cons).sketch["points"]
-    b = run(TRAP, cons).sketch["points"]
-    assert a == b
-
-
-def test_solver_is_fast_enough_for_dragging():
-    import time
-
-    pts = [[10 * math.cos(2 * math.pi * i / 12), 10 * math.sin(2 * math.pi * i / 12)] for i in range(12)]
-    cons = [C("length", i, value=length(pts, i)) for i in range(0, 12, 2)] + [C("parallel", 0, 6)]
-    t = time.time()
-    for _ in range(10):
-        run(pts, cons, drag={"point": 3, "target": [12.0, 5.0]})
-    assert (time.time() - t) / 10 < 0.25
-
-
-# ---- Index conversion ----------------------------------------------------------------------------
-def base_sketch():
-    return {"points": [list(p) for p in PENT], "constraints": [C("length", 0, value=10.0), C("angle", 2, value=100.0), C("parallel", 1, 3), C("fix", 4, value=-3.0, value2=7.0), C("equal", 0, 2)]}
-
-
-def test_insert_point_shifts_indices():
-    sk = S.insert_point(base_sketch(), 1)
-    assert len(sk["points"]) == 6
-    types = [(c["type"], c["a"], c["b"]) for c in sk["constraints"]]
-    assert ("length", 0, None) in types  # side 0 unchanged
-    assert ("angle", 3, None) in types  # point 2 became point 3
-    assert ("fix", 5, None) in types
-    # parallel(1,3) refers to the line of side 1. Both halves (1 and 2) are tied to side 4
-    assert ("parallel", 1, 4) in types and ("parallel", 2, 4) in types
-    # equal(0,2) becomes equal(0,3)
-    assert ("equal", 0, 3) in types
+def test_delete_entities_renumbers_and_drops_constraints():
+    b = free_lines(3)
+    b.constrain("coincident", ["p1", "p2"])
+    b.constrain("parallel", ["e0", "e2"])
+    b.constrain("length", ["e2"], 5.0)
+    sk = S.delete_entities(b.as_dict(), {1})
+    assert len(sk["entities"]) == 2 and len(sk["points"]) == 4
+    assert [x["refs"] for x in sk["constraints"]] == [["e0", "e1"], ["e1"]]
+    assert sk["entities"][1]["points"] == [2, 3]
     assert S.solve(sk).ok
 
 
-def test_insert_point_drops_length_of_split_side():
-    sk = S.insert_point(base_sketch(), 0)
-    assert not [c for c in sk["constraints"] if c["type"] == "length"]
+# ---- profile -----------------------------------------------------------------------------------------------------
+def test_housing_is_the_hull_without_construction_and_gear():
+    b = S.Builder()
+    b.rectangle(-10, -20, 2, -4)
+    b.line((-30, -30), (30, 30), construction=True)
+    b.gear(5.0, 6.0, 4.0)
+    res = S.solve(b.as_dict())
+    prof = res.profile
+    assert prof["bbox"] == pytest.approx({"xmin": -10, "ymin": -20, "xmax": 2, "ymax": -4})
+    assert prof["gear"]["diameter"] == pytest.approx(6.0) and prof["gear"]["center_distance"] == pytest.approx(5.0)
+    assert not res.warnings
 
 
-def test_delete_point_drops_dependent_constraints():
-    sk = S.delete_point(base_sketch(), 2)
-    assert len(sk["points"]) == 4
-    types = [c["type"] for c in sk["constraints"]]
-    assert "angle" not in types  # point 2 removed
-    assert "parallel" not in types  # sides 1 and 2 merged, side 3 stays, but side 1 is dropped
-    assert "length" in types
-    assert S.solve(sk).ok
+def test_circle_and_arc_hull_is_conservative():
+    b = S.Builder()
+    b.points.append([-10.0, -20.0])
+    b.entities.append({"type": "circle", "points": [0], "radius": 6.0, "construction": False, "role": ""})
+    b.gear(5.0, 6.0, 4.0)
+    prof = S.solve(b.as_dict()).profile
+    for angle in range(0, 360, 7):
+        x, y = -10 + 6 * math.cos(math.radians(angle)), -20 + 6 * math.sin(math.radians(angle))
+        assert _inside(prof["housing"], (x, y), 1e-9)
 
 
-def test_delete_point_limits():
-    sk = {"points": [[0, 0], [1, 0], [0, 1]], "constraints": []}
-    with pytest.raises(S.SketchError):
-        S.delete_point(sk, 0)
-    with pytest.raises(S.SketchError):
-        S.delete_point(base_sketch(), 99)
+def _inside(poly, p, tol):
+    n = len(poly)
+    return all((poly[(i + 1) % n][0] - poly[i][0]) * (p[1] - poly[i][1]) - (poly[(i + 1) % n][1] - poly[i][1]) * (p[0] - poly[i][0]) >= -tol
+               for i in range(n))
 
 
-def test_hull_drops_inner_points():
-    sk = {"points": [[0, 0], [10, 0], [3, 3], [0, 10]], "constraints": [C("length", 0, value=10.0), C("angle", 2, value=100.0)]}
-    h = S.hull_sketch(sk)
-    assert len(h["points"]) == 3
-    assert [c["type"] for c in h["constraints"]] == ["length"]
-    assert S.polygon_report(h["points"])["convex"]
+@pytest.mark.parametrize("build, needle", [
+    (lambda b: b.rectangle(-10, -20, 2, -4), "Kein Zahnrad"),
+    (lambda b: b.gear(5.0, 6.0, 4.0), "Kein Gehäuse"),
+    (lambda b: (b.rectangle(-10, -6, 2, 6), b.gear(5.0, 6.0, 4.0)), "ragt"),
+])
+def test_profile_problems(build, needle):
+    b = S.Builder()
+    build(b)
+    res = S.solve(b.as_dict())
+    assert any(needle in w for w in res.warnings), res.warnings
 
 
-# ---- Random check ---------------------------------------------------------------------------------
-def random_convex(rng, n):
-    angs = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
-    for _ in range(50):
-        if all((angs[(i + 1) % n] - angs[i]) % (2 * math.pi) > 0.35 for i in range(n)):
-            break
-        angs = sorted(rng.uniform(0, 2 * math.pi) for _ in range(n))
-    return [[math.cos(a) * rng.uniform(8, 15) + rng.uniform(-1, 1), math.sin(a) * rng.uniform(8, 15)] for a in angs]
+def test_gear_must_stay_on_the_x_axis():
+    b = S.Builder()
+    b.rectangle(-10, -20, 2, -4)
+    b.gear(5.0, 6.0, 4.0)
+    sk = b.as_dict()
+    sk["constraints"] = [x for x in sk["constraints"] if not (x["type"] == "horizontal" and "o" in x["refs"])]
+    res = S.solve(sk, drag={"ref": f"e{len(sk['entities']) - 1}", "target": [-5.0, 3.0]})
+    assert any("x Achse" in w for w in res.warnings)
 
 
-def test_random_constraints_derived_from_a_real_polygon_are_always_satisfiable():
-    """Measures a random polygon, derives constraints from it and starts with disturbed points.
-    The solver must satisfy all constraints (a solution provably exists)."""
-    rng = random.Random(1234)
-    solved = 0
-    for _ in range(60):
-        n = rng.randint(3, 7)
-        true = random_convex(rng, n)
-        if S.signed_area(true) <= 0 or not S.polygon_report(true)["convex"]:
-            continue
-        cons = []
-        for i in rng.sample(range(n), rng.randint(1, n)):
-            cons.append(C("length", i, value=length(true, i)))
-        for i in rng.sample(range(n), rng.randint(0, n)):
-            cons.append(C("angle", i, value=interior(true, i)))
-        cons.append(C("fix", 0, value=true[0][0], value2=true[0][1]))
-        start = [[x + rng.uniform(-0.4, 0.4), y + rng.uniform(-0.4, 0.4)] for x, y in true]
-        r = run(start, cons)
-        if not r.ok:
-            continue  # very rare, bad start position. Counted below
-        p = r.sketch["points"]
-        for c in cons:
-            if c["type"] == "length":
-                assert math.isclose(length(p, c["a"]), c["value"], abs_tol=1e-6)
-            elif c["type"] == "angle":
-                assert math.isclose(interior(p, c["a"]), c["value"], abs_tol=1e-5)
-            else:
-                assert p[0] == pytest.approx([c["value"], c["value2"]], abs=1e-6)
-        solved += 1
-    assert solved >= 40
-
-
-def test_random_parallel_and_perpendicular_relations():
-    rng = random.Random(99)
-    for _ in range(30):
-        n = rng.choice([4, 6])
-        true = random_convex(rng, n)
-        if not S.polygon_report(true)["convex"]:
-            continue
-        i, j = rng.sample(range(n), 2)
-        a, b = side(true, i), side(true, j)
-        cons = [C("angle_sides", i, j, value=math.degrees(math.atan2(abs(cross(a, b)), a[0] * b[0] + a[1] * b[1])))]
-        r = run([[x + 0.2, y - 0.1] for x, y in true], cons)
-        assert r.ok
-
-
-def test_solver_moves_points_minimally():
-    """A small change of a length may only move the outline a little."""
-    r = run(RECT, [C("length", 0, value=25.0)])
-    moved = max(math.dist(a, b) for a, b in zip(RECT, r.sketch["points"]))
-    assert r.ok and moved < 1.01
-
-
-def test_time_limit_returns_error_instead_of_hanging():
-    cons = [C("length", i % 4, value=20.0 + i * 0.01) for i in range(120)]
-    r = S.solve({"points": RECT, "constraints": cons}, time_limit=0.05)
-    assert not r.ok and r.errors
-
-
-# ---- Fuzzing with an independent check of all constraint types -------------------------------------------------
-def satisfied(p, c, cd):
-    """Measures a constraint without the solver (own formulas). Returns the deviation."""
-    t, a, b, v, v2 = c["type"], c["a"], c["b"], c["value"], c["value2"]
-    ref = (0.0, 0.0) if c["ref"] == "rod" else (-cd, 0.0)
-    if t == "length":
-        return abs(length(p, a) - v)
-    if t == "angle":
-        d = abs(interior(p, a) - v)
-        return min(d, 360 - d) * math.pi / 180
-    if t == "angle_sides":
-        u, w = side(p, a), side(p, b)
-        ang = math.degrees(math.atan2(abs(cross(u, w)), u[0] * w[0] + u[1] * w[1]))
-        return abs(ang - v) * math.pi / 180
-    if t == "parallel":
-        u, w = side(p, a), side(p, b)
-        return abs(cross(u, w)) / (math.hypot(*u) * math.hypot(*w))
-    if t == "perpendicular":
-        u, w = side(p, a), side(p, b)
-        return abs(u[0] * w[0] + u[1] * w[1]) / (math.hypot(*u) * math.hypot(*w))
-    if t == "equal":
-        return abs(length(p, a) - length(p, b))
-    if t == "horizontal":
-        return abs(side(p, a)[1])
-    if t == "vertical":
-        return abs(side(p, a)[0])
-    if t == "fix":
-        return max(abs(p[a][0] - v), abs(p[a][1] - v2))
-    if t == "coord_x":
-        return abs(p[a][0] - v)
-    if t == "coord_y":
-        return abs(p[a][1] - v)
-    if t == "dist_point":
-        return abs(math.hypot(p[a][0] - ref[0], p[a][1] - ref[1]) - v)
-    if t == "dist_side":
-        d = side(p, a)
-        return abs(abs(cross(d, (ref[0] - p[a][0], ref[1] - p[a][1])) / math.hypot(*d)) - v)
-    raise AssertionError(t)
-
-
-def random_constraint(rng, n, true):
-    t = rng.choice(list(S.SPEC))
-    sides, verts, nv, nv2 = S.SPEC[t]
-    c = C(t)
-    if len(sides) == 2:
-        c["a"], c["b"] = rng.sample(range(n), 2)
-    elif sides:
-        c["a"] = rng.randrange(n)
-    else:
-        c["a"] = rng.randrange(n)
-    c["ref"] = rng.choice(["rod", "gear"])
-    return c
-
-
-def test_fuzz_random_constraint_sets_never_crash_and_ok_results_are_correct():
-    import time
-
-    rng = random.Random(2025)
-    ok_count = conflict_count = 0
-    t0 = time.time()
-    for _ in range(120):
-        n = rng.randint(3, 8)
-        true = random_convex(rng, n)
-        if S.signed_area(true) <= 0 or not S.polygon_report(true)["convex"]:
-            continue
-        cons = []
-        for _ in range(rng.randint(0, 6)):
-            c = random_constraint(rng, n, true)
-            # measure the value on the real polygon (mostly satisfiable), sometimes falsified on purpose
-            mm = S.measures(true)
-            t = c["type"]
-            if t == "length":
-                c["value"] = mm["sides"][c["a"]]
-            elif t == "angle":
-                c["value"] = mm["angles"][c["a"]]
-            elif t == "angle_sides":
-                u, w = side(true, c["a"]), side(true, c["b"])
-                c["value"] = math.degrees(math.atan2(abs(cross(u, w)), u[0] * w[0] + u[1] * w[1]))
-            elif t == "fix":
-                c["value"], c["value2"] = true[c["a"]]
-            elif t in ("coord_x", "coord_y"):
-                c["value"] = true[c["a"]][0 if t == "coord_x" else 1]
-            elif t == "dist_point":
-                r = (0, 0) if c["ref"] == "rod" else (-5.0, 0)
-                c["value"] = math.hypot(true[c["a"]][0] - r[0], true[c["a"]][1] - r[1])
-            elif t == "dist_side":
-                r = (0, 0) if c["ref"] == "rod" else (-5.0, 0)
-                d = side(true, c["a"])
-                c["value"] = abs(cross(d, (r[0] - true[c["a"]][0], r[1] - true[c["a"]][1]))) / math.hypot(*d)
-            if rng.random() < 0.15 and c["value"] is not None:
-                c["value"] = abs(c["value"]) * rng.uniform(0.3, 2.0) + 0.5
-                if t == "angle":
-                    c["value"] = min(c["value"], 170.0)
-            cons.append(c)
-        start = [[x + rng.uniform(-0.3, 0.3), y + rng.uniform(-0.3, 0.3)] for x, y in true]
-        r = S.solve({"points": start, "constraints": cons}, cd=5.0)
-        assert r.state in ("under", "full", "over", "conflict", "invalid")
-        assert len(r.constraints) == len(cons)
-        if r.ok:
-            ok_count += 1
-            p = r.sketch["points"]
-            for c in r.sketch["constraints"]:
-                assert satisfied(p, c, 5.0) < 1e-5, (c, p)
-            assert 0 <= r.dof <= 2 * n
-        elif r.state == "conflict":
-            conflict_count += 1
-            assert r.errors and any(c["status"] == "conflict" for c in r.constraints)
-    assert ok_count > 40
-    assert time.time() - t0 < 60
+# ---- random check -----------------------------------------------------------------------------------------------
+@pytest.mark.parametrize("seed", range(12))
+def test_random_polygons_with_measured_constraints_are_solved(seed):
+    """Measure a random polygon, derive constraints and start from disturbed points. A solution provably exists."""
+    rng = random.Random(seed)
+    n = rng.randint(3, 6)
+    pts = [(math.cos(2 * math.pi * i / n) * 10 + rng.uniform(-1.5, 1.5), math.sin(2 * math.pi * i / n) * 10 + rng.uniform(-1.5, 1.5))
+           for i in range(n)]
+    truth = S.Builder()
+    lines = truth.closed(pts)
+    exact = truth.as_dict()
+    v = S.Vars(exact)
+    x = v.vector()
+    for k in lines:
+        kind = rng.choice(["length", "angle", "horizontal", "none"])
+        if kind == "length":
+            truth.constrain("length", [f"e{k}"], length(exact, k))
+        elif kind == "angle":
+            other = lines[(k + 1) % n]
+            truth.constrain("angle", [f"e{k}", f"e{other}"], measured_angle(v, x, f"e{k}", f"e{other}"))
+    disturbed = truth.as_dict()
+    disturbed["points"] = [[p[0] + rng.uniform(-0.3, 0.3), p[1] + rng.uniform(-0.3, 0.3)] for p in disturbed["points"]]
+    disturbed["constraints"] = [x for x in disturbed["constraints"] if x["type"] != "horizontal"]
+    res = S.solve(disturbed)
+    assert res.ok, res.errors
+    assert all(e["residual"] < S.TOL_OK for e in res.constraints)

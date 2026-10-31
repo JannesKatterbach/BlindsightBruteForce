@@ -31,7 +31,7 @@ from .errors import ConfigError
 from .geometry import is_convex_ccw, signed_area
 from .i18n import LocalText, has_text, tr
 from .patterns import PATTERNS
-from .sketch import check_sketch_motor
+from .sketch import motor_fields, sketch_profile
 from .units import EPS, EPS_AREA, FAR_AWAY, is_finite_number, normalize_angle_deg
 
 MAX_ANGLE_COUNT = 100_000  # protection against tiny angle steps
@@ -60,24 +60,35 @@ class RodSpec:
 
 
 @dataclass
-class ConstraintSpec:
-    """One constraint of the motor sketch (types and meaning see sketch/constraints.py)."""
+class EntitySpec:
+    """One element of the motor sketch (point, line, circle, arc, see sketch/entities.py)."""
 
-    type: str = "length"
-    a: Optional[int] = None
-    b: Optional[int] = None
-    value: Optional[float] = None
-    value2: Optional[float] = None
-    ref: str = "rod"
+    type: str = "line"
+    points: list[int] = field(default_factory=list)  # indices into SketchSpec.points
+    radius: Optional[float] = None  # circles
+    construction: bool = False  # helper geometry, not part of the housing
+    role: str = ""  # "gear" for the gear
+
+
+@dataclass
+class ConstraintSpec:
+    """One relation or dimension of the motor sketch (types and meaning see sketch/constraints.py)."""
+
+    type: str = "coincident"
+    refs: list[str] = field(default_factory=list)  # "p3" point, "e2" entity, "o" origin
+    value: Optional[float] = None  # dimensions (mm or degrees)
+    at: Optional[list[float]] = None  # position of a fixed point
     enabled: bool = True
     name: str = ""
+    label: Optional[list[float]] = None  # position of the dimension text in the drawing (display only)
 
 
 @dataclass
 class SketchSpec:
-    """Parametric housing outline in the rod frame (origin = rod axis, mm)."""
+    """Parametric motor in top view in the rod frame (origin = rod axis, mm)."""
 
     points: list[list[float]] = field(default_factory=list)
+    entities: list[EntitySpec] = field(default_factory=list)
     constraints: list[ConstraintSpec] = field(default_factory=list)
 
 
@@ -96,8 +107,9 @@ class MotorSpec:
         at the height of the gear centre.
 
     With sketch (``sketch``, rod frame)
-      * The origin is the rod axis, the gear lies at (-center_distance, 0).
-      * width, depth, shaft_x, gear_gap and outline are ignored.
+      * The origin is the rod axis. The housing is the convex hull of the sketch, the gear is drawn in the
+        sketch. width, depth, gear_diameter, gear_width and center_distance are taken from the sketch
+        when the project is validated, shaft_x, gear_gap and outline are ignored.
     """
 
     width: float = 12.0
@@ -397,6 +409,10 @@ def _check_motor(proj: Project, errs: list[str]) -> None:
     motor = proj.motor
     if motor.axis_height > motor.height:
         errs.append(tr("config.axis_outside"))
+    if motor.sketch is not None:
+        _sync_sketch_motor(motor, errs)
+    elif motor.outline is not None:
+        _check_outline(motor.outline, errs)
     lo, hi = motor.center_distance_min, motor.center_distance_max
     if (lo is None) != (hi is None):
         errs.append(tr("config.cd_together"))
@@ -405,11 +421,15 @@ def _check_motor(proj: Project, errs: list[str]) -> None:
             errs.append(tr("config.cd_max_below_min"))
         elif not lo - EPS <= motor.center_distance <= hi + EPS:
             errs.append(tr("config.cd_outside", cd=motor.center_distance, lo=lo, hi=hi))
-    if motor.sketch is not None:
-        _, sketch_errors = check_sketch_motor(motor)
-        errs.extend(sketch_errors)
-    elif motor.outline is not None:
-        _check_outline(motor.outline, errs)
+
+
+def _sync_sketch_motor(motor: MotorSpec, errs: list[str]) -> None:
+    """Take housing size, gear and centre distance from the sketch, so that file and computation agree."""
+    profile, sketch_errors = sketch_profile(motor)
+    errs.extend(sketch_errors)
+    if profile is not None:
+        for name, value in motor_fields(profile).items():
+            setattr(motor, name, value)
 
 
 def _check_stack(proj: Project, errs: list[str]) -> None:

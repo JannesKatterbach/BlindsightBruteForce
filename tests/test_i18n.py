@@ -14,7 +14,7 @@ from blindsight.export import EXPORTERS
 from blindsight.i18n import LANGUAGES, catalog, localize, negotiate, normalize_language, tr, use_language
 from blindsight.model import KIND_GEAR, KIND_HOUSING, KIND_OBSTACLE, KIND_ROD
 from blindsight.optimizers.base import STATUS_WITH_MESSAGE
-from blindsight.sketch import CONSTRAINT_TYPES, REFS
+from blindsight.sketch import CONSTRAINT_TYPES
 from blindsight.web.server import App
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "blindsight"
@@ -59,7 +59,6 @@ def test_dynamic_keys_exist():
             assert f"option.{meta.path}.{value}" in keys
     assert {f"export.{name}" for name in EXPORTERS} <= keys
     assert {f"constraint.{name}" for name in CONSTRAINT_TYPES} <= keys
-    assert {f"ref.{name}" for name in REFS} <= keys
     assert {f"part.{kind}" for kind in (KIND_HOUSING, KIND_GEAR, KIND_ROD, KIND_OBSTACLE, "threaded_rod")} <= keys
     assert {f"status.{status}" for status in STATUS_WITH_MESSAGE} <= keys
 
@@ -76,8 +75,8 @@ def test_local_text_renders_again_in_another_language():
 
 def test_localize_walks_containers_and_joins_lists():
     with use_language("de"):
-        data = {"a": [tr("part.gear"), ("x", tr("part.rod"))], "b": tr("sketch.constraint_label", name="L", where=[tr("sketch.side", n=2)], number=1)}
-    assert localize(data, "en") == {"a": ["Gear", ["x", "Rod"]], "b": "L (Side 2) [no. 1]"}
+        data = {"a": [tr("part.gear"), ("x", tr("part.rod"))], "b": tr("sketch.constraint_label", name="L", where=[tr("part.gear"), "e2"], number=1)}
+    assert localize(data, "en") == {"a": ["Gear", ["x", "Rod"]], "b": "L (Gear, e2) [no. 1]"}
 
 
 def test_language_codes_are_normalised():
@@ -188,7 +187,7 @@ def test_every_ui_key_exists():
         "ui.term.": ("count", "area", "uniformity", "regularity"),
         "ui.sk.state.": ("under", "full", "over", "conflict", "invalid"),
         "ui.sk.status.": ("ok", "conflict", "redundant", "disabled"),
-        "ui.sk.ref.": tuple(REFS),
+        "ui.sk.ref.": ("rod", "gear"),
         "ui.progress.": ("status", "phase", "candidates", "elapsed", "best_count", "best_score", "info"),
         "ui.levels.head.": ("layer", "z_top", "rod_total", "below_mount", "thread"),
         "ui.obstacle.": ("shape", "x", "y", "w", "h", "r", "angle", "plane", "name", "rect", "circle"),

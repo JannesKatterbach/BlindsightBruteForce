@@ -40,7 +40,6 @@ from ..model import Model
 from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
 from ..scoring import evaluate
 from ..service import JobManager, JobNotFound
-from ..units import is_finite_number
 
 STATIC = Path(__file__).parent / "static"
 MAX_BODY = 8 * 1024 * 1024
@@ -131,12 +130,6 @@ class Request:
             return int(self.query.get(name, [str(default)])[0])
         except ValueError:
             raise BadRequest(tr("server.query_integer", name=name)) from None
-
-
-def _int(v: Any, name: str) -> int:
-    if isinstance(v, bool) or not isinstance(v, int):
-        raise BadRequest(tr("server.integer_expected", name=name))
-    return v
 
 
 def _examples_dir() -> Optional[Path]:
@@ -413,49 +406,22 @@ class App:
 
     @route("POST", "/api/sketch/", prefix=True)
     def sketch_api(self, req: Request) -> Response:
-        """Endpoints of the motor sketch. Solver results (also conflicts) are normal responses with ok=false."""
+        """Endpoints of the motor sketch. Solver results (also conflicts) are normal responses with ok=false.
+
+        from-motor  {motor}                 sketch of the housing rectangle and the gear from the motor fields
+        solve       {sketch, drag?, diagnose?}"""
         op = req.tail
         data = req.dict_data()
-        gear = self._gear_arg(data.get("gear"))
         if op == "from-motor":
             motor = motor_from_dict(data.get("motor"))
-            sketch = sk.legacy_to_sketch(motor, with_constraints=data.get("constraints", True))
-            return json_response(sk.solve(sketch, cd=motor.center_distance, gear=(motor.gear_diameter, motor.gear_width)).as_dict())
-        if op not in ("solve", "hull", "insert", "delete"):
+            return json_response(sk.solve(sk.sketch_from_motor(motor)).as_dict())
+        if op != "solve":
             return error_response(404, tr("server.not_found"))
         sketch = data.get("sketch")
         if not isinstance(sketch, dict):
             raise BadRequest(tr("server.sketch_required"))
-        sketch = sk.sketch_dict(sketch)
-        errors = sk.validate_structure(sketch)
-        if errors:
-            return json_response(self._invalid_sketch(sketch, errors))
-        cd = data.get("cd", 5.0)
-        try:
-            if op == "solve":
-                return json_response(sk.solve(sketch, cd=cd, drag=data.get("drag"), gear=gear).as_dict())
-            if op == "hull":
-                sketch = sk.hull_sketch(sketch)
-            elif op == "insert":
-                sketch = sk.insert_point(sketch, _int(data.get("side"), "side"), data.get("t", 0.5))
-            else:
-                sketch = sk.delete_point(sketch, _int(data.get("point"), "point"))
-        except sk.SketchError as exc:
-            return json_response(self._invalid_sketch(sketch, exc.errors))
-        return json_response(sk.solve(sketch, cd=cd, gear=gear).as_dict())
-
-    @staticmethod
-    def _gear_arg(gear: Any) -> Optional[tuple[float, float]]:
-        if gear is None:
-            return None
-        if not (isinstance(gear, list) and len(gear) == 2 and all(is_finite_number(v) for v in gear)):
-            raise BadRequest(tr("server.gear_format"))
-        return float(gear[0]), float(gear[1])
-
-    @staticmethod
-    def _invalid_sketch(sketch: dict, errors: list[str]) -> dict:
-        return {"ok": False, "errors": errors, "sketch": sketch, "state": "invalid", "dof": 0, "constraints": [],
-                "warnings": []}
+        diagnose = data.get("diagnose", True)
+        return json_response(sk.solve(sketch, drag=data.get("drag"), diagnose=diagnose is not False).as_dict())
 
 
 # ---------------------------------------------------------------------------

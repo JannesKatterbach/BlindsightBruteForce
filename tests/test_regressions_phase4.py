@@ -148,11 +148,14 @@ from blindsight import sketch as S  # noqa: E402
 from blindsight.sketch import motor as sketch_motor  # noqa: E402
 
 
-def _c(t, a=None, b=None, value=None, value2=None, ref="rod", enabled=True):
-    return {"type": t, "a": a, "b": b, "value": value, "value2": value2, "ref": ref, "enabled": enabled, "name": ""}
+def _c(t, refs, value=None, enabled=True):
+    return {"type": t, "refs": refs, "value": value, "at": None, "enabled": enabled, "name": "", "label": None}
 
 
-SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
+def _square():
+    b = S.Builder()
+    b.closed([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
+    return b.as_dict()
 
 
 def test_solver_ok_always_matches_errors_on_random_sketches():
@@ -160,68 +163,47 @@ def test_solver_ok_always_matches_errors_on_random_sketches():
     import random
 
     rng = random.Random(7)
-    for _ in range(80):
-        n = rng.randint(3, 6)
-        pts = [[math.cos(2 * math.pi * i / n) * 10 + rng.uniform(-1, 1), math.sin(2 * math.pi * i / n) * 10
-                + rng.uniform(-1, 1)] for i in range(n)]
-        cons = []
+    for _ in range(60):
+        sk = _square()
         for _ in range(rng.randint(1, 5)):
-            t = rng.choice(["length", "horizontal", "vertical", "parallel", "equal", "coord_x"])
-            a = rng.randrange(n)
-            b = (a + rng.randint(1, n - 1)) % n
-            cons.append(_c(t, a, b, value=rng.uniform(2, 15)))
-        res = S.solve({"points": pts, "constraints": cons})
+            t = rng.choice(["length", "horizontal", "vertical", "parallel", "equal", "hdistance"])
+            a, b = rng.sample(range(4), 2)
+            refs = {"length": [f"e{a}"], "horizontal": [f"e{a}"], "vertical": [f"e{a}"], "parallel": [f"e{a}", f"e{b}"],
+                    "equal": [f"e{a}", f"e{b}"], "hdistance": ["o", f"p{2 * a}"]}[t]
+            sk["constraints"].append(_c(t, refs, rng.uniform(2, 15) if t in ("length", "hdistance") else None))
+        res = S.solve(sk)
         assert res.ok == (not res.errors)
         if res.ok:
             assert all(e.get("residual", 0.0) < S.TOL_OK for e in res.constraints)
 
 
-def test_drag_on_clockwise_sketch_moves_the_dragged_point():
-    clockwise = list(reversed(SQUARE))  # point 0 is (0, 10)
-    res = S.solve({"points": clockwise, "constraints": []}, drag={"point": 0, "target": [-3.0, 13.0]})
-    assert res.ok and res.reoriented
-    assert [-3.0, 13.0] in [[round(x, 6), round(y, 6)] for x, y in res.sketch["points"]]
-    assert [0.0, 10.0] not in [[round(x, 6), round(y, 6)] for x, y in res.sketch["points"]]
-
-
 def test_rejected_drag_returns_the_unchanged_sketch():
-    # Point 0 lies on the rod, the start position is moved slightly internally. The conflict
-    # forces the rejection. The moved start position used to come back
-    pts = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0]]
-    cons = [_c("dist_point", 0, value=0.0), _c("length", 1, value=10.0), _c("length", 1, value=12.0)]
-    res = S.solve({"points": pts, "constraints": cons}, drag={"point": 2, "target": [12.0, 12.0]})
+    sk = _square()
+    sk["constraints"] += [_c("length", ["e1"], 10.0), _c("length", ["e1"], 12.0)]
+    res = S.solve(sk, drag={"ref": "p4", "target": [12.0, 12.0]})
     assert not res.ok and res.errors
-    assert res.sketch["points"] == pts
+    assert res.sketch["points"] == sk["points"]
 
 
 def test_conflict_without_diagnosis_reports_an_error():
-    cons = [_c("length", 0, value=10.0), _c("length", 0, value=12.0)]
-    res = S.solve({"points": SQUARE, "constraints": cons}, diagnose=False)
+    sk = _square()
+    sk["constraints"] += [_c("length", ["e0"], 10.0), _c("length", ["e0"], 12.0)]
+    res = S.solve(sk, diagnose=False)
     assert not res.ok and res.errors
-    assert res.sketch["points"] == SQUARE
+    assert res.sketch["points"] == sk["points"]
 
 
-def test_self_intersection_is_always_reported():
-    star = [[math.cos(math.radians(90 + 144 * i)) * 10, math.sin(math.radians(90 + 144 * i)) * 10] for i in range(5)]
-    report = S.polygon_report(star)
-    assert not report["simple"]
-    assert any("schneidet sich selbst" in p for p in report["problems"])
-
-
-@pytest.mark.parametrize("bad", [{"points": 5, "constraints": []}, {"points": [], "constraints": 3}, {"points": None}])
+@pytest.mark.parametrize("bad", [{"points": 5, "entities": [], "constraints": []}, {"points": [], "entities": [], "constraints": 3},
+                                 {"points": None}])
 def test_solve_rejects_non_list_input_without_crash(bad):
     res = S.solve(bad)
     assert not res.ok and res.state == "invalid" and res.errors
 
 
-@pytest.mark.parametrize("t", [float("nan"), 0.0, 1.0, -0.5, 1.5, "0.5"])
-def test_insert_point_checks_parameter(t):
-    with pytest.raises(S.SketchError):
-        S.insert_point({"points": SQUARE, "constraints": []}, 0, t)
-
-
 def test_constraint_enabled_must_be_bool():
-    res = S.solve({"points": SQUARE, "constraints": [_c("length", 0, value=10.0, enabled="no")]})
+    sk = _square()
+    sk["constraints"].append(_c("length", ["e0"], 10.0, enabled="no"))
+    res = S.solve(sk)
     assert not res.ok and any("enabled" in e for e in res.errors)
 
 
@@ -236,19 +218,18 @@ def test_motor_sketch_is_solved_once(monkeypatch):
     monkeypatch.setattr(sketch_motor, "solve", counting)
     sketch_motor._motor_cache.clear()
     p = Project()
-    p.motor.sketch = S.legacy_to_sketch(p.motor)
     data = p.to_dict()
-    data["motor"]["sketch"] = S.legacy_to_sketch(p.motor)
+    data["motor"]["sketch"] = S.sketch_from_motor(p.motor)
     project = Project.from_dict(data)
     project.validate()
     Model(project)
     assert len(calls) == 1
 
 
-def test_constraint_registry_matches_spec_and_schema():
-    assert set(S.SPEC) == set(S.CONSTRAINT_TYPES) == {t["name"] for t in S.constraint_schema()}
+def test_constraint_registry_matches_schema():
+    assert set(S.CONSTRAINT_TYPES) == {t["name"] for t in S.constraint_schema()}
     for name, ctype in S.CONSTRAINT_TYPES.items():
-        assert ctype.index_fields, name
+        assert ctype.signatures, name
         assert ctype.value in (None, "len", "deg")
 
 
@@ -412,9 +393,9 @@ def test_motor_from_svg_does_not_share_lists_with_base():
     assert base.outline == [[0, 0], [1, 0], [0, 1]]
 
 
-@pytest.mark.parametrize("t", [None, "nan", "x", 2])
-def test_sketch_insert_with_bad_t_answers_valid_json(t):
-    code, payload = _post(App(), "/api/sketch/insert", {"sketch": {"points": SQUARE, "constraints": []}, "side": 0, "t": t})
+@pytest.mark.parametrize("target", [None, "nan", "x", [1, None]])
+def test_sketch_drag_with_bad_target_answers_valid_json(target):
+    code, payload = _post(App(), "/api/sketch/solve", {"sketch": _square(), "drag": {"ref": "p0", "target": target}})
     # Earlier. float(None) crashed, "nan" produced invalid JSON with NaN
     assert code == 200
     assert payload["ok"] is False and payload["errors"]

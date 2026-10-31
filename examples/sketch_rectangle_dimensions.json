@@ -40,73 +40,486 @@
         ],
         [
           1.0,
+          -27.0
+        ],
+        [
+          1.0,
+          -3.0
+        ],
+        [
+          1.0,
           -3.0
         ],
         [
           -11.0,
           -3.0
+        ],
+        [
+          -11.0,
+          -3.0
+        ],
+        [
+          -11.0,
+          -27.0
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -8.0,
+          2.0
+        ],
+        [
+          -8.0,
+          2.0
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -5.0,
+          0.0
         ]
+      ],
+      "entities": [
+        {
+          "type": "line",
+          "points": [
+            0,
+            1
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            2,
+            3
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            4,
+            5
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            6,
+            7
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            8,
+            9
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            10,
+            11
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            12,
+            13
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            14,
+            15
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            16,
+            17
+          ],
+          "radius": null,
+          "construction": true,
+          "role": "gear"
+        },
+        {
+          "type": "point",
+          "points": [
+            18
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        }
       ],
       "constraints": [
         {
+          "type": "coincident",
+          "refs": [
+            "p1",
+            "p2"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p3",
+            "p4"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p5",
+            "p6"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p7",
+            "p0"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
           "type": "horizontal",
-          "a": 0,
-          "b": null,
+          "refs": [
+            "e0"
+          ],
           "value": null,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e1"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e2"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e3"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
         },
         {
           "type": "length",
-          "a": 0,
-          "b": null,
+          "refs": [
+            "e0"
+          ],
           "value": 12.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
         },
         {
           "type": "length",
-          "a": 1,
-          "b": null,
+          "refs": [
+            "e3"
+          ],
           "value": 24.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
         },
         {
-          "type": "angle",
-          "a": 1,
-          "b": null,
-          "value": 90.0,
-          "value2": null,
-          "ref": "rod",
+          "type": "hdistance",
+          "refs": [
+            "o",
+            "p0"
+          ],
+          "value": 11.0,
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
         },
         {
-          "type": "parallel",
-          "a": 0,
-          "b": 2,
+          "type": "vdistance",
+          "refs": [
+            "o",
+            "p0"
+          ],
+          "value": 27.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p9",
+            "p10"
+          ],
           "value": null,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
         },
         {
-          "type": "parallel",
-          "a": 1,
-          "b": 3,
+          "type": "coincident",
+          "refs": [
+            "p11",
+            "p12"
+          ],
           "value": null,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": ""
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p13",
+            "p14"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p15",
+            "p8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e4"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e5"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e6"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e7"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p16",
+            "p8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p17",
+            "p12"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "midpoint",
+          "refs": [
+            "e9",
+            "e8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e9",
+            "o"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "distance",
+          "refs": [
+            "o",
+            "e9"
+          ],
+          "value": 5.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "length",
+          "refs": [
+            "e4"
+          ],
+          "value": 6.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "length",
+          "refs": [
+            "e7"
+          ],
+          "value": 4.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
         }
       ]
     }
@@ -157,6 +570,16 @@
     "top_k": 5,
     "refine_fraction": 0.35,
     "stagnation_s": 6.0,
-    "workers": 1
-  }
+    "workers": 1,
+    "pattern": "square",
+    "pattern_pitch": null,
+    "pattern_pitch_y": null,
+    "max_block_holes": 12,
+    "custom_tile": null,
+    "tile_rods": 2,
+    "tile_width": null,
+    "tile_height": null,
+    "tile_step": 0.5
+  },
+  "holes": null
 }

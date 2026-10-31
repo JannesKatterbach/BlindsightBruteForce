@@ -13,8 +13,8 @@
     "hole_clearance": 0.5
   },
   "motor": {
-    "width": 12.0,
-    "depth": 24.0,
+    "width": 16.000000000000256,
+    "depth": 20.54109961541443,
     "height": 10.0,
     "shaft_x": 0.0,
     "axis_height": 5.0,
@@ -31,82 +31,498 @@
     "sketch": {
       "points": [
         [
-          -12.635515234862693,
-          -26.790252090249233
+          -13.864402589849012,
+          -26.799999999999972
         ],
         [
-          3.3644847651401424,
-          -26.79025209025649
+          2.135597410151073,
+          -26.799999999999798
         ],
         [
-          -1.0016607395306856,
-          -6.24915247431404
+          2.1355974101511386,
+          -26.79999999999979
         ],
         [
-          -9.908571132615739,
-          -6.249152474228432
+          -2.2305480970020897,
+          -6.258900384585689
+        ],
+        [
+          -2.2305480970020666,
+          -6.258900384585685
+        ],
+        [
+          -10.242452514310436,
+          -6.2589003845855435
+        ],
+        [
+          -10.242452514310441,
+          -6.258900384585541
+        ],
+        [
+          -13.864402589849117,
+          -26.79999999999995
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -8.0,
+          2.0
+        ],
+        [
+          -8.0,
+          2.0
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -8.0,
+          -2.0
+        ],
+        [
+          -2.0,
+          2.0
+        ],
+        [
+          -5.0,
+          0.0
         ]
+      ],
+      "entities": [
+        {
+          "type": "line",
+          "points": [
+            0,
+            1
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            2,
+            3
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            4,
+            5
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            6,
+            7
+          ],
+          "radius": null,
+          "construction": false,
+          "role": ""
+        },
+        {
+          "type": "line",
+          "points": [
+            8,
+            9
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            10,
+            11
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            12,
+            13
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            14,
+            15
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        },
+        {
+          "type": "line",
+          "points": [
+            16,
+            17
+          ],
+          "radius": null,
+          "construction": true,
+          "role": "gear"
+        },
+        {
+          "type": "point",
+          "points": [
+            18
+          ],
+          "radius": null,
+          "construction": false,
+          "role": "gear"
+        }
       ],
       "constraints": [
         {
-          "type": "horizontal",
-          "a": 0,
-          "b": null,
+          "type": "coincident",
+          "refs": [
+            "p1",
+            "p2"
+          ],
           "value": null,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Unterkante waagerecht"
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p3",
+            "p4"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p5",
+            "p6"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p7",
+            "p0"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e0"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "Unterkante waagerecht",
+          "label": null
         },
         {
           "type": "length",
-          "a": 0,
-          "b": null,
+          "refs": [
+            "e0"
+          ],
           "value": 16.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Breite unten"
+          "name": "Breite unten",
+          "label": null
         },
         {
           "type": "parallel",
-          "a": 0,
-          "b": 2,
+          "refs": [
+            "e0",
+            "e2"
+          ],
           "value": null,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Oberkante parallel"
+          "name": "Oberkante parallel",
+          "label": null
         },
         {
           "type": "angle",
-          "a": 1,
-          "b": null,
+          "refs": [
+            "e0",
+            "e1"
+          ],
           "value": 78.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Flankenwinkel rechts"
+          "name": "Flankenwinkel rechts",
+          "label": null
         },
         {
           "type": "length",
-          "a": 1,
-          "b": null,
+          "refs": [
+            "e1"
+          ],
           "value": 21.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Flanke rechts"
+          "name": "Flanke rechts",
+          "label": null
         },
         {
-          "type": "dist_side",
-          "a": 3,
-          "b": null,
+          "type": "distance",
+          "refs": [
+            "o",
+            "e3"
+          ],
           "value": 9.0,
-          "value2": null,
-          "ref": "rod",
+          "at": null,
           "enabled": true,
-          "name": "Abstand linke Flanke zur Stange"
+          "name": "Abstand linke Flanke zur Stange",
+          "label": null
+        },
+        {
+          "type": "vdistance",
+          "refs": [
+            "o",
+            "p0"
+          ],
+          "value": 26.8,
+          "at": null,
+          "enabled": true,
+          "name": "Höhe über der Stange",
+          "label": null
+        },
+        {
+          "type": "angle",
+          "refs": [
+            "e0",
+            "e3"
+          ],
+          "value": 80.0,
+          "at": null,
+          "enabled": true,
+          "name": "Flankenwinkel links",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p9",
+            "p10"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p11",
+            "p12"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p13",
+            "p14"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p15",
+            "p8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e4"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e5"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e6"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "vertical",
+          "refs": [
+            "e7"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p16",
+            "p8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "coincident",
+          "refs": [
+            "p17",
+            "p12"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "midpoint",
+          "refs": [
+            "e9",
+            "e8"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "horizontal",
+          "refs": [
+            "e9",
+            "o"
+          ],
+          "value": null,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "distance",
+          "refs": [
+            "o",
+            "e9"
+          ],
+          "value": 5.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "length",
+          "refs": [
+            "e4"
+          ],
+          "value": 6.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
+        },
+        {
+          "type": "length",
+          "refs": [
+            "e7"
+          ],
+          "value": 4.0,
+          "at": null,
+          "enabled": true,
+          "name": "",
+          "label": null
         }
       ]
     }
@@ -157,6 +573,16 @@
     "top_k": 5,
     "refine_fraction": 0.35,
     "stagnation_s": 6.0,
-    "workers": 1
-  }
+    "workers": 1,
+    "pattern": "square",
+    "pattern_pitch": null,
+    "pattern_pitch_y": null,
+    "max_block_holes": 12,
+    "custom_tile": null,
+    "tile_rods": 2,
+    "tile_width": null,
+    "tile_height": null,
+    "tile_step": 0.5
+  },
+  "holes": null
 }
