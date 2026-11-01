@@ -48,7 +48,9 @@
       "count": 10.0,
       "area": 8.0,
       "uniformity": 2.0,
-      "regularity": 1.0
+      "regularity": 1.0,
+      "border": 50,
+      "alignment": 50
     },
     "patterns": [
       "hex_x",

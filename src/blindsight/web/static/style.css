@@ -28,7 +28,7 @@ details{margin-top:10px}summary{cursor:pointer}
 details.advanced{margin-top:8px}details.advanced>summary{color:var(--mut);padding:4px 0}details.advanced>.form{margin-top:6px}
 .toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:10px 0}
 .toolbar .group{display:inline-flex;gap:6px;align-items:center}
-#weights{display:grid;grid-template-columns:1fr 160px 44px;gap:6px 10px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px}
+#weights{display:grid;gap:8px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px}
 #weights input[type=range]{padding:0}
 
 /* Tables */
@@ -114,3 +114,10 @@ svg{background:var(--card);border:1px solid var(--bd);border-radius:8px;width:10
 #runSummary{line-height:1.6}
 .form input[type=checkbox]{width:auto;justify-self:start}
 #f-pattern,#f-free{max-width:720px}
+/* Goals in percent and the sum below them */
+.weightRow{display:grid;grid-template-columns:1fr 140px 64px 16px;gap:4px 8px;align-items:center}
+.weightRow input[type=number]{width:64px}.weightRow .weightNote{grid-column:1/-1;margin-top:-2px}
+.weightNote:empty{display:none}
+.weightSum{display:flex;gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);font-weight:600}
+.weightSum .ok{color:var(--ok)}.weightSum .warn{color:var(--warn)}
+#tiledPreview,#blockPreview{max-width:640px}

@@ -52,10 +52,10 @@
   "obstacles": [],
   "search": {
     "weights": {
-      "count": 10.0,
-      "area": 1,
-      "uniformity": 10,
-      "regularity": 1.0
+      "count": 45,
+      "area": 5,
+      "uniformity": 45,
+      "regularity": 5
     },
     "optimizer": "pattern_greedy",
     "patterns": [

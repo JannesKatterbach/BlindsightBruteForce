@@ -66,6 +66,7 @@ function renderResult() {
   renderLegend();
   renderEditPanel();
   drawView();
+  if ($("#tileView").classList.contains("active")) renderTiling();
 }
 
 function renderStatusBox() {
@@ -129,7 +130,7 @@ function renderMetrics() {
     [t("ui.metric.upper_bound"), r.upper_bound], [t("ui.metric.candidates"), fmtCount(r.candidates)], [t("ui.metric.time"), r.elapsed.toFixed(1) + " s"],
   ];
   for (const key of Object.keys(M).filter((k) => k.startsWith("plane_"))) rows.push([t("ui.metric.units_on", { plane: key.split("_")[1] }), M[key]]);
-  if ("layers" in score.terms) {  // modes holes and pattern
+  if ("border" in score.terms) {  // modes holes and pattern
     rows.push([t("ui.metric.layers_used"), t("ui.metric.layers_of", { k: M.layers_used, n: cfg.stack.n_motor_planes })]);
     if (cfg.bounds.border) rows.push([t("ui.metric.border_depth"), `${M.border_depth.toFixed(1)} / ${round(cfg.bounds.border_width, 2)} mm`]);
   }
@@ -160,5 +161,5 @@ function renderLegend() {
   const swatch = (style, text) => `<span><i style="${style}"></i>${text}</span>`;
   $("#legend").innerHTML = lastGeo.planes.slice(1).map((p) => swatch(`background:${col(p.index)}`, esc(t("ui.legend.motor_on", { plane: p.name })))).join("") +
     swatch(`background:${COLORS.rod}`, esc(t("ui.legend.rod"))) + swatch(`background:none;border:2px solid ${COLORS.bad}`, esc(t("ui.legend.collision"))) +
-    swatch(`background:none;border:2px solid ${COLORS.tight}`, esc(t("ui.legend.tight")));
+    swatch(`background:${COLORS.tight};border-radius:50%;width:8px;height:8px`, esc(t("ui.legend.tight")));
 }

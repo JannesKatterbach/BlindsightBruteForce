@@ -120,9 +120,12 @@ function renderModes() {
   renderRunSummary();
 }
 
-/** The target count belongs to the pattern task or the free distribution, the field moves along. */
+/** The target count belongs to the pattern (number of holes) or the free distribution, the field moves along. */
 function placeCountField(mode) {
   const label = document.querySelector('[data-label-for="target_count"]'), input = $("#in-target_count");
+  if (!label || !input) return;
+  const field = fieldByPath("target_count"), text = mode === "free" ? lenLabel(field.label, field.kind) : t("ui.pattern.count_label");
+  if (ownText(label) !== text) setFieldLabel(label, field, text);
   const box = $(mode === "free" ? "#f-free" : "#f-pattern");
   if (!label || !input || box.lastElementChild === input || box.lastElementChild === input.nextElementSibling) return;
   const error = input.nextElementSibling && input.nextElementSibling.classList.contains("errmsg") ? input.nextElementSibling : null;
@@ -137,14 +140,17 @@ function renderRunSummary() {
   let what;
   if (mode === "holes") what = t("ui.summary.holes", { n: (cfg.holes || []).length });
   else if (mode === "pattern") {
+    const count = se.pattern_count === "fill" ? optionLabel("search.pattern_count", "fill") : t("ui.summary.holes_count", { n: cfg.target_count });
+    const distance = se.pattern_distance === "fixed" ? t("ui.summary.distance_fixed", { a: round(se.pattern_pitch || 0, 2) }) : optionLabel("search.pattern_distance", se.pattern_distance);
     what = t("ui.summary.pattern", {
-      pattern: optionLabel("search.pattern", se.pattern), task: optionLabel("search.pattern_task", se.pattern_task),
+      pattern: optionLabel("search.pattern", se.pattern), count, distance,
       repeat: t(se.optimizer === "pattern_holes" ? "ui.summary.repeat_holes" : "ui.summary.repeat_block"),
     });
   } else what = t("ui.summary.free", { n: cfg.target_count, method: optionLabel("search.optimizer", se.optimizer) });
   const board = t("ui.summary.board", { w: round(b.width, 2), h: round(b.height, 2) }) + ", " +
     (b.border ? t("ui.summary.border", { b: round(b.border_width, 2) }) : t("ui.summary.no_border"));
-  box.innerHTML = `<b>${esc(what)}</b><br>${esc(board)}. ${esc(t("ui.summary.layers", { n: cfg.stack.n_motor_planes }))}`;
+  const layers = t(cfg.stack.layers_fixed ? "ui.summary.layers_fixed" : "ui.summary.layers", { n: cfg.stack.n_motor_planes });
+  box.innerHTML = `<b>${esc(what)}</b><br>${esc(board)}. ${esc(layers)}`;
 }
 
 function initModes() {

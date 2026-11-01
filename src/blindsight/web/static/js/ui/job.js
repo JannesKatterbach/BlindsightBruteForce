@@ -17,8 +17,11 @@ function stopPolling() {
   statusTimer = liveTimer = null;
 }
 
+let jobRunning = false;
+
 function setRunning(running) {
-  $("#btnStart").disabled = running;
+  jobRunning = running;
+  updateStartButton();
   $("#btnCancel").disabled = !running;
 }
 

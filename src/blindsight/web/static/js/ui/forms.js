@@ -6,7 +6,7 @@ const GROUP_TARGET = { general: "f-general", rod: "f-rod", motor: "f-motor", sta
 // pattern and free distribution (modes.js)
 const FIELD_PLACE = {
   target_count: "f-pattern",
-  "search.pattern_task": "f-pattern", "search.pattern_fill": "f-pattern", "search.pattern_pitch": "f-pattern",
+  "search.pattern_count": "f-pattern", "search.pattern_distance": "f-pattern", "search.pattern_pitch": "f-pattern",
   "search.pattern_pitch_y": "f-pattern", "search.tile_rods": "f-pattern", "search.tile_width": "f-pattern",
   "search.tile_height": "f-pattern", "search.max_block_holes": "f-pattern", "search.tile_step": "f-pattern",
   "search.layout_goal": "f-free", "search.patterns": "f-free", "search.fixed_pitch": "f-free",
@@ -35,12 +35,11 @@ function optionLabel(path, value) {
 const modeIs = (c, mode) => (MODE_OF_OPTIMIZER[c.search.optimizer] || "free") === mode;
 const block = (c) => c.search.optimizer === "periodic_tile";  // 2a, holes and motors repeat
 const lattice = (c) => c.search.pattern !== "free";
-const task = (c, ...names) => names.includes(c.search.pattern_task);
 const FIELD_VISIBLE = {
-  "target_count": (c) => modeIs(c, "free") || (modeIs(c, "pattern") && (task(c, "count") || (task(c, "dense") && !c.search.pattern_fill))),
-  "search.pattern_task": (c) => modeIs(c, "pattern"),
-  "search.pattern_fill": (c) => modeIs(c, "pattern") && task(c, "dense"),
-  "search.pattern_pitch": (c) => modeIs(c, "pattern") && task(c, "pitch") && lattice(c),
+  "target_count": (c) => modeIs(c, "free") || (modeIs(c, "pattern") && c.search.pattern_count === "exact"),
+  "search.pattern_count": (c) => modeIs(c, "pattern"),
+  "search.pattern_distance": (c) => modeIs(c, "pattern"),
+  "search.pattern_pitch": (c) => modeIs(c, "pattern") && c.search.pattern_distance === "fixed" && lattice(c),
   "search.pattern_pitch_y": (c) => modeIs(c, "pattern") && ["rectangle", "staggered"].includes(c.search.pattern),
   "search.max_block_holes": (c) => block(c) && lattice(c),
   "search.tile_rods": (c) => block(c) && !lattice(c),
@@ -68,8 +67,20 @@ function updateFieldVisibility() {
     if (next && next.classList.contains("errmsg")) next.hidden = !show;
   }
   updateAdvancedParts();
+  blockConflictingOptions();
   renderModes();
   renderWeightsForMode();
+}
+
+/** Options that do not go together are greyed out. "As large as possible" spreads a given number of holes,
+ * with a full board it has no meaning. */
+function blockConflictingOptions() {
+  const count = $("#in-search-pattern_count"), distance = $("#in-search-pattern_distance");
+  if (!count || !distance) return;
+  const largest = distance.querySelector('option[value="largest"]'), fill = count.querySelector('option[value="fill"]');
+  largest.disabled = cfg.search.pattern_count === "fill";
+  fill.disabled = cfg.search.pattern_distance === "largest";
+  largest.title = fill.title = t("ui.pattern.largest_needs_exact");
 }
 
 /** Folded part "More settings" of a form, created on first use right below the form. */

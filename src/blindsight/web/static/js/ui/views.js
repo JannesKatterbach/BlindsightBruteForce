@@ -32,7 +32,7 @@ function drawPlan(svg, g, plane, live) {
   const b = g.bounds, w = b.xmax - b.xmin, h = b.ymax - b.ymin, m = Math.max(w, h) * 0.04;
   svg.setAttribute("viewBox", `${b.xmin - m} ${-b.ymax - m} ${w + 2 * m} ${h + 2 * m}`);
   const ctx = { svg, g, w, fs: Math.max(w, h) / 50, pts: (outline) => outline.map(([x, y]) => `${x},${-y}`).join(" ") };
-  el("rect", { x: b.xmin, y: -b.ymax, width: w, height: h, fill: "none", stroke: "currentColor", "stroke-width": w / 500 }, svg);
+  drawBoardFrame(svg, w, h, b.edge_margin || 0, b.rod_margin ?? b.edge_margin ?? 0, w / 500);  // origin at the bottom left
   g.obstacles.forEach((o) => el("polygon", { points: ctx.pts(o.outline), fill: COLORS.obstacle, stroke: COLORS.obstacleStroke, "stroke-width": w / 700 }, svg));
   drawPlanMotors(ctx, plane);
   drawPlanRods(ctx, plane, live);
@@ -57,7 +57,8 @@ function drawPlanRods({ svg, g, w, fs }, plane, live) {
   for (const u of g.units) {
     if (plane != null && !(u.plane === plane || rodPasses(g, u, plane))) continue;
     if (plane != null) el("circle", { cx: u.x, cy: -u.y, r: g.hole_diameter / 2, fill: "none", stroke: "currentColor", "stroke-width": w / 700 }, svg);
-    el("circle", { cx: u.x, cy: -u.y, r: Math.max(r, w / 200), fill: u.id === selUnit ? COLORS.bad : COLORS.rod, "data-unit": u.id, class: editMode && !live ? "handle" : "" }, svg);
+    el("circle", { cx: u.x, cy: -u.y, r: Math.max(r, w / 200), fill: u.id === selUnit ? COLORS.bad : COLORS.rod, style: "stroke:var(--card)", "stroke-width": w / 900,
+                   "data-unit": u.id, class: editMode && !live ? "handle" : "" }, svg);
     svgText(svg, { x: u.x + r + fs * 0.3, y: -u.y - r, "font-size": fs, fill: "currentColor", "pointer-events": "none" }, u.id);
   }
 }
@@ -76,20 +77,24 @@ function drawPlanDistances({ svg, g, w, fs }) {
   }
 }
 
-function drawPlanTightSpots({ svg, g, w, fs }) {
+/** Tight spots as a small dot where two parts come closest, the tooltip names distance and parts. */
+function drawPlanTightSpots({ svg, g, fs }) {
   for (const p of g.closest_pairs || []) {
     if (p.gap >= g.required_gap * TIGHT_FACTOR) continue;
-    const stroke = p.gap < g.required_gap - GAP_EPS ? COLORS.bad : COLORS.tight;
-    el("circle", { cx: p.x, cy: -p.y, r: fs, fill: "none", stroke, "stroke-width": w / 600, "pointer-events": "none" }, svg);
+    const dot = el("circle", { cx: p.x, cy: -p.y, r: fs * 0.32, fill: p.gap < g.required_gap - GAP_EPS ? COLORS.bad : COLORS.tight, class: "tightSpot" }, svg);
+    el("title", {}, dot).textContent = t("ui.result.tight_spot", { gap: p.gap.toFixed(2), a: `${p.a} ${kindLabel(p.kind_a)}`, b: `${p.b} ${kindLabel(p.kind_b)}` });
   }
 }
 
-/** Outlines of the placed tiles of a repeating pattern. */
-function drawTileGrid({ svg, w }) {
+/** Outlines of the placed blocks of a repeating pattern, cut at the board edge. */
+function drawTileGrid({ svg, g, w }) {
   const tile = currentTile();
   if (!tile) return;
+  const b = g.bounds, clip = el("clipPath", { id: "boardClip" }, el("defs", {}, svg));
+  el("rect", { x: b.xmin, y: -b.ymax, width: b.xmax - b.xmin, height: b.ymax - b.ymin }, clip);
+  const group = el("g", { "clip-path": "url(#boardClip)" }, svg);
   for (const [x, y] of tile.origins) {
-    el("rect", { x, y: -(y + tile.height), width: tile.width, height: tile.height, fill: "none", stroke: "#8a6", "stroke-width": w / 900, "stroke-dasharray": `${w / 300} ${w / 300}`, "pointer-events": "none", class: "tile" }, svg);
+    el("rect", { x, y: -(y + tile.height), width: tile.width, height: tile.height, fill: "none", stroke: "#8a6", "stroke-width": w / 900, "stroke-dasharray": `${w / 300} ${w / 300}`, "pointer-events": "none", class: "tile" }, group);
   }
 }
 

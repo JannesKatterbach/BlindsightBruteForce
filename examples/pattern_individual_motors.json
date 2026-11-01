@@ -12,11 +12,14 @@
     "pattern": "hex",
     "time_limit_s": 8,
     "weights": {
-      "layers": 6,
-      "border": 2,
-      "alignment": 2
+      "layers": 60,
+      "border": 20,
+      "alignment": 20
     },
     "pattern_count": "exact",
     "pattern_distance": "smallest"
+  },
+  "stack": {
+    "layers_fixed": false
   }
 }

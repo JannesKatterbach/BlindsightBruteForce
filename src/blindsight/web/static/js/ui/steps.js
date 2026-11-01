@@ -78,8 +78,19 @@ function stepButton(key, target, className) {
   return button;
 }
 
+/** Open the step and, if it has a problem, the first field with an error. */
+function openStep(step) {
+  switchTab(step);
+  const field = $(`#tab-${step} .err`);
+  if (!field) return;
+  const folded = field.closest("details");
+  if (folded) folded.open = true;
+  field.scrollIntoView({ block: "center" });
+  field.focus();
+}
+
 function initSteps() {
-  $$("#steps button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.step)));
+  $$("#steps button").forEach((b) => b.addEventListener("click", () => openStep(b.dataset.step)));
   $$("[data-motor-view]").forEach((b) => b.addEventListener("click", () => { stepState.motorView = b.dataset.motorView; switchTab("motor"); }));
   addStepButtons();
   renderStepStates();

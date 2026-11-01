@@ -8,7 +8,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // Colours of the motor layers (same table as in the SVG export)
 const PLANE_COLORS = ["#4e79a7", "#f28e2b", "#59a14f", "#b07aa1", "#edc948", "#76b7b2", "#ff9da7", "#9c755f"];
 const col = (plane) => PLANE_COLORS[(plane - 1) % PLANE_COLORS.length];
-const COLORS = { bad: "#e00", tight: "#e08a00", rod: "#222", obstacle: "#bbb", obstacleStroke: "#555", g0: "#a1887f", gear: "#f28e2b" };
+// Rods take the text colour, so they stay visible in the light and the dark mode
+const COLORS = { bad: "#e00", tight: "#e08a00", rod: "currentColor", obstacle: "#bbb", obstacleStroke: "#555", g0: "#a1887f", gear: "#f28e2b" };
 /** Label of a part kind (housing, gear, rod, obstacle). */
 const kindLabel = (kind) => t("ui.kind." + kind);
 
@@ -18,6 +19,15 @@ function el(name, attrs = {}, parent) {
   for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
   if (parent) parent.appendChild(node);
   return node;
+}
+
+/** Board in top view (origin at the bottom left, y drawn upwards). The edge strip for motors light between
+ * the keep out edge and the area of the holes, the area of the holes dashed. */
+function drawBoardFrame(svg, w, h, edgeMargin, rodMargin, strokeWidth) {
+  el("rect", { x: 0, y: -h, width: w, height: h, fill: "none", stroke: "currentColor", "stroke-width": strokeWidth }, svg);
+  const frame = (m) => `M ${m} ${-h + m} H ${w - m} V ${-m} H ${m} Z`;
+  if (rodMargin > edgeMargin) el("path", { d: frame(edgeMargin) + " " + frame(rodMargin), "fill-rule": "evenodd", fill: COLORS.gear, "fill-opacity": 0.16, "pointer-events": "none", class: "edgeStrip" }, svg);
+  if (rodMargin > 0) el("path", { d: frame(rodMargin), fill: "none", stroke: "#888", "stroke-dasharray": `${w / 120} ${w / 120}`, "stroke-width": strokeWidth / 1.5, "pointer-events": "none", class: "holeArea" }, svg);
 }
 
 /** SVG text with content. */

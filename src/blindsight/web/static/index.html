@@ -216,6 +216,7 @@
       <div><h2 data-i18n="ui.optim.computation" data-help="ui.help.computation">Berechnung</h2>
         <button id="btnStart" class="primary" data-i18n="ui.optim.start">Optimierung starten</button>
         <button id="btnCancel" disabled data-i18n="ui.optim.cancel">Abbrechen</button>
+        <p id="startHint" class="hint" role="status"></p>
         <div class="progress"><div id="bar"></div></div>
         <table class="kv" id="progTable"></table>
         <div id="errors" class="errors"></div>
@@ -231,6 +232,11 @@
     </div>
     <div id="resultBox" hidden>
       <div id="statusBox" class="statusBox"></div>
+      <div class="seg" role="group">
+        <button data-result-view="main" class="active" data-i18n="ui.results.view_main">Ergebnis</button>
+        <button data-result-view="tile" data-i18n="ui.results.view_tile">Muster kacheln</button>
+      </div>
+      <div id="resultMain" class="view active">
       <div class="toolbar">
         <label><span data-i18n="ui.results.solution">Lösung</span> <select id="solSel"></select></label>
         <label><span data-i18n="ui.results.view" data-help="ui.help.view">Ansicht</span> <select id="viewSel">
@@ -259,6 +265,26 @@
           <h2 data-i18n="ui.results.messages">Hinweise</h2><ul id="messages"></ul>
           <h2 data-i18n="ui.results.collisions">Kollisionen</h2><ul id="collisions"></ul></div>
       </div>
+      </div>
+      <div id="tileView" class="view">
+        <p id="tileUnavailable" class="statusBox" hidden></p>
+        <div id="tileContent" class="cols">
+          <div><h2 data-i18n="ui.tile.block" data-help="ui.help.tiling">Block</h2>
+            <svg id="blockPreview" viewBox="0 0 100 100"></svg>
+            <div class="form">
+              <label for="tileNx" data-i18n="ui.tile.nx">Blöcke in x</label><input id="tileNx" type="number" min="1" max="40" step="1" value="3">
+              <label for="tileNy" data-i18n="ui.tile.ny">Blöcke in y</label><input id="tileNy" type="number" min="1" max="40" step="1" value="3">
+            </div>
+            <div class="toolbar">
+              <button id="tileDownloadBlock" data-i18n="ui.tile.download_block">Block als Datei</button>
+              <button id="tileDownloadTile" data-i18n="ui.tile.download_tile">Block als eigene Kachel</button>
+            </div></div>
+          <div><h2 data-i18n="ui.tile.preview">Gekachelte Anordnung</h2>
+            <div id="tileStatus" class="statusBox"></div>
+            <svg id="tiledPreview" viewBox="0 0 100 100"></svg>
+            <div class="toolbar"><button id="tileApply" class="primary" data-i18n="ui.tile.apply">Als Ergebnis übernehmen</button></div></div>
+        </div>
+      </div>
     </div>
   </section>
 </main>
@@ -280,6 +306,7 @@
 <script src="/static/js/ui/views.js"></script>
 <script src="/static/js/ui/edit.js"></script>
 <script src="/static/js/ui/export.js"></script>
+<script src="/static/js/ui/tiling.js"></script>
 <script src="/static/js/ui/holes.js"></script>
 <script src="/static/js/ui/modes.js"></script>
 <script src="/static/js/ui/steps.js"></script>

@@ -18,6 +18,7 @@ const UI_START = { search: { optimizer: "periodic_tile" } };
 /** Load a configuration (missing values from the defaults). */
 async function loadCfg(obj) {
   cfg = mergeConfig(clone(defaults), obj || {});
+  if (!weightsComplete()) normalizeWeights();  // older files kept relative weights, their ratio stays
   loadHolesFromCfg();
   writeInputs();
   await refresh();
@@ -116,6 +117,7 @@ async function init() {
   if (window.initSketch) initSketch();
   initIsoDrag();
   initEdit();
+  initTiling();
   bindHeader();
   bindTabs();
   initHoles();

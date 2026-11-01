@@ -62,10 +62,10 @@
   ],
   "search": {
     "weights": {
-      "count": 10,
-      "area": 4,
-      "uniformity": 2.0,
-      "regularity": 1.0
+      "count": 58,
+      "area": 24,
+      "uniformity": 12,
+      "regularity": 6
     },
     "patterns": [
       "square",

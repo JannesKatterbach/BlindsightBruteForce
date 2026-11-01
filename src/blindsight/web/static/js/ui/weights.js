@@ -1,25 +1,27 @@
 "use strict";
-// Priorities of the goals. Every mode rates its own goals (scoring.GOALS_BY_MODE), the sliders show their
-// share in percent. The values stay relative weights in cfg.search.weights.
+// Priorities of the goals in percent. Every mode rates its own goals (scoring.goals_for), few layers only when
+// the layer count is not fixed. Every goal has a slider and a number field, both move freely. The sum must be
+// 100 percent before a run starts, the line below the goals says how far off it is.
 
-const WEIGHT_SLIDER_MAX = 20;  // larger values are kept, the slider grows with them
+const WEIGHT_MAX = 100;
 const GOALS_BY_MODE = {
   free: ["count", "area", "uniformity", "regularity"],
-  holes: ["layers", "border", "alignment"],
-  pattern: ["layers", "border", "alignment"],
+  holes: ["border", "alignment"],
+  pattern: ["border", "alignment"],
 };
+// Presets in percent. Goals that are not shown are left out and the rest is scaled to 100
 const WEIGHT_PRESETS = {
   free: {
-    count: { count: 20, area: 3, uniformity: 1, regularity: 1 },
-    area: { count: 8, area: 20, uniformity: 2, regularity: 1 },
-    uniform: { count: 6, area: 3, uniformity: 15, regularity: 4 },
-    balanced: { count: 10, area: 8, uniformity: 2, regularity: 1 },
+    count: { count: 70, area: 15, uniformity: 10, regularity: 5 },
+    area: { count: 30, area: 60, uniformity: 6, regularity: 4 },
+    uniform: { count: 25, area: 15, uniformity: 45, regularity: 15 },
+    balanced: { count: 48, area: 38, uniformity: 10, regularity: 4 },
   },
   goals: {
-    layers: { layers: 10, border: 2, alignment: 2 },
-    border: { layers: 2, border: 10, alignment: 2 },
-    alignment: { layers: 2, border: 2, alignment: 10 },
-    balanced: { layers: 1, border: 1, alignment: 1 },
+    layers: { layers: 60, border: 20, alignment: 20 },
+    border: { layers: 10, border: 70, alignment: 20 },
+    alignment: { layers: 10, border: 20, alignment: 70 },
+    balanced: { layers: 34, border: 33, alignment: 33 },
   },
 };
 const PRESET_LABELS = {
@@ -29,81 +31,118 @@ const PRESET_LABELS = {
 
 const weightFields = () => schema.fields.filter((f) => f.group === "weights");
 const weightKey = (field) => field.path.split(".").pop();
-const modeGoals = () => GOALS_BY_MODE[currentMode()];
+/** Goals of the current mode, like scoring.goals_for in the core. */
+const modeGoals = () => GOALS_BY_MODE[currentMode()].concat(cfg.stack.layers_fixed ? [] : ["layers"]);
+const weightSum = () => modeGoals().reduce((sum, k) => sum + (cfg.search.weights[k] || 0), 0);
+const weightsComplete = () => Math.abs(weightSum() - 100) < 1e-6;
 
 function buildWeights() {
   const box = $("#weights");
   box.innerHTML = "";
   for (const field of weightFields()) {
     const key = weightKey(field);
+    const row = document.createElement("div");
+    row.className = "weightRow";
+    row.dataset.wRow = key;
     const label = document.createElement("label");
     setFieldLabel(label, field, field.label);
     label.title = field.tip;
-    label.dataset.wLabel = key;
+    label.htmlFor = "wn-" + key;
     const range = document.createElement("input");
-    range.type = "range";
-    range.min = 0;
-    range.max = WEIGHT_SLIDER_MAX;
-    range.step = 0.5;
+    Object.assign(range, { type: "range", min: 0, max: WEIGHT_MAX, step: 1, title: field.tip });
     range.dataset.w = key;
-    range.title = field.tip;
     range.setAttribute("aria-label", field.label);
-    const value = document.createElement("span");
-    value.id = "wv-" + key;
-    range.addEventListener("input", () => {
-      cfg.search.weights[key] = parseFloat(range.value);
-      renderWeightShares();
-    });
-    box.append(label, range, value);
+    const number = document.createElement("input");
+    Object.assign(number, { type: "number", min: 0, max: WEIGHT_MAX, step: 1, id: "wn-" + key });
+    number.dataset.wNumber = key;
+    const unit = document.createElement("span");
+    unit.textContent = "%";
+    const note = document.createElement("span");
+    note.className = "hint weightNote";
+    note.id = "wnote-" + key;
+    const set = (value) => {
+      const v = Math.max(0, Math.min(WEIGHT_MAX, Math.round(Number(value) || 0)));
+      cfg.search.weights[key] = v;
+      range.value = number.value = v;
+      renderWeightSum();
+    };
+    range.addEventListener("input", () => set(range.value));
+    number.addEventListener("change", () => set(number.value));
+    row.append(label, range, number, unit, note);
+    box.appendChild(row);
   }
+  const sum = document.createElement("div");
+  sum.className = "weightSum";
+  sum.innerHTML = '<span id="weightSum"></span> <button id="weightNormalize" type="button"></button>';
+  box.appendChild(sum);
+  $("#weightNormalize").addEventListener("click", normalizeWeights);
 }
 
 function writeWeights() {
   for (const field of weightFields()) {
     const key = weightKey(field);
-    const range = document.querySelector(`[data-w="${key}"]`);
-    const value = cfg.search.weights[key];
-    range.max = Math.max(WEIGHT_SLIDER_MAX, Math.ceil(value));  // values above 20 used to be cut off
-    range.value = value;
+    const value = Math.round(cfg.search.weights[key] || 0);
+    document.querySelector(`[data-w="${key}"]`).value = value;
+    document.querySelector(`[data-w-number="${key}"]`).value = value;
   }
   renderWeightsForMode();
 }
 
-/** Only the goals of the mode, each with its share. The edge goal needs the edge strip. */
+/** Only the goals of the mode. The edge goal says when it has no effect (edge strip off). */
 function renderWeightsForMode() {
   if (!cfg || !schema) return;
   const goals = modeGoals();
   for (const field of weightFields()) {
-    const key = weightKey(field), shown = goals.includes(key);
-    for (const node of [document.querySelector(`[data-w-label="${key}"]`), document.querySelector(`[data-w="${key}"]`), $("#wv-" + key)]) {
-      if (node) node.hidden = !shown;
-    }
+    const key = weightKey(field);
+    const row = document.querySelector(`[data-w-row="${key}"]`);
+    if (row) row.hidden = !goals.includes(key);
   }
-  const borderRange = document.querySelector('[data-w="border"]');
-  if (borderRange) {
-    borderRange.disabled = !cfg.bounds.border;
-    borderRange.title = cfg.bounds.border ? fieldByPath("search.weights.border").tip : t("ui.run.border_off");
-  }
-  renderWeightShares();
+  const note = $("#wnote-border");
+  if (note) note.textContent = cfg.bounds.border ? "" : t("ui.run.border_off");
+  renderWeightSum();
   renderPresets();
 }
 
-function renderWeightShares() {
-  const goals = modeGoals(), w = cfg.search.weights;
-  const total = goals.reduce((sum, k) => sum + w[k], 0);
-  for (const key of goals) {
-    const node = $("#wv-" + key);
-    if (node) node.textContent = `${Math.round(total > 0 ? (100 * w[key]) / total : 100 / goals.length)} %`;
-  }
+/** Sum of the shown goals, green at 100 percent, otherwise how much is missing or too much. */
+function renderWeightSum() {
+  const box = $("#weightSum");
+  if (!box || !cfg) return;
+  const sum = Math.round(weightSum()), rest = Math.abs(100 - sum);
+  box.textContent = sum === 100 ? t("ui.run.sum_ok") : t(sum < 100 ? "ui.run.sum_missing" : "ui.run.sum_over", { sum, rest });
+  box.className = sum === 100 ? "ok" : "warn";
+  $("#weightNormalize").textContent = t("ui.run.normalize");
+  $("#weightNormalize").hidden = sum === 100;
+  updateStartButton();
+}
+
+/** Scale the shown goals to 100 percent (whole numbers, the rest goes to the largest). */
+function normalizeWeights() {
+  const goals = modeGoals(), w = cfg.search.weights, sum = weightSum();
+  const values = goals.map((k) => (sum > 0 ? Math.round((100 * (w[k] || 0)) / sum) : Math.floor(100 / goals.length)));
+  const largest = values.indexOf(Math.max(...values));
+  values[largest] += 100 - values.reduce((a, b) => a + b, 0);
+  goals.forEach((k, i) => { w[k] = values[i]; });
+  writeWeights();
+}
+
+/** Start only with priorities of 100 percent and no run going on. */
+function updateStartButton() {
+  const button = $("#btnStart");
+  if (!button || !cfg) return;
+  const ready = weightsComplete();
+  button.disabled = jobRunning || !ready;
+  button.title = ready ? "" : t("ui.run.start_blocked");
+  $("#startHint").textContent = ready || jobRunning ? "" : t("ui.run.start_blocked");
 }
 
 function renderPresets() {
   const box = $("#presets"), group = currentMode() === "free" ? "free" : "goals";
-  if (box.dataset.group === group && box.dataset.lang === currentLanguage) return;
-  box.dataset.group = group;
-  box.dataset.lang = currentLanguage;
+  const key = `${group}|${currentLanguage}|${cfg.stack.layers_fixed}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
   box.innerHTML = `<span>${esc(t("ui.optim.preset"))}</span>`;
   for (const name of Object.keys(WEIGHT_PRESETS[group])) {
+    if (name === "layers" && cfg.stack.layers_fixed) continue;  // the goal is not shown
     const button = document.createElement("button");
     button.dataset.preset = name;
     button.textContent = t(PRESET_LABELS[name]);
@@ -113,6 +152,7 @@ function renderPresets() {
 }
 
 function applyWeightPreset(group, name) {
-  Object.assign(cfg.search.weights, WEIGHT_PRESETS[group][name]);
-  writeWeights();
+  const preset = WEIGHT_PRESETS[group][name];
+  for (const key of modeGoals()) cfg.search.weights[key] = preset[key] || 0;
+  normalizeWeights();  // goals that are not shown were left out, the rest makes 100 percent again
 }

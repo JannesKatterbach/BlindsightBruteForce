@@ -84,11 +84,24 @@ def test_empty_required_field_is_marked_and_keeps_value(page):
     assert page.evaluate("cfg.rod.diameter") == before
 
 
-def test_weights_above_slider_range_are_kept(page):
+def test_goals_move_freely_and_must_add_up_to_100_percent(page):
     page.evaluate("loadCfg({search: {weights: {count: 50, area: 1, uniformity: 1, regularity: 1}}})")  # free mode
-    page.wait_for_function("document.querySelector('#wv-count').textContent === '94 %'")  # shares in percent
-    assert page.evaluate("cfg.search.weights.count") == 50
-    assert float(page.get_attribute("[data-w='count']", "max")) >= 50
+    page.wait_for_function("cfg.search.weights.count === 94")  # older relative weights keep their ratio
+    page.click("[data-step=run]")
+    assert page.inner_text("#weightSum") == "Summe 100 %"
+    change(page, "#wn-count", "50")
+    change(page, "#wn-area", "1")
+    assert page.inner_text("#weightSum") == "Summe 55 %, es fehlen 45 %"
+    assert page.locator("#btnStart").is_disabled() and "100 %" in page.inner_text("#startHint")
+    # Number field and slider stay in step, nothing is redistributed automatically
+    change(page, "#wn-area", "45")
+    assert page.input_value("[data-w=area]") == "45" and page.evaluate("cfg.search.weights.count") == 50
+    assert page.inner_text("#weightSum") == "Summe 99 %, es fehlen 1 %"
+    page.fill("[data-w=uniformity]", "10")
+    page.dispatch_event("[data-w=uniformity]", "input")
+    assert page.input_value("#wn-uniformity") == "10" and page.inner_text("#weightSum") == "Summe 107 %, 7 % zu viel"
+    page.click("#weightNormalize")
+    assert page.inner_text("#weightSum") == "Summe 100 %" and page.locator("#btnStart").is_enabled()
 
 
 def test_zone_add_with_null_zones_does_not_crash(page):
@@ -174,7 +187,7 @@ def test_repeating_tile_run_shows_tile_outlines(page):
     page.click("[data-step=holes]")
     # Only the fields of the chosen pattern are shown
     assert page.locator("#patternCards [data-pattern=centered_square].chosen").count() == 1
-    assert page.locator("#in-search-pattern_task").is_visible() and page.locator("#in-search-tile_rods").is_hidden()
+    assert page.locator("#in-search-pattern_count").is_visible() and page.locator("#in-search-tile_rods").is_hidden()
     assert page.locator("#in-search-patterns").is_hidden()
     page.click("[data-step=run]")
     change(page, "#in-search-time_limit_s", "4")
@@ -377,8 +390,16 @@ def test_pattern_mode_with_individual_motors(page):
     page.check("input[name=patternRepeat][value=pattern_holes]")
     page.wait_for_function("cfg.search.optimizer === 'pattern_holes' && cfg.search.pattern === 'hex'")
     assert page.locator("#patternCards [data-pattern=free]").is_disabled()  # 2b needs a lattice
-    page.select_option("#in-search-pattern_task", "pitch")
-    page.dispatch_event("#in-search-pattern_task", "change")
+    # Two questions. As large as possible only goes with a fixed number of holes
+    assert page.locator("#in-search-pattern_distance option[value=largest]").is_disabled()
+    page.select_option("#in-search-pattern_count", "exact")
+    page.dispatch_event("#in-search-pattern_count", "change")
+    assert page.locator("#in-target_count").is_visible() and page.inner_text("[data-label-for=target_count]") == "Anzahl Löcher"
+    assert page.locator("#in-search-pattern_distance option[value=largest]").is_enabled()
+    page.select_option("#in-search-pattern_count", "fill")
+    page.dispatch_event("#in-search-pattern_count", "change")
+    page.select_option("#in-search-pattern_distance", "fixed")
+    page.dispatch_event("#in-search-pattern_distance", "change")
     assert page.locator("#in-search-pattern_pitch").is_visible() and page.locator("#in-target_count").is_hidden()
     change(page, "#in-search-pattern_pitch", "24")
     page.click("[data-step=board]")
@@ -387,9 +408,9 @@ def test_pattern_mode_with_individual_motors(page):
     assert page.locator("#in-bounds-border_width").is_visible()
     page.click("[data-step=run]")
     assert "Hexagonal" in page.inner_text("#runSummary") and "Randbereich 10 mm" in page.inner_text("#runSummary")
-    assert page.locator("[data-w=layers]").is_visible() and page.locator("[data-w=count]").is_hidden()
+    assert page.locator("[data-w=layers]").is_hidden() and page.locator("[data-w=count]").is_hidden()  # layers are fixed
     page.click("#presets [data-preset=border]")
-    assert page.inner_text("#wv-border") == "71 %"
+    assert page.input_value("#wn-border") == "78" and page.inner_text("#weightSum") == "Summe 100 %"
     change(page, "#in-search-time_limit_s", "4")
     page.click("#btnStart")
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
@@ -418,11 +439,62 @@ def test_free_mode_is_folded_and_keeps_its_method(page):
     assert page.locator("[data-w=border]").is_hidden()
 
 
-def test_edge_goal_needs_the_edge_strip(page):
+def test_edge_goal_moves_freely_and_says_when_it_has_no_effect(page):
     page.click("[data-step=run]")
-    assert page.locator("[data-w=border]").is_disabled()
+    assert page.locator("[data-w=border]").is_enabled() and "Randbereich" in page.inner_text("#wnote-border")
     page.click("[data-step=board]")
     page.check("#in-bounds-border")
     page.dispatch_event("#in-bounds-border", "change")
     page.click("[data-step=run]")
-    assert page.locator("[data-w=border]").is_enabled()
+    assert page.inner_text("#wnote-border") == ""
+
+
+def test_layer_goal_appears_when_the_layer_count_is_not_fixed(page):
+    page.click("[data-step=run]")
+    assert page.locator("[data-w-row=layers]").is_hidden() and page.locator("#presets [data-preset=layers]").count() == 0
+    page.click("[data-step=basics]")
+    page.uncheck("#in-stack-layers_fixed")
+    page.dispatch_event("#in-stack-layers_fixed", "change")
+    page.click("[data-step=run]")
+    assert page.locator("[data-w-row=layers]").is_visible() and "so wenige wie nötig" in page.inner_text("#runSummary")
+    page.click("#presets [data-preset=layers]")
+    assert page.input_value("#wn-layers") == "60" and page.inner_text("#weightSum") == "Summe 100 %"
+
+
+def test_result_shows_dots_edge_strip_and_tiling(page):
+    page.click("[data-step=board]")
+    page.check("#in-bounds-border")
+    page.dispatch_event("#in-bounds-border", "change")
+    page.click("[data-step=holes]")
+    page.select_option("#in-search-pattern_count", "exact")
+    page.dispatch_event("#in-search-pattern_count", "change")
+    page.click("[data-step=run]")
+    change(page, "#in-search-time_limit_s", "4")
+    page.click("#btnStart")
+    page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
+    assert page.locator("#view .edgeStrip").count() == 1 and page.locator("#view .holeArea").count() == 1
+    assert page.locator("#view circle[fill='none'][stroke='#e08a00']").count() == 0  # tight spots are dots, not rings
+    # Tile the found block
+    page.click("[data-result-view=tile]")
+    page.wait_for_function("document.querySelector('#tileStatus').innerText.includes('Keine Kollisionen')")
+    change(page, "#tileNx", "2")
+    change(page, "#tileNy", "2")
+    # The answer for 3 x 3 may still be on its way, only the newest one counts
+    page.wait_for_function("tileState.response && tileState.response.placements.length === 4 * currentTile().units.length")
+    count = page.evaluate("tileState.response.placements.length")
+    assert "Platte" in page.inner_text("#tileStatus")
+    with page.expect_download() as download:
+        page.click("#tileDownloadTile")
+    data = json.loads(open(download.value.path(), encoding="utf-8").read())
+    assert data["format"] == "blindsight.holes" and data["tile"]["holes"]
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#tileApply")
+    page.wait_for_function(f"lastGeo && lastGeo.units.length === {count}")
+    assert page.locator("#resultMain").is_visible() and page.evaluate("cfg.target_count") == count
+
+
+def test_pattern_with_individual_motors_cannot_be_tiled(page):
+    page.set_input_files("#fileResult", result_file(GOOD))
+    page.wait_for_selector("#resultBox:not([hidden])")
+    page.click("[data-result-view=tile]")
+    assert page.locator("#tileUnavailable").is_visible() and page.locator("#tileContent").is_hidden()

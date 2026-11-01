@@ -80,6 +80,7 @@ Exitcodes der Kommandozeile
 | `web/server.py` | HTTP Server (stdlib) mit Routentabelle, einheitlicher Fehlerform, Host, Origin und Content Type Prüfung |
 | `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand, Sprachen), `i18n` (Kataloge der UI), `ui` (Schritte `steps.js`, Modi `modes.js`, Formulare und Ansichten), `sketch` (Skizze) |
 | `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
+| `tiling.py` | Muster kacheln. Block von Muster 2a nx x ny mal aneinandersetzen, Platte passend rechnen (`/api/tile`) |
 | `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
 
@@ -167,14 +168,15 @@ Zusätzlich muss das Gehäuse samt Zahnrad vertikal zwischen die Ebenen passen u
 Die Oberfläche führt in sieben Schritten von links nach rechts. Jeder Schritt hat Zurück und Weiter, springen ist jederzeit
 möglich. Die Schrittleiste zeigt mit ✓ besuchte Schritte und mit ! Schritte mit einem Fehler.
 
-1. Grundlagen. Gewindestange (Durchmesser, Überstand über G0, Gewinde), Sicherheitsabstand, Ebenen (höchstens N Ebenen,
-   Abstände, Plattendicke) mit berechneten Stangenlängen und Seitenschnitt
+1. Grundlagen. Gewindestange (Durchmesser, Überstand über G0, Gewinde), Sicherheitsabstand, Ebenen (Anzahl fest oder
+   höchstens N, Abstände, Plattendicke) mit berechneten Stangenlängen und Seitenschnitt
 2. Motor. Umschalter Maße oder Skizze (Motor Skizze wie Onshape, siehe unten)
 3. Modus. Karten "Löcher vorgeben" und "Muster wählen", eingeklappt "Frei verteilen"
 4. Platte und Rand. Plattengröße und Randbereich nur für Motoren, eingeklappt Hindernisse und Montagebereiche
 5. Löcher, Muster oder Verteilung, je nach Modus
-6. Ziele und Berechnen. Prioritäten in Prozent, Zusammenfassung, Start, Fortschritt
-7. Ergebnis
+6. Ziele und Berechnen. Prioritäten in Prozent mit Regler und Zahlenfeld, Summe mit Anzeige (Start erst bei 100 %),
+   Zusammenfassung, Start, Fortschritt
+7. Ergebnis, mit der Seite "Muster kacheln" für Muster 2a
 
 Den Modus bestimmt der Optimierer (`config.mode_of`)
 
@@ -185,28 +187,40 @@ Den Modus bestimmt der Optimierer (`config.mode_of`)
 | Muster 2b | `pattern_holes` | Nur die Löcher bilden das Muster, jeder Motor wird einzeln gedreht |
 | Frei verteilen | `pattern_greedy`, `anneal_free`, `exhaustive_small` | ohne festes Muster möglichst viele Stangen |
 
-Aufgaben im Muster Modus (`search.pattern_task`)
-- `dense` so dicht wie möglich. Kleinster Lochabstand, bei dem alle Motoren passen. Die Zielanzahl in der Mitte oder mit
-  `search.pattern_fill` die ganze Platte
-- `count` feste Anzahl verteilt. Größter Abstand, mit dem die Zielanzahl gleichmäßig auf die Platte passt
-- `pitch` fester Abstand prüfen. Der Abstand `search.pattern_pitch` füllt die Platte, nicht bedienbare Löcher werden mit Grund
-  gemeldet (2b) bzw. ausgelassen (2a)
+Zwei Fragen im Muster Modus
+- Wie viele Löcher? (`search.pattern_count`) `fill` so viele wie auf die Platte passen, `exact` genau `target_count`
+- Welcher Lochabstand? (`search.pattern_distance`) `smallest` so klein wie möglich, `largest` so groß wie möglich (verteilt die
+  feste Anzahl gleichmäßig über die Platte, nur mit `exact`), `fixed` der Abstand `search.pattern_pitch`
+- Bei `exact` mit kleinstem oder festem Abstand liegen die Löcher in der Mitte der Platte. Nicht bedienbare Löcher meldet 2b
+  mit Grund, 2a lässt sie aus
 
 Randbereich (`bounds.border`, `bounds.border_width`). Am Plattenrand ein Streifen, in den nur Motoren und Zahnräder ragen
 dürfen. Die Löcher bleiben im inneren Lochbereich, nichts ragt über die Platte. Gilt in allen Modi. Dazu bleiben der Sperrrand
 für alle Bauteile (`bounds.edge_margin`) und "Motoren dürfen über die Platte hinaus" (`bounds.parts_in_bounds` = `rods`).
 
-Ziele der Modi Löcher und Muster (Gewichte in `search.weights`, in der Oberfläche als Prozent)
+Ziele der Modi Löcher und Muster (Gewichte in `search.weights` in Prozent, die Oberfläche verlangt die Summe 100 und
+rechnet ältere relative Gewichte beim Laden im gleichen Verhältnis um)
 
 | Ziel | Bedeutung |
 |---|---|
-| `layers` | Wenig Ebenen. 1 minus Anteil der benötigten Motorebenen bis zur tiefsten genutzten |
+| `layers` | Wenig Ebenen, nur wenn die Anzahl der Ebenen nicht fest ist (`stack.layers_fixed` false). 1 minus Anteil der benötigten Motorebenen bis zur tiefsten genutzten |
 | `border` | Kleiner Rand. 1 minus wie tief Motoren in den Randbereich ragen, relativ zu seiner Breite |
 | `alignment` | Saubere Ausrichtung. Anteil gleicher Ebene und Drehung zwischen Löchern 1 bis 4 Gitterschritte entlang der zwei Hauptrichtungen (reihenweise abwechselnd zählt als sauber) |
 
-Jedes bediente Loch zählt mehr als alle Ziele zusammen, Gesamtwert = (Anzahl + gewichtete Ziele) / (Zielanzahl + 1). Mit
-Priorität 0 für Wenig Ebenen dürfen alle N Ebenen frei genutzt werden. Bei festen Löchern und im Muster 2b verbessert eine
-eigene Phase nach der ersten gültigen Lösung die Ziele (erst die gleiche Lage für alle Löcher, dann einzelne Löcher).
+Jedes bediente Loch zählt mehr als alle Ziele zusammen, Gesamtwert = (Anzahl + gewichtete Ziele) / (Zielanzahl + 1). Bei
+festen Löchern und im Muster 2b verbessert eine eigene Phase nach der ersten gültigen Lösung die Ziele (erst die gleiche Lage
+für alle Löcher, dann einzelne Löcher).
+
+Ebenen fest oder nicht fest (`stack.layers_fixed`). Fest heißt, alle N Ebenen gibt es und die Motoren dürfen auf jede. Nicht
+fest heißt höchstens N. Dann zählt das Ziel Wenig Ebenen, die Suche probiert obere Ebenen zuerst, und Ergebnis, Prüfung und
+Export enthalten nur die genutzten Ebenen G1 bis Gk mit den dazu passenden Stangenlängen und Lochlisten
+(`export.result_model`, `config.with_layers`).
+
+Muster kacheln (`tiling.py`, `/api/tile`). Der Block von Muster 2a gilt auf dem unendlichen Gitter und lässt sich darum
+beliebig oft aneinandersetzen. Die Ergebnisseite "Muster kacheln" setzt nx x ny Blöcke nebeneinander und rechnet die Platte
+passend (Gehäuse mit Sperrrand, Stangen mit Randbereich), Hindernisse und Montagebereiche der alten Platte entfallen. Die
+gekachelte Anordnung lässt sich als Ergebnis übernehmen (dann funktionieren alle Exporte), der Block als Datei
+(`blindsight.block`) oder als eigene Kachel (`blindsight.holes`, im Schritt Muster wieder ladbar) speichern.
 
 ## Optimierung
 
@@ -242,8 +256,8 @@ gewählten Musters und der Aufgabe. Das Muster 2b (`pattern_holes`) nutzt diesel
 | `free` | frühere Kachel. `tile_rods` Schrauben je Kachel, optional `tile_width` und `tile_height` | in x und y getrennt gesucht |
 | `custom` | eigene Kachel aus dem Lochbild Generator (`search.custom_tile`), fest oder skalierbar | wie gezeichnet |
 
-- a ist `search.pattern_pitch` (nur bei der Aufgabe `pitch`), b ist `search.pattern_pitch_y`. Sonst wird a auf dem Raster
-  `search.tile_step` gesucht, bei `dense` der kleinste, bei `count` der größte, bei dem die Zielanzahl auf die Platte passt
+- a ist `search.pattern_pitch` (nur beim festen Abstand), b ist `search.pattern_pitch_y`. Sonst wird a auf dem Raster
+  `search.tile_step` gesucht, bei `smallest` der kleinste, bei `largest` der größte, bei dem die Zielanzahl auf die Platte passt
 - Ebene, Motorwinkel und Achsabstand je Loch werden per Backtracking für einen Block aus m x n Zellen gesucht und wiederholen
   sich mit dem Block. Blöcke werden nach Lochzahl aufsteigend probiert (höchstens `search.max_block_holes` Löcher), die
   Motoranordnung wiederholt sich also so früh wie möglich. Ein Block ist gültig, wenn er gegen alle seine Kopien in Reichweite
@@ -520,6 +534,8 @@ Beispiele in `examples/` (im UI per Dropdown ladbar)
 - `repeating_tile.json` wiederholendes Muster Würfel Fünf
 - `pattern_hex_spread.json` hexagonales Muster gleichmäßig über den Bauraum verteilt
 - `fixed_holes_grid.json` feste Löcher 3 x 3, Motorlage je Loch wird bestimmt
+- `fixed_holes_edge_strip.json` feste Löcher mit Randbereich für Motoren, Ziel Kleiner Rand
+- `pattern_individual_motors.json` Muster 2b (Hexagonal, Motoren einzeln), Ebenen nicht fest mit Ziel Wenig Ebenen
 - `sketch_trapezoid_motor.json` Trapez Motor als Skizze mit Parallel, Winkel, Länge, Abstand und Zahnrad
 - `sketch_rectangle_dimensions.json` Rechteck als voll bemaßte Skizze mit Zahnrad
 - `three_levels_mixed_gaps.json` ungleiche Ebenenabstände mit Hindernis
@@ -554,7 +570,9 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 - Schritt Ergebnis. Erste Zeile Ansicht (Lösung, Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht mit der Maus drehen,
   Abstände, manuelles Bearbeiten mit sofortiger Prüfung), zweite Zeile Dateien (Export SVG, Schraubenpositionen, DXF, CSV, JSON,
   Ergebnis speichern und laden). Daneben Kennzahlen (in den Modi Löcher und Muster auch genutzte Ebenen und Tiefe im
-  Randbereich), Kollisionen, engste Stellen und Vergleich der Top Lösungen
+  Randbereich), Kollisionen, engste Stellen und Vergleich der Top Lösungen. Die Draufsicht zeigt Platte, Lochbereich
+  (gestrichelt) und Randbereich (hell), Stangen in der Textfarbe, engste Stellen als kleinen Punkt mit Tooltip
+- Seite "Muster kacheln" im Ergebnis (siehe Ablauf und Modi)
 
 Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten,
 `Origin: null` wird abgewiesen), nimmt POST nur als `application/json` an, weist NaN und zu tief verschachteltes JSON ab und

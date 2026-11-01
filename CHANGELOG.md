@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.0
+Rückmeldung zum geführten Ablauf
+- Muster mit zwei einfachen Fragen statt Aufgabe und "Ganze Platte füllen". Wie viele Löcher (so viele wie auf die Platte
+  passen oder genau N) und welcher Lochabstand (so klein wie möglich, so groß wie möglich oder fest). Unsinnige Kombinationen
+  sind ausgegraut, das Feld heißt hier "Anzahl Löcher". Neu ist genau N mit festem Abstand
+- Ebenen fest oder nicht fest in den Grundlagen. Nur bei nicht fest gibt es das Ziel Wenig Ebenen, und Ergebnis und Export
+  enthalten dann nur die genutzten Ebenen mit passenden Stangenlängen
+- Ziele frei einstellbar. Regler und Zahlenfeld je Ziel, Summe mit Anzeige (es fehlen bzw. zu viel), Knopf "Auf 100 %
+  bringen", Start erst bei 100 %. Kleiner Rand ist immer beweglich, ohne Randbereich steht ein Hinweis daneben. Gewichte sind
+  jetzt Prozent, ältere Dateien werden beim Laden im gleichen Verhältnis umgerechnet
+- Ergebnisbild. Stangen in der Textfarbe (im dunklen Modus gut sichtbar), engste Stellen als kleiner Punkt mit Tooltip statt
+  Ring, Platte mit Lochbereich und Randbereich eingezeichnet, Blockgrenzen an der Platte abgeschnitten
+- Neue Ergebnisseite "Muster kacheln". Der Block von Muster 2a wird nx x ny mal aneinandergesetzt, die Platte wird passend
+  gerechnet. Übernehmen als Ergebnis, Block als Datei oder als eigene Kachel speichern. API `/api/tile`
+- Klick auf einen Schritt mit ! springt zum ersten Feld mit Fehler
+- Der Muster Modus füllt standardmäßig die ganze Platte
+
 ## 0.8.0
 Geführter Ablauf mit Modi und Zielen
 - Die Oberfläche führt in sieben Schritten von links nach rechts (Grundlagen, Motor, Modus, Platte und Rand, Löcher bzw.

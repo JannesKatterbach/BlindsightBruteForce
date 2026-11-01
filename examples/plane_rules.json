@@ -79,10 +79,10 @@
   ],
   "search": {
     "weights": {
-      "count": 10.0,
-      "area": 8.0,
-      "uniformity": 2.0,
-      "regularity": 1.0
+      "count": 47,
+      "area": 38,
+      "uniformity": 10,
+      "regularity": 5
     },
     "optimizer": "pattern_greedy",
     "patterns": [
