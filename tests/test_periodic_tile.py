@@ -15,6 +15,7 @@ def project(**search):
     p = Project()
     p.target_count = 8
     p.search.optimizer = "periodic_tile"
+    p.search.pattern_count = "exact"  # most tests place the target count
     p.search.time_limit_s = 6
     for key, value in search.items():
         setattr(p.search, key, value)
@@ -90,7 +91,7 @@ def test_exact_target_count_on_a_regular_lattice():
 
 
 def test_fixed_distance_fills_the_board():
-    p = project(pattern="square", pattern_task="pitch", pattern_pitch=25.0)
+    p = project(pattern="square", pattern_count="fill", pattern_distance="fixed", pattern_pitch=25.0)
     model, res = run(p)
     best = res.best
     assert len(best.placements) > p.target_count and res.target == len(best.placements)
@@ -127,7 +128,7 @@ def test_custom_pattern_needs_a_tile():
 
 
 def test_too_small_fixed_distance_is_reported():
-    _, res = run(project(pattern="square", pattern_task="pitch", pattern_pitch=6.0))
+    _, res = run(project(pattern="square", pattern_distance="fixed", pattern_pitch=6.0))
     assert not res.solutions
     assert any("festen Abstand 6.00 mm" in m for m in res.messages)
 
@@ -141,15 +142,15 @@ def test_obstacles_skip_single_holes():
     assert all(math.hypot(q.x - 60.0, q.y - 60.0) > 15.0 for q in best.placements)
 
 
-@pytest.mark.parametrize("task", ["dense", "count"])
-def test_tasks_give_valid_layouts(task):
-    model, res = run(project(pattern="hex", pattern_task=task))
+@pytest.mark.parametrize("distance", ["smallest", "largest"])
+def test_distances_give_valid_layouts(distance):
+    model, res = run(project(pattern="hex", pattern_distance=distance))
     assert res.best and len(res.best.placements) == 8
     for solution in res.solutions:
         assert layout_from_placements(model, solution.placements).is_valid()
 
 
 def test_spread_uses_a_larger_distance_than_compact():
-    _, compact = run(project(pattern="square", pattern_task="dense"))
-    _, spread = run(project(pattern="square", pattern_task="count"))
+    _, compact = run(project(pattern="square", pattern_distance="smallest"))
+    _, spread = run(project(pattern="square", pattern_distance="largest"))
     assert spread.best.tile["pitch"] > compact.best.tile["pitch"]

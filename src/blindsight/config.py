@@ -20,6 +20,7 @@ relevant dimensions must be overwritten with the real parts.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import json
 import types
@@ -41,9 +42,11 @@ MOUNT_MODES = ("top", "bottom")
 OBSTACLE_SHAPES = ("rect", "circle")
 # Hole patterns of the optimizers periodic_tile and pattern_holes (see optimizers/periodic_tile.py)
 PATTERN_KINDS = ("square", "centered_square", "hex", "hex_rotated", "staggered", "rectangle", "free", "custom")
-# Tasks of the pattern mode. dense (smallest distance), count (given number spread over the board),
-# pitch (given distance, fill the board and check)
-PATTERN_TASKS = ("dense", "count", "pitch")
+# Two questions of the pattern mode. How many holes (as many as fit on the board, or exactly target_count)
+# and which hole distance (as small as possible, as large as possible, or search.pattern_pitch).
+# "largest" needs "exact", with a full board the distance would just grow until one hole is left
+PATTERN_COUNTS = ("fill", "exact")
+PATTERN_DISTANCES = ("smallest", "largest", "fixed")
 OPTIMIZERS = ("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile", "pattern_holes", "fixed_holes")
 # Modes of the guided UI. The optimizer decides the mode, every other optimizer distributes freely
 MODE_HOLES, MODE_PATTERN, MODE_FREE = "holes", "pattern", "free"
@@ -179,6 +182,7 @@ class StackSpec:
     """
 
     n_motor_planes: int = 3
+    layers_fixed: bool = True  # False. At most n_motor_planes, the goal "layers" asks for as few as possible
     mode: str = "uniform"
     uniform_spacing: float = 20.0
     gaps: list[float] = field(default_factory=list)
@@ -273,14 +277,14 @@ class WeightsSpec:
 
     Every field corresponds to an entry in ``scoring.OBJECTIVES``."""
 
-    count: float = 10.0
-    area: float = 8.0
-    uniformity: float = 2.0
-    regularity: float = 1.0
-    # Goals of the modes holes and pattern (scoring.GOALS_BY_MODE)
-    layers: float = 1.0
-    border: float = 1.0
-    alignment: float = 1.0
+    count: float = 48.0  # percent, the UI asks for a sum of 100 over the goals in use
+    area: float = 38.0
+    uniformity: float = 10.0
+    regularity: float = 4.0
+    # Goals of the modes holes and pattern, layers only when the layer count is not fixed (scoring.goals_for)
+    layers: float = 0.0
+    border: float = 50.0
+    alignment: float = 50.0
 
     def as_dict(self) -> dict[str, float]:
         return dataclasses.asdict(self)
@@ -320,8 +324,8 @@ class SearchSpec:
     # Repeating pattern (optimizer periodic_tile). pattern chooses the hole lattice, pattern_pitch the distance to
     # the nearest hole (None = search it). The motor arrangement repeats in blocks of at most max_block_holes holes.
     pattern: str = "square"
-    pattern_task: str = "dense"  # PATTERN_TASKS
-    pattern_fill: bool = False  # task dense. True fills the board, False places target_count holes
+    pattern_count: str = "fill"  # PATTERN_COUNTS
+    pattern_distance: str = "smallest"  # PATTERN_DISTANCES
     pattern_pitch: Optional[float] = None  # mm
     pattern_pitch_y: Optional[float] = None  # mm, second distance of rectangle and staggered rows
     max_block_holes: int = 12
@@ -434,19 +438,42 @@ class Project:
         return self.allowed_angle_list()
 
 
+def with_layers(project: Project, k: int) -> Project:
+    """Copy with only the motor layers G1 to Gk. Used when the layer count is not fixed and an arrangement needs
+    only k layers, rod lengths and hole lists then belong to the smaller stack. Settings of deeper layers are dropped."""
+    out = copy.deepcopy(project)
+    stack = out.stack
+    stack.n_motor_planes = k
+    if stack.thicknesses is not None:
+        stack.thicknesses = stack.thicknesses[:k]
+    if stack.allowed_planes is not None:
+        stack.allowed_planes = [p for p in stack.allowed_planes if p <= k]
+    for name in ("mount_zones", "max_per_plane", "plane_angles"):
+        setattr(stack, name, {key: value for key, value in getattr(stack, name).items() if key.isdigit() and int(key) <= k})
+    out.obstacles = [o for o in out.obstacles if o.plane is None or o.plane <= k]
+    return out
+
+
+# Version 0.8 asked for one task instead of the two questions
+_TASK_QUESTIONS = {"dense": ("exact", "smallest"), "count": ("exact", "largest"), "pitch": ("fill", "fixed")}
+
+
 def _upgrade(data: Any) -> Any:
-    """Files of version 0.7 and older. The repeating pattern chose compact or spread placement with
-    layout_goal and a fixed distance with pattern_pitch, both now are tasks (search.pattern_task)."""
+    """Older files of the pattern mode. 0.8 had search.pattern_task and pattern_fill, 0.7 and older placed
+    target_count holes compact or spread (layout_goal) with a searched or a fixed distance (pattern_pitch)."""
     search = data.get("search") if isinstance(data, dict) else None
-    if not isinstance(search, dict) or search.get("optimizer") != "periodic_tile" or "pattern_task" in search:
+    if not isinstance(search, dict) or "pattern_count" in search:
         return data
-    if search.get("layout_goal") == "spread":
-        task = "count"
-    elif search.get("pattern_pitch") is not None:
-        task = "pitch"
+    search = dict(search)
+    task, fill = search.pop("pattern_task", None), search.pop("pattern_fill", False)
+    if task in _TASK_QUESTIONS:
+        count, distance = ("fill", "smallest") if task == "dense" and fill else _TASK_QUESTIONS[task]
+    elif search.get("optimizer") == "periodic_tile":
+        count = "exact"
+        distance = "largest" if search.get("layout_goal") == "spread" else "fixed" if search.get("pattern_pitch") is not None else "smallest"
     else:
-        task = "dense"
-    return {**data, "search": {**search, "pattern_task": task}}
+        return {**data, "search": search}
+    return {**data, "search": {**search, "pattern_count": count, "pattern_distance": distance}}
 
 
 def _check_motor(proj: Project, errs: list[str]) -> None:
@@ -582,9 +609,12 @@ def _check_search(proj: Project, errs: list[str]) -> None:
     _check_custom_tile(search, errs)
     if search.optimizer == "pattern_holes" and search.pattern == "free":
         errs.append(tr("config.pattern_holes_free"))
-    if proj.mode == MODE_PATTERN and search.pattern_task == "pitch" and search.pattern_pitch is None and not (
-            search.pattern == "custom" and search.custom_tile is not None and not search.custom_tile.scalable):
-        errs.append(tr("config.pattern_pitch_missing"))
+    if proj.mode == MODE_PATTERN:
+        if search.pattern_distance == "fixed" and search.pattern_pitch is None and not (
+                search.pattern == "custom" and search.custom_tile is not None and not search.custom_tile.scalable):
+            errs.append(tr("config.pattern_pitch_missing"))
+        if search.pattern_distance == "largest" and search.pattern_count == "fill":
+            errs.append(tr("config.pattern_largest_fill"))
     if proj.holes is not None and any(len(h) != 2 for h in proj.holes):
         errs.append(tr("config.holes_format"))
     elif search.optimizer == "fixed_holes" and not proj.holes:
@@ -691,6 +721,7 @@ FIELD_META: list[Meta] = [
     Meta("motor.own_clearance", "len", 0, 1000, group="motor"),
     Meta("motor.mount", "enum", options=MOUNT_MODES, group="motor"),
     Meta("stack.n_motor_planes", "int", 1, 1000, group="stack"),
+    Meta("stack.layers_fixed", "bool", group="stack"),
     Meta("stack.mode", "enum", options=STACK_MODES, group="stack"),
     Meta("stack.uniform_spacing", "len", 0, 100000, True, group="stack"),
     Meta("stack.gaps", "lenlist", group="stack"),
@@ -720,8 +751,8 @@ FIELD_META: list[Meta] = [
     Meta("search.refine_fraction", "num", 0, 0.9, group="search"),
     Meta("search.stagnation_s", "num", 0, 86400, True, group="search", optional=True),
     Meta("search.pattern", "enum", options=PATTERN_KINDS, group="search"),
-    Meta("search.pattern_task", "enum", options=PATTERN_TASKS, group="search"),
-    Meta("search.pattern_fill", "bool", group="search"),
+    Meta("search.pattern_count", "enum", options=PATTERN_COUNTS, group="search"),
+    Meta("search.pattern_distance", "enum", options=PATTERN_DISTANCES, group="search"),
     Meta("search.pattern_pitch", "len", 0, 1e5, True, group="search", optional=True),
     Meta("search.pattern_pitch_y", "len", 0, 1e5, True, group="search", optional=True),
     Meta("search.max_block_holes", "int", 1, 36, group="search"),

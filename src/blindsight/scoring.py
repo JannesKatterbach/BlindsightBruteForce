@@ -1,6 +1,7 @@
 """Scoring function. All objectives lie in [0, 1], 1 is best.
 
-Every mode rates its own goals (GOALS_BY_MODE, weights from WeightsSpec normalised over these goals).
+Every mode rates its own goals (goals_for, weights from WeightsSpec normalised over these goals). The goal
+layers only counts when the layer count is not fixed (stack.layers_fixed False).
   count        placed number relative to the target number
   area         1 - used bounding box / available build area (share of free build area)
   uniformity   1 - 2 * coefficient of variation of the neighbour distances
@@ -13,7 +14,7 @@ Every mode rates its own goals (GOALS_BY_MODE, weights from WeightsSpec normalis
 
 Free mode. Total = weighted mean of count, area, uniformity and regularity.
 Modes holes and pattern. Every served hole counts more than all goals together,
-total = (count + weighted mean of layers, border, alignment) / (target + 1).
+total = (count + weighted mean of border, alignment and layers) / (target + 1).
 
 Uniformity counts as satisfied (1.0) for a single unit. Regularity needs at least 4 neighbours (psi4)
 and is 0 otherwise, the same for every count. Earlier a single unit got 1.0 and two to four units 0,
@@ -34,7 +35,7 @@ from typing import Callable, Optional
 
 from collections import Counter
 
-from .config import MODE_FREE, MODE_HOLES, MODE_PATTERN, WeightsSpec
+from .config import MODE_FREE, MODE_HOLES, MODE_PATTERN, Project, WeightsSpec
 from .geometry import BBox, convex_hull, polygon_area
 from .layout import Placement
 from .model import KIND_ROD, Model
@@ -44,8 +45,8 @@ UNIFORMITY_CV_FACTOR = 2.0  # a coefficient of variation of 0.5 gives uniformity
 ORDER_NEIGHBORS = (4, 6)  # psi4 (square) and psi6 (hexagon)
 GOALS_BY_MODE = {
     MODE_FREE: ("count", "area", "uniformity", "regularity"),
-    MODE_HOLES: ("layers", "border", "alignment"),
-    MODE_PATTERN: ("layers", "border", "alignment"),
+    MODE_HOLES: ("border", "alignment"),
+    MODE_PATTERN: ("border", "alignment"),
 }
 ALIGNMENT_STEPS = 4  # repetition after up to this many lattice steps counts as regular
 LATTICE_TOL = 0.05  # mm, two holes count as one lattice step apart within this tolerance
@@ -304,6 +305,12 @@ def layout_stats(model: Model, placements: list[Placement], target: int) -> Layo
     )
 
 
+def goals_for(project: Project) -> tuple[str, ...]:
+    """Goals of the mode, plus few layers when the layer count is not fixed."""
+    goals = GOALS_BY_MODE[project.mode]
+    return goals if project.stack.layers_fixed else goals + ("layers",)
+
+
 def normalized_weights(weights: WeightsSpec, goals: tuple[str, ...] = GOALS_BY_MODE[MODE_FREE]) -> dict[str, float]:
     """Weights of the goals as shares summing to 1 (equal shares if all are 0)."""
     raw = weights.as_dict()
@@ -314,7 +321,7 @@ def normalized_weights(weights: WeightsSpec, goals: tuple[str, ...] = GOALS_BY_M
 def evaluate(model: Model, placements: list[Placement], weights: WeightsSpec, target: int) -> Score:
     """Score a layout with the goals of the mode. Returns total, objectives, normalised weights and metrics."""
     mode = model.project.mode
-    goals = GOALS_BY_MODE[mode]
+    goals = goals_for(model.project)
     wn = normalized_weights(weights, goals)
     names = goals if mode == MODE_FREE else ("count", *goals)
     if not placements:

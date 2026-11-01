@@ -7,11 +7,13 @@ import math
 
 import pytest
 
-from blindsight.config import MODE_FREE, MODE_HOLES, MODE_PATTERN, ConfigError, Project, WeightsSpec, mode_of
+from blindsight.config import MODE_FREE, MODE_HOLES, MODE_PATTERN, ConfigError, ObstacleSpec, Project, WeightsSpec, mode_of
+from blindsight.export import build_geometry
 from blindsight.layout import Placement, layout_from_placements
 from blindsight.model import KIND_ROD, Model
 from blindsight.optimizers import get_optimizer
 from blindsight.scoring import evaluate
+from blindsight.tiling import TilingError, tile_project
 
 
 def grid(n, pitch, x0=30.0, y0=30.0):
@@ -82,6 +84,7 @@ def test_served_holes_count_more_than_the_goals():
 def test_goal_terms_are_measured_independently():
     p = holes_project(grid(3, 30.0))
     p.bounds.border, p.bounds.border_width = True, 20.0
+    p.stack.layers_fixed = False
     model = Model(p)
     placements = [Placement(x, y, 1 + (k % 2), 90.0 * (k % 2)) for k, (x, y) in enumerate(p.holes)]
     terms = evaluate(model, placements, p.search.weights, 9).terms
@@ -104,7 +107,9 @@ def test_rows_alternating_count_as_clean_alignment():
 
 def test_goal_few_layers_moves_motors_up():
     holes = grid(3, 32.0)
-    model = Model(holes_project(holes, layers=10, border=0, alignment=0))
+    p = holes_project(holes, layers=10, border=0, alignment=0)
+    p.stack.layers_fixed = False
+    model = Model(p)
     res = get_optimizer("fixed_holes").run(model)
     assert len(res.best.placements) == 9 and layout_from_placements(model, res.best.placements).is_valid()
     assert max(q.plane for q in res.best.placements) == 1
@@ -133,12 +138,13 @@ def test_goal_small_edge_turns_outer_motors_inwards():
 
 
 # --- Pattern with individually turned motors (2b) -----------------------------------------------------------------
-def pattern_project(task, **search):
+def pattern_project(count, distance, **search):
     p = Project()
     p.target_count = 10
     p.search.optimizer = "pattern_holes"
     p.search.pattern = "hex"
-    p.search.pattern_task = task
+    p.search.pattern_count = count
+    p.search.pattern_distance = distance
     p.search.time_limit_s = 5
     for key, value in search.items():
         setattr(p.search, key, value)
@@ -149,48 +155,125 @@ def nearest(points):
     return min(math.hypot(a.x - b.x, a.y - b.y) for i, a in enumerate(points) for b in points[i + 1:])
 
 
-@pytest.mark.parametrize("task, extra", [("dense", {}), ("dense", {"pattern_fill": True}), ("count", {}), ("pitch", {"pattern_pitch": 24.0})])
-def test_pattern_holes_tasks_give_valid_lattices(task, extra):
-    model = Model(pattern_project(task, **extra))
-    res = get_optimizer("pattern_holes").run(model)
-    best = res.best.placements
+COMBINATIONS = [("fill", "smallest"), ("exact", "smallest"), ("exact", "largest"), ("fill", "fixed"), ("exact", "fixed")]
+
+
+@pytest.mark.parametrize("optimizer", ["pattern_holes", "periodic_tile"])
+@pytest.mark.parametrize("count, distance", COMBINATIONS)
+def test_every_combination_of_the_two_questions_is_valid(optimizer, count, distance):
+    p = pattern_project(count, distance, optimizer=optimizer, pattern_pitch=24.0 if distance == "fixed" else None)
+    model = Model(p)
+    best = get_optimizer(optimizer).run(model).best.placements
     assert layout_from_placements(model, best).is_valid()
-    if task in ("dense", "count") and not extra:
+    if count == "exact":
         assert len(best) == 10
-    if task == "pitch":
-        assert nearest(best) == pytest.approx(24.0, abs=1e-6)
     else:
-        assert len(best) >= 10
+        assert len(best) > 10  # the board is filled
+    if distance == "fixed":
+        assert nearest(best) == pytest.approx(24.0, abs=1e-6)
 
 
-def test_dense_is_tighter_than_count():
-    dense = get_optimizer("pattern_holes").run(Model(pattern_project("dense"))).best.placements
-    spread = get_optimizer("pattern_holes").run(Model(pattern_project("count"))).best.placements
+def test_smallest_is_tighter_than_largest():
+    dense = get_optimizer("pattern_holes").run(Model(pattern_project("exact", "smallest"))).best.placements
+    spread = get_optimizer("pattern_holes").run(Model(pattern_project("exact", "largest"))).best.placements
     assert nearest(dense) < nearest(spread)
 
 
+def test_largest_needs_a_fixed_count():
+    with pytest.raises(ConfigError) as exc:
+        pattern_project("fill", "largest").validate()
+    assert any("search.pattern_distance" in e for e in exc.value.errors)
+
+
 def test_pattern_holes_needs_a_shape():
-    p = pattern_project("dense", pattern="free")
+    p = pattern_project("exact", "smallest", pattern="free")
     with pytest.raises(ConfigError) as exc:
         p.validate()
     assert any("search.pattern" in e for e in exc.value.errors)
 
 
-def test_check_fixed_distance_needs_a_distance():
+def test_fixed_distance_needs_a_distance():
     with pytest.raises(ConfigError) as exc:
-        pattern_project("pitch").validate()
+        pattern_project("fill", "fixed").validate()
     assert any("search.pattern_pitch" in e for e in exc.value.errors)
 
 
 # --- Older files -----------------------------------------------------------------------------------------------------
-@pytest.mark.parametrize("search, task", [
-    ({"layout_goal": "spread"}, "count"),
-    ({"pattern_pitch": 20.0}, "pitch"),
-    ({}, "dense"),
+@pytest.mark.parametrize("search, questions", [
+    ({"optimizer": "periodic_tile", "layout_goal": "spread"}, ("exact", "largest")),
+    ({"optimizer": "periodic_tile", "pattern_pitch": 20.0}, ("exact", "fixed")),
+    ({"optimizer": "periodic_tile"}, ("exact", "smallest")),
+    ({"optimizer": "pattern_holes", "pattern_task": "dense", "pattern_fill": True}, ("fill", "smallest")),
+    ({"optimizer": "pattern_holes", "pattern_task": "count"}, ("exact", "largest")),
+    ({"optimizer": "periodic_tile", "pattern_task": "pitch", "pattern_pitch": 20.0}, ("fill", "fixed")),
 ])
-def test_older_pattern_files_get_a_task(search, task):
-    p = Project.from_dict({"search": {"optimizer": "periodic_tile", **search}})
-    assert p.search.pattern_task == task
+def test_older_pattern_files_get_the_two_questions(search, questions):
+    p = Project.from_dict({"search": search})
+    assert (p.search.pattern_count, p.search.pattern_distance) == questions
+
+
+# --- Layers not fixed -------------------------------------------------------------------------------------------------
+def test_layers_not_fixed_use_fewer_layers_and_shorter_stacks():
+    holes = grid(3, 32.0)
+    p = holes_project(holes, layers=80, border=10, alignment=10)
+    p.stack.layers_fixed = False
+    model = Model(p)
+    best = get_optimizer("fixed_holes").run(model).best.placements
+    assert len(best) == 9 and max(q.plane for q in best) == 1
+    geometry = build_geometry(model, best)
+    assert [pl["index"] for pl in geometry["planes"]] == [0, 1]  # only G0 and G1 are left
+    fixed = holes_project(holes, border=10, alignment=10)
+    assert len(build_geometry(Model(fixed), best)["planes"]) == 4  # a fixed count keeps all layers
+
+
+def test_goal_few_layers_only_counts_when_the_count_is_not_fixed():
+    p = holes_project(grid(2, 32.0))
+    model = Model(p)
+    placements = [Placement(x, y, 3, 0.0) for x, y in p.holes]
+    assert "layers" not in evaluate(model, placements, p.search.weights, 4).terms
+    p.stack.layers_fixed = False
+    assert evaluate(Model(p), placements, p.search.weights, 4).terms["layers"] == 0.0
+
+
+def test_default_weights_are_percent():
+    w = WeightsSpec()
+    assert w.count + w.area + w.uniformity + w.regularity == 100
+    assert w.border + w.alignment + w.layers == 100
+
+
+# --- Tiling of a repeating block ---------------------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def block_result():
+    p = Project()
+    p.target_count = 8
+    p.search.optimizer = "periodic_tile"
+    p.search.pattern = "centered_square"
+    p.search.pattern_count = "exact"
+    p.search.time_limit_s = 5
+    p.bounds.border, p.bounds.border_width = True, 6.0
+    p.obstacles = [ObstacleSpec(shape="circle", x=10.0, y=10.0, r=3.0)]
+    return p, get_optimizer("periodic_tile").run(Model(p)).best.tile
+
+
+@pytest.mark.parametrize("nx, ny", [(1, 1), (2, 3), (3, 3)])
+def test_tiled_blocks_stay_valid_on_a_fitted_board(block_result, nx, ny):
+    p, tile = block_result
+    project, placements, notes = tile_project(p, tile, nx, ny)
+    model = Model(project)
+    assert len(placements) == nx * ny * len(tile["units"])
+    assert layout_from_placements(model, placements).is_valid()  # also inside the board and the edge strip
+    assert project.obstacles == [] and notes  # the old board's obstacles are gone, with a note
+    bigger, _, _ = tile_project(p, tile, nx + 1, ny)
+    assert bigger.bounds.width == pytest.approx(project.bounds.width + tile["width"])  # one more block, one block wider
+
+
+def test_tiling_rejects_bad_input(block_result):
+    p, tile = block_result
+    for bad in ({}, {**tile, "width": -1}, {**tile, "units": []}):
+        with pytest.raises(TilingError):
+            tile_project(p, bad, 2, 2)
+    with pytest.raises(TilingError):
+        tile_project(p, tile, 0, 2)
 
 
 def test_repeating_block_counts_as_clean_alignment():
@@ -198,7 +281,22 @@ def test_repeating_block_counts_as_clean_alignment():
     p.target_count = 12
     p.search.optimizer = "periodic_tile"
     p.search.pattern = "centered_square"
+    p.search.pattern_count = "exact"
     p.search.time_limit_s = 5
     model = Model(p)
     best = get_optimizer("periodic_tile").run(model).best
     assert len(best.placements) == 12 and best.score.terms["alignment"] == 1.0
+
+
+def test_tile_endpoint_returns_a_fitted_valid_layout(block_result):
+    import json
+    from blindsight.web.server import App
+    p, tile = block_result
+    body = json.dumps({"project": p.to_dict(), "tile": tile, "nx": 2, "ny": 2}).encode()
+    code, _, raw = App().handle("POST", "/api/tile", {}, body, {"Content-Type": "application/json"})
+    data = json.loads(raw)
+    assert code == 200 and data["valid"] and len(data["placements"]) == 4 * len(tile["units"])
+    assert data["project"]["bounds"]["width"] > tile["width"] * 2
+    code, _, raw = App().handle("POST", "/api/tile", {}, json.dumps({"project": p.to_dict(), "tile": tile, "nx": 0, "ny": 1}).encode(),
+                                {"Content-Type": "application/json"})
+    assert code == 400

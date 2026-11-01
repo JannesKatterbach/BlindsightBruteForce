@@ -18,7 +18,6 @@ from typing import Callable, Iterator, Optional
 from ..geometry import BBox
 from ..i18n import tr
 from ..layout import Counter, Layout, Placement, layout_from_placements, layout_signature
-from ..config import MODE_FREE
 from ..model import Model
 from ..scoring import Score, evaluate
 from .base import STATUS_STAGNATION, ProgressInfo, Solution, StopToken
@@ -60,9 +59,9 @@ class SearchBase:
         ]
 
     def plane_order(self, index: int) -> list[int]:
-        """Order in which the layers are tried for hole index. With the goal few layers (modes holes and
-        pattern) the upper layers first, otherwise rotated by the index so that the layers fill evenly."""
-        if self.proj.mode != MODE_FREE and self.se.weights.layers > 0:
+        """Order in which the layers are tried for hole index. With the goal few layers (layer count not fixed)
+        the upper layers first, otherwise rotated by the index so that the layers fill evenly."""
+        if not self.proj.stack.layers_fixed and self.se.weights.layers > 0:
             return list(self.usable)
         start = index % len(self.usable)
         return self.usable[start:] + self.usable[:start]

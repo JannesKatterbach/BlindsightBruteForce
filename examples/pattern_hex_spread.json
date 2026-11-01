@@ -85,7 +85,8 @@
     "tile_width": null,
     "tile_height": null,
     "tile_step": 0.5,
-    "pattern_task": "count"
+    "pattern_count": "exact",
+    "pattern_distance": "largest"
   },
   "holes": null
 }

@@ -452,6 +452,7 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `motor.own_clearance` | Eigenabstand Gehäuse zur Stange. Mindestabstand des Gehäuses zur eigenen Stange | mm | >= 0, <= 1000 |
 | `motor.mount` | Montage. Motor steht auf der Ebene oder hängt darunter |  | `top` / `bottom` |
 | `stack.n_motor_planes` | Anzahl Motorebenen. Anzahl der Ebenen G1 bis Gn, keine feste Obergrenze |  | >= 1, <= 1000 |
+| `stack.layers_fixed` | Anzahl Ebenen fest. Ein. Es gibt genau so viele Ebenen. Aus. Höchstens so viele, das Ziel Wenig Ebenen sucht weniger |  |  |
 | `stack.mode` | Abstandsmodus. Wie die Ebenenhöhen angegeben werden |  | `uniform` / `gaps` / `distances` |
 | `stack.uniform_spacing` | Einheitlicher Ebenenabstand. Abstand zwischen allen Ebenen (Modus uniform) | mm | > 0, <= 100000 |
 | `stack.gaps` | Einzelabstände (Liste). Abstände G0-G1, G1-G2, ... (Modus gaps) | mm |  |
@@ -481,8 +482,8 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `search.refine_fraction` | Anteil lokale Suche. Zeitanteil der Verfeinerung (0 bis 0.9) |  | >= 0, <= 0.9 |
 | `search.stagnation_s` | Stagnation (s, optional). Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert |  | > 0, <= 86400 |
 | `search.pattern` | Muster. Wiederholendes Muster. Form des Lochbilds. Die Motoranordnung je Loch sucht das Programm und wiederholt sie |  | `square` / `centered_square` / `hex` / `hex_rotated` / `staggered` / `rectangle` / `free` / `custom` |
-| `search.pattern_task` | Aufgabe. Was das Programm mit dem Muster erreichen soll |  | `dense` / `count` / `pitch` |
-| `search.pattern_fill` | Ganze Platte füllen. Statt der gewünschten Anzahl so viele Löcher setzen, wie auf die Platte passen |  |  |
+| `search.pattern_count` | Wie viele Löcher?. So viele wie auf die Platte passen, oder genau die eingegebene Anzahl |  | `fill` / `exact` |
+| `search.pattern_distance` | Welcher Lochabstand?. Kleinster möglicher, größter möglicher oder fester Abstand zum nächsten Loch |  | `smallest` / `largest` / `fixed` |
 | `search.pattern_pitch` | Lochabstand (optional). Wiederholendes Muster. Abstand zum nächsten Loch. Leer heißt automatisch (kompakt kleinster, verteilt größter passender Abstand). Bei eigener Kachel die Kachelbreite | mm | > 0, <= 100000 |
 | `search.pattern_pitch_y` | Zweiter Abstand (optional). Rechteck. Abstand in y. Versetzte Reihen. Reihenabstand. Leer heißt gleich dem Lochabstand (Rechteck) bzw. dicht wie Kreise (versetzte Reihen) | mm | > 0, <= 100000 |
 | `search.max_block_holes` | Größter Wiederholblock. Wiederholendes Muster. Höchstens so viele Löcher umfasst der Block, nach dem sich die Motoranordnung wiederholt |  | >= 1, <= 36 |

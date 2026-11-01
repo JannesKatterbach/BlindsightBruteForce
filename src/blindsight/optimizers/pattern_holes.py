@@ -4,14 +4,15 @@ The holes of G0 form a regular lattice (search.pattern, the same lattices as per
 periodic_tile the motors do not have to repeat. Every hole gets its own layer, angle and centre distance
 from the search for fixed holes (HoleSearch), including the improvement for the goals of the mode.
 
-Tasks (search.pattern_task)
-  dense  smallest lattice distance on the search.tile_step raster at which all holes can be served,
-         found by bisection. The holes are the target_count lattice holes closest to the centre of the
-         board, or the whole board with search.pattern_fill. Not proven to be the smallest distance.
-  count  largest lattice distance at which target_count holes still fit on the board, the lattice is
-         centred. Smaller distances are tried if the motors do not fit.
-  pitch  the given distance search.pattern_pitch, the lattice fills the board. Holes that cannot be served
-         are reported with their reason like fixed holes.
+Two questions
+  search.pattern_count     fill (all lattice holes on the board) or exact (target_count holes closest to the centre)
+  search.pattern_distance
+    smallest  smallest lattice distance on the search.tile_step raster at which all holes can be served,
+              found by bisection. Not proven to be the smallest distance
+    largest   (only with exact) the largest distance at which target_count holes still fit on the board, the
+              lattice centred. Smaller distances are tried if the motors do not fit
+    fixed     the given distance search.pattern_pitch. Holes that cannot be served are reported with their
+              reason like fixed holes
 """
 
 from __future__ import annotations
@@ -87,7 +88,7 @@ class LatticeSearch:
         return pattern_cell(se.pattern, a, se.pattern_pitch_y, se.custom_tile)
 
     def fixed_param(self) -> Optional[float]:
-        """Lattice parameter of the task pitch (the tile width for an own tile that may not scale)."""
+        """Lattice parameter of a fixed distance (the tile width for an own tile that may not scale)."""
         se = self.se
         if se.pattern_pitch is not None:
             if se.pattern == "custom":  # the distance is given, scale the tile accordingly
@@ -149,11 +150,11 @@ class LatticeSearch:
         return self.stop.elapsed + max(0.05, (end - self.stop.elapsed) * CHECK_SHARE)
 
     def run(self, end: float) -> None:
-        task = self.se.pattern_task
-        count = None if task == "pitch" or (task == "dense" and self.se.pattern_fill) else self.target
-        if task == "pitch":
+        distance = self.se.pattern_distance
+        count = None if self.se.pattern_count == "fill" else self.target
+        if distance == "fixed" or (self.se.pattern == "custom" and not self.se.custom_tile.scalable):
             self.pitch = self.fixed_param()
-            search = self.prepare(self.pitch, None)
+            search = self.prepare(self.pitch, count)
             if search is not None:
                 search.exact(lambda: search.halted() or self.stop.elapsed > end)
                 if search.assignment is None:  # not all holes can be served, keep the largest served set
@@ -164,7 +165,7 @@ class LatticeSearch:
         hi = self._snap(self._param_for(self.reach))
         if count is not None:  # the lattice must still hold count holes
             hi = min(hi, self._largest_holding(lo, count))
-        if task == "count":
+        if distance == "largest":
             self._first_feasible_downwards(hi, count, end)
         else:
             self._smallest(lo, hi, count, end)
@@ -218,7 +219,7 @@ class LatticeSearch:
         out = [tr("pattern_holes.summary", pattern=pattern_label, pitch=self.cell(self.pitch).nearest_distance(), n=self.best.target)]
         if self.best.dropped:
             out.append(tr("pattern_holes.dropped", n=self.best.dropped))
-        if self.se.pattern_task == "dense":
+        if self.se.pattern_distance == "smallest":
             out.append(tr("pattern.not_proven"))
         return out
 

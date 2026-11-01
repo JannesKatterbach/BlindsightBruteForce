@@ -39,6 +39,7 @@ from ..layout import Placement
 from ..model import Model
 from ..motor_import import ScaleRequired, SvgImportError, outline_from_svg
 from ..scoring import evaluate
+from ..tiling import TilingError, tile_project
 from ..service import JobManager, JobNotFound
 
 STATIC = Path(__file__).parent / "static"
@@ -223,7 +224,7 @@ class App:
                 if not prefix and path == r_path:
                     return getattr(self, name)(Request(method, path, query, body))
             return error_response(404, tr("server.not_found"))
-        except (ConfigError, hole_files.HolesError) as exc:
+        except (ConfigError, hole_files.HolesError, TilingError) as exc:
             return error_response(400, exc.errors)
         except SvgImportError as exc:
             return error_response(400, _message(exc))
@@ -361,6 +362,17 @@ class App:
         geometry = build_geometry(model, placements)
         score = evaluate(model, placements, project.search.weights, project.target_count).as_dict() if placements else None
         return json_response({"geometry": geometry, "valid": not geometry["collisions"], "score": score})
+
+    @route("POST", "/api/tile")
+    def tile(self, req: Request) -> Response:
+        """Set a repeating block side by side ({project, tile, nx, ny} -> project with a fitted board,
+        placements, geometry, valid, notes)."""
+        data = req.dict_data()
+        project, placements, notes = tile_project(Project.from_dict(data.get("project", {})), data.get("tile"),
+                                                  data.get("nx"), data.get("ny"), MAX_PLACEMENTS)
+        geometry = build_geometry(Model(project), placements)
+        return json_response({"project": project.to_dict(), "placements": [p.as_dict() for p in placements],
+                              "geometry": geometry, "valid": not geometry["collisions"], "notes": notes})
 
     @route("POST", "/api/export-layout")
     def export_layout(self, req: Request) -> Response:

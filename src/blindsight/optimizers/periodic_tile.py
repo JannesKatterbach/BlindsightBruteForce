@@ -25,12 +25,11 @@ Search
   2. Distance. For every block a binary search finds the smallest distance with a valid assignment. The
      result is the smallest distance found on the raster, it is not proven to be the smallest.
   3. Placement. Holes of the lattice are placed one by one, each must satisfy all rules of the real build
-     area (edge, obstacles, mounting zones, capacity). The task (search.pattern_task) decides
-       dense  holes closest to the centre at the smallest distance, target_count of them or as many as
-              fit with search.pattern_fill
-       count  the largest distance at which the target count fits, the lattice centred
-       pitch  the given distance search.pattern_pitch, as many holes as fit
-     The goals of the mode (few layers, small edge) choose among equally full placements.
+     area (edge, obstacles, mounting zones, capacity). Two questions decide
+       search.pattern_count     fill (as many holes as fit) or exact (target_count holes closest to the centre)
+       search.pattern_distance  smallest (searched), largest (the largest distance at which target_count holes
+                                fit, the lattice centred) or fixed (search.pattern_pitch)
+     The goals of the mode (small edge, alignment, few layers) choose among equally full placements.
 """
 
 from __future__ import annotations
@@ -330,8 +329,8 @@ class TileSearch(SearchBase):
         self.checker = PeriodicChecker(self.model, self.counter)
         self.step = self.se.tile_step
         self.pattern = self.se.pattern
-        self.task = self.se.pattern_task
-        self.fill = self.task == "pitch" or (self.task == "dense" and self.se.pattern_fill)
+        self.distance = self.se.pattern_distance
+        self.fill = self.se.pattern_count == "fill"
         if self.fill:
             self.target = FILL_TARGET
         self._cache: dict[tuple, Optional[Tile]] = {}
@@ -343,7 +342,7 @@ class TileSearch(SearchBase):
         if self.pattern == "free":
             return self._free_families()
         b = se.pattern_pitch_y
-        pitch = se.pattern_pitch if self.task == "pitch" else None  # the other tasks search the distance
+        pitch = se.pattern_pitch if self.distance == "fixed" else None  # otherwise the distance is searched
         if self.pattern == "custom":
             tile = se.custom_tile
             fixed = pitch if pitch is not None else (None if tile.scalable else tile.width)
@@ -495,7 +494,7 @@ class TileSearch(SearchBase):
 
     def place(self, tile: Tile) -> None:
         self.phase = tr("phase.pattern_place")
-        if self.task == "count" and tile.family.fixed is None and self._place_spread(tile):
+        if self.distance == "largest" and tile.family.fixed is None and self._place_spread(tile):
             return
         self._place_compact(tile)
 
@@ -562,6 +561,6 @@ class TileSearch(SearchBase):
         best = tiles[0]
         out = [tr("pattern.summary", pattern=pattern_label, pitch=best.cell.nearest_distance(), cols=best.cols, rows=best.rows,
                   holes=len(best.units), width=best.width, height=best.height)]
-        if best.family.fixed is None and self.task == "dense":
+        if best.family.fixed is None and self.distance == "smallest":
             out.append(tr("pattern.not_proven"))
         return out

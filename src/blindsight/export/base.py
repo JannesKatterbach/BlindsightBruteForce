@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from ..config import with_layers
 from ..layout import Placement, layout_from_placements
 from ..model import Model
 
@@ -21,8 +22,19 @@ class Exporter(Protocol):
     def export(self, geometry: dict) -> str: ...
 
 
+def result_model(model: Model, placements: list[Placement]) -> Model:
+    """Model of an arrangement. With a layer count that is not fixed only the layers in use (G1 to Gk)."""
+    proj = model.project
+    if proj.stack.layers_fixed or not placements:
+        return model
+    k = max(p.plane for p in placements)
+    return model if k >= proj.stack.n_motor_planes else Model(with_layers(proj, k))
+
+
 def build_geometry(model: Model, placements: list[Placement]) -> dict:
-    """Complete, serialisable geometry of an arrangement (all dimensions in mm)."""
+    """Complete, serialisable geometry of an arrangement (all dimensions in mm). Layers that are not needed
+    are left out when the layer count is not fixed."""
+    model = result_model(model, placements)
     proj = model.project
     lay = layout_from_placements(model, placements)
     units = []

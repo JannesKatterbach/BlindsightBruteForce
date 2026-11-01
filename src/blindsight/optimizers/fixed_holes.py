@@ -32,7 +32,7 @@ from ..geometry import prism_distance
 from ..i18n import tr
 from ..layout import Counter, Layout, Placement
 from ..model import Model
-from ..scoring import GOALS_BY_MODE, alignment_value, lattice_pairs, normalized_weights, unit_edge_reach
+from ..scoring import alignment_value, goals_for, lattice_pairs, normalized_weights, unit_edge_reach
 from ..units import EPS
 from .base import OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import SearchBase
@@ -73,7 +73,7 @@ class HoleGoals:
     def __init__(self, search: "HoleSearch", served: list[int]):
         proj = search.model.project
         self.search = search
-        self.weights = normalized_weights(proj.search.weights, GOALS_BY_MODE[proj.mode])
+        self.weights = normalized_weights(proj.search.weights, goals_for(proj))
         self.layer_count = proj.stack.n_motor_planes
         self.border_width = proj.bounds.border_width if proj.bounds.border else 0.0
         self.served = served
@@ -88,13 +88,19 @@ class HoleGoals:
 
     def value(self, assignment: dict[int, Option]) -> float:
         w = self.weights
-        deepest = max(o[0] for o in assignment.values())
-        layers = 1.0 - (deepest - 1) / (self.layer_count - 1) if self.layer_count > 1 else 1.0
-        border = 1.0
-        if self.border_width > 0 and w["border"] > 0:
-            border = max(0.0, 1.0 - max(self.reach(i, o) for i, o in assignment.items()) / self.border_width)
-        keys = [(assignment[i][0], round(assignment[i][1], 3), assignment[i][2]) for i in self.served]
-        return w["layers"] * layers + w["border"] * border + w["alignment"] * alignment_value(self.pairs, keys)
+        value = 0.0
+        if w.get("layers", 0) > 0:
+            deepest = max(o[0] for o in assignment.values())
+            value += w["layers"] * (1.0 - (deepest - 1) / (self.layer_count - 1) if self.layer_count > 1 else 1.0)
+        if w.get("border", 0) > 0:
+            border = 1.0
+            if self.border_width > 0:
+                border = max(0.0, 1.0 - max(self.reach(i, o) for i, o in assignment.items()) / self.border_width)
+            value += w["border"] * border
+        if w.get("alignment", 0) > 0:
+            keys = [(assignment[i][0], round(assignment[i][1], 3), assignment[i][2]) for i in self.served]
+            value += w["alignment"] * alignment_value(self.pairs, keys)
+        return value
 
 
 class HoleSearch(SearchBase):

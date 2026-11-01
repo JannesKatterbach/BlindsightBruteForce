@@ -69,6 +69,7 @@
     "pattern": "centered_square",
     "pattern_pitch": null,
     "max_block_holes": 12,
-    "pattern_task": "dense"
+    "pattern_count": "exact",
+    "pattern_distance": "smallest"
   }
 }
