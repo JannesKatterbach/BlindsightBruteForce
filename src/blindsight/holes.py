@@ -25,7 +25,6 @@ from .units import is_finite_number
 FORMAT_HOLES = "blindsight.holes"
 FORMAT_RODS = "blindsight.rod_positions"
 FORMAT_VERSION = 1
-SAME_HOLE_MM = 1e-6
 
 
 class HolesError(ValidationError):
@@ -89,11 +88,7 @@ def parse(data: Any) -> HoleDocument:
     errs: list = []
     doc = HoleDocument(build_area=data.get("build_area") if isinstance(data.get("build_area"), dict) else None)
     if kind == FORMAT_RODS:
-        layers = data.get("layers") or []
-        g0 = next((layer for layer in layers if isinstance(layer, dict) and layer.get("index") == 0), None) or {}
-        entries = [rod for key, rods in g0.items() if key.startswith("present") or key == "always_present"
-                   for rod in (rods if isinstance(rods, list) else [])]
-        doc.holes = sorted(_points(entries, "layers[0]", errs), key=lambda p: (p[1], p[0]))
+        doc.holes = _g0_rods(data, errs)
     else:
         doc.holes = _points(data.get("holes", []), "holes", errs)
         tile = data.get("tile")
@@ -104,6 +99,15 @@ def parse(data: Any) -> HoleDocument:
     if not doc.holes and doc.tile is None:
         raise HolesError(tr("holes.empty"))
     return doc
+
+
+def _g0_rods(data: dict, errs: list) -> list[list[float]]:
+    """All rods of layer G0 of a rod positions export (every presence group), sorted by row."""
+    layers = data.get("layers") or []
+    g0 = next((layer for layer in layers if isinstance(layer, dict) and layer.get("index") == 0), None) or {}
+    entries = [rod for key, rods in g0.items() if key.startswith("present") or key == "always_present"
+               for rod in (rods if isinstance(rods, list) else [])]
+    return sorted(_points(entries, "layers[0]", errs), key=lambda p: (p[1], p[0]))
 
 
 def _tile(data: Any, errs: list) -> Optional[CustomTileSpec]:

@@ -112,12 +112,6 @@ def rotate(x: float, y: float, angle_rad: float) -> Point:
     return (x * c - y * s, x * s + y * c)
 
 
-def rotate_point(px: float, py: float, ox: float, oy: float, angle_rad: float) -> Point:
-    """Rotate (px, py) about the point (ox, oy) by angle_rad (counter clockwise)."""
-    dx, dy = rotate(px - ox, py - oy, angle_rad)
-    return (ox + dx, oy + dy)
-
-
 def rect_corners(cx: float, cy: float, w: float, d: float, angle_rad: float = 0.0) -> list[Point]:
     """Corners of a rotated rectangle centred at (cx, cy) (counter clockwise)."""
     hw, hd = w / 2.0, d / 2.0

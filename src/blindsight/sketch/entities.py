@@ -92,11 +92,6 @@ def ref_kind(sk: dict, ref: Any) -> Optional[str]:
     return {"point": K_POINT, "line": K_LINE, "circle": K_CURVE, "arc": K_CURVE}.get(kind)
 
 
-def owner_of_points(sk: dict) -> dict[int, int]:
-    """Point index -> entity index."""
-    return {p: k for k, e in enumerate(sk["entities"]) for p in e["points"]}
-
-
 class Vars:
     """Access to the geometry of a sketch in the vector of unknowns x = [x0, y0, x1, y1, ..., r_circle, ...]."""
 

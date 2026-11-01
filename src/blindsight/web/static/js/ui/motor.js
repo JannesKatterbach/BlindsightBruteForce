@@ -111,19 +111,12 @@ function initLibrary() {
     libStore(library);
     libRender();
   });
-  $("#libExport").addEventListener("click", () => download("blindsight-motor.json", JSON.stringify(cfg.motor, null, 2), "application/json"));
-  $("#libImport").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    resetFileInput(e.target);
-    if (!file) return;
+  $("#libExport").addEventListener("click", () => downloadJson("blindsight-motor.json", cfg.motor));
+  onFile("#libImport", async (file) => {
     try { cfg.motor = withDefaults(JSON.parse(await file.text())); } catch (err) { alert(t("ui.library.bad_file")); return; }
     motorChanged();
   });
-  $("#svgMotor").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    resetFileInput(e.target);
-    if (file) await importSvgMotor(await file.text());
-  });
+  onFile("#svgMotor", async (file) => importSvgMotor(await file.text()));
 }
 
 /** SVG import. Asks for the scale if it is ambiguous. */

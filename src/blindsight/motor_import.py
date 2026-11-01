@@ -135,6 +135,36 @@ def _tag(e: ET.Element) -> str:
     return e.tag.split("}")[-1] if isinstance(e.tag, str) else ""
 
 
+def _scale_from_size(root: ET.Element) -> float:
+    """mm per SVG unit from width (with unit) and viewBox. Raises ScaleRequired if that is ambiguous."""
+    w_mm = _length_mm(root.get("width"))
+    vb = root.get("viewBox")
+    if w_mm is None or not vb:
+        raise ScaleRequired(tr("svg.scale_required"))
+    try:
+        vbw = float(re.split(r"[ ,]+", vb.strip())[2])
+    except (IndexError, ValueError):
+        raise ScaleRequired(tr("svg.viewbox_unreadable")) from None
+    if vbw <= 0:
+        raise ScaleRequired(tr("svg.viewbox_invalid"))
+    return w_mm / vbw
+
+
+def _single_shape(root: ET.Element, notes: list[str]) -> list[tuple[float, float]]:
+    """Corners of the one supported shape of the SVG (in SVG units, Y down)."""
+    shapes = [e for e in root.iter() if _tag(e) in ("rect", "polygon", "polyline", "path")]
+    if len(shapes) != 1:
+        raise SvgImportError(tr("svg.shape_count", n=len(shapes)))
+    if shapes[0].get("transform"):
+        notes.append(tr("svg.transform_ignored"))
+    try:
+        return _shape_points(shapes[0], _tag(shapes[0]))
+    except SvgImportError:
+        raise
+    except ValueError as exc:
+        raise SvgImportError(tr("svg.outline_unreadable", error=str(exc))) from exc
+
+
 def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
     """Read exactly one outline from the SVG text. Returned in mm, centred, Y up, convex.
 
@@ -148,32 +178,9 @@ def outline_from_svg(svg_text: Any, mm_per_unit: Any = None) -> ImportedOutline:
         root = ET.fromstring(svg_text)
     except (ET.ParseError, RecursionError, ValueError) as exc:
         raise SvgImportError(tr("svg.unreadable", error=str(exc))) from exc
-    tag = _tag
-    scale = mm_per_unit
+    scale = mm_per_unit if mm_per_unit is not None else _scale_from_size(root)
     notes: list[str] = []
-    if scale is None:
-        w_mm = _length_mm(root.get("width"))
-        vb = root.get("viewBox")
-        if w_mm is None or not vb:
-            raise ScaleRequired(tr("svg.scale_required"))
-        try:
-            vbw = float(re.split(r"[ ,]+", vb.strip())[2])
-        except (IndexError, ValueError):
-            raise ScaleRequired(tr("svg.viewbox_unreadable")) from None
-        if vbw <= 0:
-            raise ScaleRequired(tr("svg.viewbox_invalid"))
-        scale = w_mm / vbw
-    shapes = [e for e in root.iter() if tag(e) in ("rect", "polygon", "polyline", "path")]
-    if len(shapes) != 1:
-        raise SvgImportError(tr("svg.shape_count", n=len(shapes)))
-    if shapes[0].get("transform"):
-        notes.append(tr("svg.transform_ignored"))
-    try:
-        raw = _shape_points(shapes[0], tag(shapes[0]))
-    except ValueError as exc:
-        if isinstance(exc, SvgImportError):
-            raise
-        raise SvgImportError(tr("svg.outline_unreadable", error=str(exc))) from exc
+    raw = _single_shape(root, notes)
     xs, ys = [p[0] for p in raw], [p[1] for p in raw]
     cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
     pts = [((x - cx) * scale, -(y - cy) * scale) for x, y in raw]

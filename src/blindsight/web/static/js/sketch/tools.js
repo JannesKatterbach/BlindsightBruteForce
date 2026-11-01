@@ -79,43 +79,54 @@
     if (tool === "gear" && !SK.draft && hasGear()) { SK.msg = t("ui.sk.gear_exists"); Sketch.renderAll(); return; }
     if (!SK.draft) { SK.draft = { tool, clicks: [click] }; Sketch.render(); return; }
     const draft = SK.draft;
-    const first = draft.clicks[0], last = draft.clicks[draft.clicks.length - 1];
-    if (tool === "line") {
-      if (Math.hypot(click.x - last.x, click.y - last.y) < SK_EPS) { finishDraft(); return; }
-      const closes = draft.clicks.length > 1 && Math.hypot(click.x - first.x, click.y - first.y) < SK_SNAP_PX * SK.view.k;
-      // Commits run one after another, so the chain is read when this line is really added
-      Sketch.commit((sk) => {
-        const chainEnd = draft.lastLine;
-        const start = { ...last, snap: chainEnd !== undefined ? null : last.snap };
-        const end = closes ? { ...first, snap: null } : click;
-        const k = addLine(sk, start, end);
-        if (chainEnd !== undefined) sk.constraints.push(makeConstraint("coincident", [`p${sk.entities[k].points[0]}`, `p${sk.entities[chainEnd].points[1]}`]));
-        if (closes) sk.constraints.push(makeConstraint("coincident", [`p${sk.entities[k].points[1]}`, `p${sk.entities[draft.firstLine ?? k].points[0]}`]));
-        draft.lastLine = k;
-        if (draft.firstLine === undefined) draft.firstLine = k;
-      });
-      if (closes) { SK.draft = null; return; }
-      draft.clicks.push({ ...click, snap: null });
-      return;
-    }
+    if (tool === "line") { chainClick(draft, click); return; }
     if (tool === "arc" && draft.clicks.length === 1) { draft.clicks.push(click); Sketch.render(); return; }
     SK.draft = null;
+    const first = draft.clicks[0];
     Sketch.commit((sk) => {
       if (tool === "rect") addRectangle(sk, first, click);
       else if (tool === "gear") addGear(sk, first, click);
-      else if (tool === "circle") {
-        const c = addPoint(sk, first.x, first.y);
-        addEntity(sk, "circle", [c], { radius: Math.max(Math.hypot(click.x - first.x, click.y - first.y), 0.1) });
-        snapConstraint(sk, c, first.snap);
-      } else if (tool === "arc") {
-        const s = draft.clicks[1], r = Math.max(Math.hypot(s.x - first.x, s.y - first.y), 0.1);
-        const a1 = Math.atan2(click.y - first.y, click.x - first.x);
-        const c = addPoint(sk, first.x, first.y), ps = addPoint(sk, s.x, s.y), pe = addPoint(sk, first.x + r * Math.cos(a1), first.y + r * Math.sin(a1));
-        addEntity(sk, "arc", [c, ps, pe]);
-        snapConstraint(sk, c, first.snap);
-        snapConstraint(sk, ps, s.snap);
-      }
+      else if (tool === "circle") addCircle(sk, first, click);
+      else if (tool === "arc") addArc(sk, first, draft.clicks[1], click);
     });
+  }
+
+  /** Next click of a line chain. Adds the line from the last click, a click on the start point closes the chain. */
+  function chainClick(draft, click) {
+    const first = draft.clicks[0], last = draft.clicks[draft.clicks.length - 1];
+    if (Math.hypot(click.x - last.x, click.y - last.y) < SK_EPS) { finishDraft(); return; }
+    const closes = draft.clicks.length > 1 && Math.hypot(click.x - first.x, click.y - first.y) < SK_SNAP_PX * SK.view.k;
+    // Commits run one after another, so the chain is read when this line is really added
+    Sketch.commit((sk) => {
+      const chainEnd = draft.lastLine;
+      const start = { ...last, snap: chainEnd !== undefined ? null : last.snap };
+      const end = closes ? { ...first, snap: null } : click;
+      const k = addLine(sk, start, end);
+      if (chainEnd !== undefined) sk.constraints.push(makeConstraint("coincident", [`p${sk.entities[k].points[0]}`, `p${sk.entities[chainEnd].points[1]}`]));
+      if (closes) sk.constraints.push(makeConstraint("coincident", [`p${sk.entities[k].points[1]}`, `p${sk.entities[draft.firstLine ?? k].points[0]}`]));
+      draft.lastLine = k;
+      if (draft.firstLine === undefined) draft.firstLine = k;
+    });
+    if (closes) { SK.draft = null; return; }
+    draft.clicks.push({ ...click, snap: null });
+  }
+
+  /** Circle from the centre click and a click on its edge. */
+  function addCircle(sk, centre, edge) {
+    const c = addPoint(sk, centre.x, centre.y);
+    addEntity(sk, "circle", [c], { radius: Math.max(Math.hypot(edge.x - centre.x, edge.y - centre.y), 0.1) });
+    snapConstraint(sk, c, centre.snap);
+  }
+
+  /** Arc counter clockwise from start, its radius from centre to start, ending in the direction of the end click. */
+  function addArc(sk, centre, start, end) {
+    const r = Math.max(Math.hypot(start.x - centre.x, start.y - centre.y), 0.1);
+    const a1 = Math.atan2(end.y - centre.y, end.x - centre.x);
+    const c = addPoint(sk, centre.x, centre.y), ps = addPoint(sk, start.x, start.y);
+    const pe = addPoint(sk, centre.x + r * Math.cos(a1), centre.y + r * Math.sin(a1));
+    addEntity(sk, "arc", [c, ps, pe]);
+    snapConstraint(sk, c, centre.snap);
+    snapConstraint(sk, ps, start.snap);
   }
 
   /** End the line chain (double click, Enter or Esc). */

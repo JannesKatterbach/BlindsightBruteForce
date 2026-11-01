@@ -433,9 +433,15 @@ def _sync_sketch_motor(motor: MotorSpec, errs: list[str]) -> None:
 
 
 def _check_stack(proj: Project, errs: list[str]) -> None:
-    stack = proj.stack
+    spacing_errs = _spacing_errors(proj.stack)
+    errs.extend(spacing_errs or plane_overlap_errors(proj.stack))  # overlaps only make sense with valid spacing
+    _check_plane_rules(proj.stack, errs)
+
+
+def _spacing_errors(stack: StackSpec) -> list[LocalText]:
+    """Layer distances and thicknesses of the chosen spacing mode."""
     n = stack.n_motor_planes
-    before = len(errs)
+    errs = []
     if stack.mode == "gaps":
         if len(stack.gaps) < n:
             errs.append(tr("config.gaps_count", n=n))
@@ -452,8 +458,12 @@ def _check_stack(proj: Project, errs: list[str]) -> None:
             errs.append(tr("config.thicknesses_count", n=n))
         elif any(t <= 0 for t in stack.thicknesses):
             errs.append(tr("config.thicknesses_positive"))
-    if len(errs) == before:
-        errs.extend(plane_overlap_errors(stack))
+    return errs
+
+
+def _check_plane_rules(stack: StackSpec, errs: list[str]) -> None:
+    """Allowed layers, mounting areas, capacities and angles per layer."""
+    n = stack.n_motor_planes
     if stack.allowed_planes is not None:
         bad = [p for p in stack.allowed_planes if not 1 <= p <= n]
         if bad:
@@ -724,13 +734,17 @@ def _check_number(meta: Meta, value: Any, errs: list[str]) -> None:
         errs.append(tr("value.at_most", path=meta.path, hi=meta.hi, value=value))
 
 
-_isnum = is_finite_number  # name from earlier versions
-
-
 # ---------------------------------------------------------------------------
 # 4. Type driven reading. Checks types and converts integral floats to int.
 # ---------------------------------------------------------------------------
 _BAD = object()  # marker of an invalid value (the message is already in errs)
+# Scalar types. (accepts the raw value, conversion, message key)
+_SCALARS = {
+    bool: (lambda v: isinstance(v, bool), bool, "value.bool"),
+    float: (is_finite_number, float, "value.finite"),
+    int: (lambda v: is_finite_number(v) and int(v) == v, int, "value.integer"),
+    str: (lambda v: isinstance(v, str), str, "value.text"),
+}
 
 
 def _build(cls, data: Any, path: str, errs: list[str]):
@@ -762,26 +776,12 @@ def _coerce(value: Any, hint: Any, path: str, errs: list[str]):
         return _coerce(value, inner, path, errs)
     if dataclasses.is_dataclass(hint):
         return _build(hint, value, path + ".", errs)
-    if hint is bool:
-        if not isinstance(value, bool):
-            errs.append(tr("value.bool", path=path))
+    if hint in _SCALARS:
+        accepts, convert, message = _SCALARS[hint]
+        if not accepts(value):
+            errs.append(tr(message, path=path))
             return _BAD
-        return value
-    if hint is float:
-        if not is_finite_number(value):
-            errs.append(tr("value.finite", path=path))
-            return _BAD
-        return float(value)
-    if hint is int:
-        if not is_finite_number(value) or int(value) != value:
-            errs.append(tr("value.integer", path=path))
-            return _BAD
-        return int(value)
-    if hint is str:
-        if not isinstance(value, str):
-            errs.append(tr("value.text", path=path))
-            return _BAD
-        return value
+        return convert(value)
     if origin is list:
         if not isinstance(value, list):
             errs.append(tr("value.list", path=path))

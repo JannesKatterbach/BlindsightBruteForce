@@ -248,10 +248,6 @@ class ConstraintType:
     def label(self) -> LocalText:
         return tr(f"constraint.{self.name}")
 
-    @property
-    def is_dimension(self) -> bool:
-        return self.value is not None
-
     def as_schema(self) -> dict:
         return {"name": self.name, "label": self.label, "signatures": [list(s) for s in self.signatures],
                 "value": self.value}
@@ -316,12 +312,10 @@ def constraint_errors(sk: dict, c: dict, tag: str) -> list[str]:
             message = ctype.check_value(c["value"])
             if message:
                 errs.append(tr("sketch.value_message", path=f"{tag}.value", message=message))
-    at = c.get("at")
-    if at is not None and not (isinstance(at, (list, tuple)) and len(at) == 2 and all(is_finite_number(v) for v in at)):
-        errs.append(tr("sketch.point_format", path=f"{tag}.at"))
-    label = c.get("label")
-    if label is not None and not (isinstance(label, (list, tuple)) and len(label) == 2 and all(is_finite_number(v) for v in label)):
-        errs.append(tr("sketch.point_format", path=f"{tag}.label"))
+    for name in ("at", "label"):  # optional positions [x, y]
+        point = c.get(name)
+        if point is not None and not (isinstance(point, (list, tuple)) and len(point) == 2 and all(is_finite_number(v) for v in point)):
+            errs.append(tr("sketch.point_format", path=f"{tag}.{name}"))
     if not isinstance(c["enabled"], bool):
         errs.append(tr("value.bool", path=f"{tag}.enabled"))
     if not isinstance(c["name"], str):

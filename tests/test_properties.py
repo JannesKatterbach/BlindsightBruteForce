@@ -3,7 +3,6 @@
 import math
 import random
 
-import pytest
 from blindsight.config import ConfigError, Project
 from blindsight.layout import Layout, Placement, layout_from_placements
 from blindsight.model import Model

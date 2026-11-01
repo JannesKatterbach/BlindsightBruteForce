@@ -299,39 +299,10 @@
   }
 
   function drawDimensionGeometry(ctx, g, c, label, color) {
-    const { px, line } = ctx;
     const r = c.refs;
-    if (c.type === "diameter" || c.type === "radius") {
-      const { c: m, r: rad } = Sketch.curve(Sketch.entityIndex(r[0]));
-      const d = [label[0] - m[0], label[1] - m[1]], n = Math.hypot(...d) || 1, u = [d[0] / n, d[1] / n];
-      const edge = [m[0] + u[0] * rad, m[1] + u[1] * rad];
-      const start = c.type === "diameter" ? [m[0] - u[0] * rad, m[1] - u[1] * rad] : m;
-      line(start, label, { stroke: color, w: 0.8, parent: g });
-      arrow(g, px, edge, u, color);
-      if (c.type === "diameter") arrow(g, px, start, [-u[0], -u[1]], color);
-      return;
-    }
-    if (c.type === "angle") {
-      const corner = Sketch.lineIntersection(r[0], r[1]);
-      const rad = Math.max(px(12), Math.hypot(label[0] - corner[0], label[1] - corner[1]) * 0.85);
-      const dirs = r.map((ref) => {
-        const [a, b] = Sketch.ends(Sketch.entityIndex(ref));
-        const far = Math.hypot(a[0] - corner[0], a[1] - corner[1]) > Math.hypot(b[0] - corner[0], b[1] - corner[1]) ? a : b;
-        return Math.atan2(far[1] - corner[1], far[0] - corner[0]);
-      });
-      let sweep = dirs[1] - dirs[0];
-      while (sweep > Math.PI) sweep -= 2 * Math.PI;
-      while (sweep < -Math.PI) sweep += 2 * Math.PI;
-      const s = [corner[0] + rad * Math.cos(dirs[0]), corner[1] + rad * Math.sin(dirs[0])];
-      const e = [corner[0] + rad * Math.cos(dirs[0] + sweep), corner[1] + rad * Math.sin(dirs[0] + sweep)];
-      el("path", { d: `M ${s[0]} ${s[1]} A ${rad} ${rad} 0 0 ${sweep > 0 ? 1 : 0} ${e[0]} ${e[1]}`, fill: "none", stroke: color, "stroke-width": px(1), "pointer-events": "none" }, g);
-      return;
-    }
-    if (c.type === "length") {
-      const [a, b] = Sketch.ends(Sketch.entityIndex(r[0]));
-      offsetDimension(ctx, g, a, b, label, color);
-      return;
-    }
+    if (c.type === "diameter" || c.type === "radius") { drawRadialDimension(ctx, g, c, label, color); return; }
+    if (c.type === "angle") { drawAngleArc(ctx, g, r, label, color); return; }
+    if (c.type === "length") { offsetDimension(ctx, g, ...Sketch.ends(Sketch.entityIndex(r[0])), label, color); return; }
     const kinds = r.map(Sketch.kindOf);
     if (kinds[0] === "point" && kinds[1] === "point") {
       const a = Sketch.point(r[0]), b = Sketch.point(r[1]);
@@ -348,6 +319,34 @@
     const tFoot = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / l2;
     const foot = [a[0] + tFoot * d[0], a[1] + tFoot * d[1]];
     linearDimension(ctx, g, p, foot, label, color);
+  }
+
+  /** Diameter or radius. Leader from the centre (or the opposite edge) through the circle to the label. */
+  function drawRadialDimension({ px, line }, g, c, label, color) {
+    const { c: m, r: rad } = Sketch.curve(Sketch.entityIndex(c.refs[0]));
+    const d = [label[0] - m[0], label[1] - m[1]], n = Math.hypot(...d) || 1, u = [d[0] / n, d[1] / n];
+    const edge = [m[0] + u[0] * rad, m[1] + u[1] * rad];
+    const start = c.type === "diameter" ? [m[0] - u[0] * rad, m[1] - u[1] * rad] : m;
+    line(start, label, { stroke: color, w: 0.8, parent: g });
+    arrow(g, px, edge, u, color);
+    if (c.type === "diameter") arrow(g, px, start, [-u[0], -u[1]], color);
+  }
+
+  /** Arc between two lines around their corner, through the label. */
+  function drawAngleArc({ px }, g, refs, label, color) {
+    const corner = Sketch.lineIntersection(refs[0], refs[1]);
+    const rad = Math.max(px(12), Math.hypot(label[0] - corner[0], label[1] - corner[1]) * 0.85);
+    const dirs = refs.map((ref) => {  // direction from the corner to the far end of each line
+      const [a, b] = Sketch.ends(Sketch.entityIndex(ref));
+      const far = Math.hypot(a[0] - corner[0], a[1] - corner[1]) > Math.hypot(b[0] - corner[0], b[1] - corner[1]) ? a : b;
+      return Math.atan2(far[1] - corner[1], far[0] - corner[0]);
+    });
+    let sweep = dirs[1] - dirs[0];
+    while (sweep > Math.PI) sweep -= 2 * Math.PI;
+    while (sweep < -Math.PI) sweep += 2 * Math.PI;
+    const s = [corner[0] + rad * Math.cos(dirs[0]), corner[1] + rad * Math.sin(dirs[0])];
+    const e = [corner[0] + rad * Math.cos(dirs[0] + sweep), corner[1] + rad * Math.sin(dirs[0] + sweep)];
+    el("path", { d: `M ${s[0]} ${s[1]} A ${rad} ${rad} 0 0 ${sweep > 0 ? 1 : 0} ${e[0]} ${e[1]}`, fill: "none", stroke: color, "stroke-width": px(1), "pointer-events": "none" }, g);
   }
 
   /** Aligned dimension between a and b, shifted parallel towards the label. */

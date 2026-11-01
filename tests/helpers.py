@@ -1,5 +1,5 @@
 from blindsight.config import Project
-from blindsight.layout import Layout, Placement
+from blindsight.layout import Placement
 from blindsight.model import Model
 
 

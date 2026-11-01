@@ -63,7 +63,17 @@ function download(name, content, type) {
 }
 
 /** Reset a file input so that the same file triggers a change event again. */
-function resetFileInput(input) { input.value = ""; }
+/** Download data as a formatted JSON file. */
+const downloadJson = (name, data) => download(name, JSON.stringify(data, null, 2), "application/json");
+
+/** Call handler with the file chosen in a file input. The input is reset, so the same file works again. */
+function onFile(selector, handler) {
+  $(selector).addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (file) await handler(file);
+  });
+}
 
 // --- Server ----------------------------------------------------------------------------------------
 const JSON_HEADERS = { "Content-Type": "application/json" };  // the server rejects other types for POST

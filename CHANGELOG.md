@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.7.0
+Oberfläche einfacher (Prüfung mit den Skills usability-psychologist und ui-ux-pro-max, die Motor Skizze bleibt wie Onshape)
+- Selten geänderte Felder liegen eingeklappt unter "Weitere Einstellungen" (Geometrie und Optimierung). Die Zusammenfassung
+  zeigt, wie viele davon geändert sind, ein Fehler in einem eingeklappten Feld klappt den Bereich auf
+- Ebenen zeigen nur das Abstandsfeld des gewählten Abstandsmodus
+- Reiter Ergebnisse ohne Lauf mit Knöpfen "Zur Optimierung" und "Ergebnis laden" (Laden war vorher erst nach einem Lauf
+  erreichbar). Die Werkzeugleiste ist in eine Zeile Ansicht und eine Zeile Dateien geteilt
+- Leere Tabellen (Hindernisse, Montagebereiche, Löcher) zeigen einen Hinweis statt einer leeren Kopfzeile
+- Rückfrage vor Standardwerte, Skizze verwerfen und Alle Löcher löschen
+- Barrierefreiheit. Sichtbarer Tastaturfokus, Dateiknöpfe mit Tab erreichbar, Reiter mit ARIA Rollen, Symbolknöpfe und
+  Auswahllisten mit Beschriftung, Fehlerbanner wird vorgelesen
+
+Fehler behoben
+- Zurücksetzen einer Bearbeitung im Reiter Ergebnisse konnte von einer verzögerten Prüfung überschrieben werden, die beim
+  Verlassen des bearbeiteten Feldes ausgelöst wurde (selten auch ein Fehler im Browser). Ausstehende Prüfungen werden jetzt
+  beim Zurücksetzen und beim Laden eines neuen Ergebnisses verworfen
+
+Code (ohne Änderung der Funktionen)
+- Toter Code entfernt (unbenutzte Hilfsfunktionen, Konstanten, Altnamen und Importe), CSS ohne Reste der alten Skizzen Tabellen
+- Lange Funktionen zerlegt. Skizzen Solver (Lösen und Auswerten getrennt), Prüfung der Ebenen, Typprüfung der
+  Konfiguration als Tabelle, SVG Import (Maßstab und Form), Lochbild Parser, Regelprüfung im Layout, Bemaßungen und
+  Zeichenwerkzeuge der Skizze
+- Gemeinsame Bausteine in der Oberfläche für Dateiauswahl, JSON Download, leere Tabellen und Löschknöpfe
+
 ## 0.6.0
 Neue Funktionen
 - Motor Skizze neu nach dem Vorbild von Onshape. Elemente Linie (als Kette), Rechteck, Kreis, Bogen und Zahnrad,

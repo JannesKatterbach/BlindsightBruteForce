@@ -149,34 +149,39 @@ def solve(sketch: Any, drag: Optional[dict] = None, diagnose: bool = True, time_
         wish = _drag_wish(sk, v, drag, x_start)
         if wish is None:
             return _invalid(sk, [tr("solver.bad_drag")])
-    cons = sk["constraints"]
-    active = [(k, c) for k, c in enumerate(cons) if c["enabled"]]
+    active = [(k, c) for k, c in enumerate(sk["constraints"]) if c["enabled"]]
     implicit = implicit_residuals(sk, v)
+    try:
+        x, conflicts, errors = _positions(sk, v, active, implicit, x_start, wish, diagnose, time.monotonic() + time_limit)
+    except _Timeout:
+        return _invalid(sk, [tr("solver.timeout")])
+    return _analyse(sk, v, active, implicit, x_start, x, conflicts, errors)
+
+
+def _positions(sk: dict, v: Vars, active: list[tuple[int, dict]], implicit: list[Residuals], x_start: Vector,
+               wish: Optional[Residuals], diagnose: bool, deadline: float) -> tuple[Vector, list[int], list[Any]]:
+    """Steps 2 and 3. Returns (positions, indices of conflicting constraints, errors)."""
     hard = _system(implicit + [compile_constraint(sk, c, v, x_start) for _, c in active])
-    deadline = time.monotonic() + time_limit
-
-    errors: list[Any] = []
-    conflicts: list[int] = []
+    x = x_start
     if wish is not None:
-        x, _ = levenberg_marquardt(hard, wish, x_start, deadline=deadline)
-        x, resid = levenberg_marquardt(hard, None, x, deadline=deadline)  # polish. Constraints take precedence
-    else:
-        x, resid = levenberg_marquardt(hard, None, x_start, deadline=deadline)
-    if resid >= TOL_OK:
-        if time.monotonic() > deadline:
-            return _invalid(sk, [tr("solver.timeout")])
-        if wish is not None:
-            x = x_start
-            errors.append(tr("solver.drag_rejected"))
-        elif diagnose:
-            try:
-                x, conflicts = _find_conflicts(sk, v, active, implicit, x_start, deadline)
-            except _Timeout:
-                return _invalid(sk, [tr("solver.timeout")])
-        else:
-            x = x_start
-            errors.append(tr("solver.unsolved"))
+        x, _ = levenberg_marquardt(hard, wish, x, deadline=deadline)
+    x, resid = levenberg_marquardt(hard, None, x, deadline=deadline)  # after a drag the constraints take precedence
+    if resid < TOL_OK:
+        return x, [], []
+    if time.monotonic() > deadline:
+        raise _Timeout
+    if wish is not None:
+        return x_start, [], [tr("solver.drag_rejected")]
+    if not diagnose:
+        return x_start, [], [tr("solver.unsolved")]
+    x, conflicts = _find_conflicts(sk, v, active, implicit, x_start, deadline)
+    return x, conflicts, []
 
+
+def _analyse(sk: dict, v: Vars, active: list[tuple[int, dict]], implicit: list[Residuals], x_start: Vector, x: Vector,
+             conflicts: list[int], errors: list[Any]) -> SolveResult:
+    """Steps 4 and 5 at the positions x. Rank, state of every constraint, determined geometry, profile."""
+    cons = sk["constraints"]
     used = [(k, c) for k, c in active if k not in conflicts]
     # Orientation dependent constraints (signs, angle ends) always come from the start position
     fns_used = [compile_constraint(sk, c, v, x_start) for _, c in used]
@@ -184,7 +189,6 @@ def solve(sketch: Any, drag: Optional[dict] = None, diagnose: bool = True, time_
     basis, redundant_all = row_space(implicit + fns_used, x)
     redundant = redundant_all[len(implicit):]
     dof = v.size - len(basis)
-    known = determined_variables(basis, v.size)
 
     status = {k: "ok" for k, _ in active}
     messages: dict[int, Any] = {}
@@ -200,14 +204,14 @@ def solve(sketch: Any, drag: Optional[dict] = None, diagnose: bool = True, time_
         errors.append(tr("solver.unsolved"))
 
     solved = v.apply(x)
+    known = determined_variables(basis, v.size)
     defined_points = [known[2 * i] and known[2 * i + 1] for i in range(v.n_points)]
     defined_entities = [all(defined_points[p] for p in e["points"]) and (k not in v.radius_slot or known[v.radius_slot[k]])
                         for k, e in enumerate(solved["entities"])]
     entries = []
     for k, c in enumerate(cons):
-        st = status.get(k, "ok") if c["enabled"] else "disabled"
-        entry = {"index": k, "status": st, "message": messages.get(k, "")}
-        if c["enabled"] and st != "conflict":
+        entry = {"index": k, "status": status.get(k, "ok") if c["enabled"] else "disabled", "message": messages.get(k, "")}
+        if c["enabled"] and entry["status"] != "conflict":
             entry["residual"] = max_abs(compile_constraint(sk, c, v, x_start)(x))
         entries.append(entry)
     prof = profile(solved)

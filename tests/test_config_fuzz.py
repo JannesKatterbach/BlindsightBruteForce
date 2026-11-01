@@ -1,8 +1,6 @@
 """Fuzzing of the configuration validation. Only ConfigError may occur, never another exception."""
 
 import copy
-import json
-import math
 import random
 
 import pytest

@@ -255,6 +255,15 @@ class Layout:
             return tr("layout.capacity_full", plane=pl.plane, cap=cap)
         return ""
 
+    def _rule_problem(self, pl: Placement, parts: list, with_parts: bool) -> str:
+        """First violated unit rule among the rules that need the parts of the unit (or those that do not)."""
+        for _, rule, needs_parts in UNIT_RULES:
+            if needs_parts == with_parts:
+                message = rule(self.model, pl, parts)
+                if message:
+                    return message
+        return ""
+
     def check(self, pl: Placement, ignore: Optional[int] = None, collect: bool = False) -> CheckResult:
         """Check a placement against unit rules, capacity, obstacles and existing units.
 
@@ -263,20 +272,14 @@ class Layout:
         """
         self.counter.checks += 1
         model = self.model
-        for _, rule, needs_parts in UNIT_RULES:
-            if not needs_parts:
-                message = rule(model, pl, [])
-                if message:
-                    return CheckResult(False, reason=message)
-        message = self._capacity_problem(pl, ignore)
+        # Cheap rules first, the parts are only built when they pass
+        message = self._rule_problem(pl, [], with_parts=False) or self._capacity_problem(pl, ignore)
         if message:
             return CheckResult(False, reason=message)
         parts = model.unit_parts(-1, pl.x, pl.y, pl.plane, pl.angle, pl.cd)
-        for _, rule, needs_parts in UNIT_RULES:
-            if needs_parts:
-                message = rule(model, pl, parts)
-                if message:
-                    return CheckResult(False, reason=message)
+        message = self._rule_problem(pl, parts, with_parts=True)
+        if message:
+            return CheckResult(False, reason=message)
 
         gap = model.gap
         need = gap - EPS

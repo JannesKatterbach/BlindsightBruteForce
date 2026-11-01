@@ -29,18 +29,9 @@ async function loadCfg(obj) {
   if (window.skReload) skReload();
 }
 
-/** Read a file from a file input and reset the input (the same file works again). */
-function onFile(selector, handler) {
-  $(selector).addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    resetFileInput(e.target);
-    if (file) await handler(file);
-  });
-}
-
 function bindHeader() {
   $$("#tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
-  $("#btnSave").addEventListener("click", () => download("blindsight-config.json", JSON.stringify(cfg, null, 2), "application/json"));
+  $("#btnSave").addEventListener("click", () => downloadJson("blindsight-config.json", cfg));
   $("#btnReset").addEventListener("click", () => { if (confirm(t("ui.confirm.reset"))) loadCfg({}); });
   onFile("#fileLoad", async (file) => {
     let obj;

@@ -32,12 +32,8 @@ function initHoles() {
   $("#holePasteAdd").addEventListener("click", () => pasteHoles(false));
   $("#holePasteReplace").addEventListener("click", () => pasteHoles(true));
   $("#holeFillBtn").addEventListener("click", fillHoles);
-  $("#holeDownload").addEventListener("click", () => download("blindsight-holes.json", JSON.stringify(holeDocument(), null, 2), "application/json"));
-  $("#holeLoad").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    resetFileInput(e.target);
-    if (file) await loadHoleFile(file);
-  });
+  $("#holeDownload").addEventListener("click", () => downloadJson("blindsight-holes.json", holeDocument()));
+  onFile("#holeLoad", loadHoleFile);
   $("#holeUse").addEventListener("click", useHoles);
   initHolePreview();
   buildHoleFillPatterns();

@@ -6,7 +6,6 @@ import pytest
 from blindsight import sketch as S
 from blindsight.config import ConfigError, Project
 from blindsight.export import EXPORTERS, build_geometry
-from blindsight.geometry import Footprint, rotate_point
 from blindsight.layout import Layout, Placement, layout_from_placements
 from blindsight.model import Model
 from blindsight.optimizers import run_optimizer

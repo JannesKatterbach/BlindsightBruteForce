@@ -1,5 +1,4 @@
 import math
-import re
 import xml.etree.ElementTree as ET
 
 from blindsight.export import JsonExporter, SvgExporter, build_geometry

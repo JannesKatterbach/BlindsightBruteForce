@@ -120,12 +120,6 @@ class PlaneStack:
             return math.inf
         return self.planes[i - 1].z_bottom - self.planes[i].z_top
 
-    def free_height_below(self, i: int) -> float:
-        """Free space below layer i down to the top face of the next lower layer (inf for the last one)."""
-        if i + 1 < len(self.planes):
-            return self.planes[i].z_bottom - self.planes[i + 1].z_top
-        return math.inf
-
 
 class Model:
     """Compiled project. Creates parts for placements and checks static conditions."""
@@ -282,10 +276,6 @@ class Model:
             cached = [(x + dx, y) for x, y in self.housing_nominal]
             self._housing_cache[key] = cached
         return cached
-
-    @property
-    def housing_local(self) -> list[Point]:  # name from earlier versions
-        return self.housing_nominal
 
     def _compute_unit_radius(self) -> float:
         """Upper bound of the distance of all part points from the rod axis (for the spatial grid)."""

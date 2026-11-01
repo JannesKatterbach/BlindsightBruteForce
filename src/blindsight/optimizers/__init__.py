@@ -1,8 +1,8 @@
 """Optimization strategies.
 
-The strategies register themselves when their module is imported (``registry.register``). A new
-strategy needs its own module with a ``@register`` class, an import here and an entry in the options
-of ``search.optimizer`` (config.FIELD_META).
+The strategies register themselves when their module is imported (``registry.register``), the class
+imports below do that. A new strategy needs its own module with a ``@register`` class, an import here
+and an entry in the options of ``search.optimizer`` (config.FIELD_META).
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import Optional
 
 from ..layout import Counter
-from . import anneal_free, exhaustive_small, fixed_holes, pattern_greedy, periodic_tile  # noqa: F401  (register themselves)
 from .anneal_free import AnnealFreeOptimizer
 from .base import OptimizationResult, Optimizer, ProgressCallback, ProgressInfo, Solution, StopToken
 from .exhaustive_small import ExhaustiveSmallOptimizer

@@ -1,7 +1,8 @@
 """Numerics of the sketch solver in pure Python (no dependency).
 
   * levenberg_marquardt  minimises the residuals with minimal movement of the points
-  * constraint_rank      rank of the Jacobian, giving degrees of freedom and redundant constraints
+  * row_space            orthonormal rows of the Jacobian, giving degrees of freedom and redundant constraints
+  * determined_variables which unknowns the constraints fix completely
 """
 
 from __future__ import annotations
@@ -137,15 +138,6 @@ def _damped_step(J: Matrix, JJT: Matrix, r: Vector, x: Vector, full: Residuals, 
             return x_new, r_new, cost_new, max(damping / DAMPING_DECREASE, DAMPING_MIN), step_length
         damping *= DAMPING_INCREASE
     return None
-
-
-def constraint_rank(fns: list[Residuals], x: Vector) -> tuple[int, list[bool]]:
-    """Rank of the joint Jacobian, built constraint by constraint (Gram Schmidt).
-
-    Returns (rank, redundant per constraint). A constraint is redundant if none of its rows adds
-    anything new to the basis of the previous ones."""
-    basis, redundant = row_space(fns, x)
-    return len(basis), redundant
 
 
 def determined_variables(basis: list[Vector], n: int) -> list[bool]:
