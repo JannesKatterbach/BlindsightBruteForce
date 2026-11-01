@@ -21,6 +21,7 @@ async function loadResult(idx) {
   const response = await resultLatest(jobId, idx);
   if (!response || response.status !== 200) return;
   const data = response.data;
+  cancelPendingEdit();
   lastResult = data.result;
   solIndex = data.solution_index || 0;
   lastGeo = data.geometry;
@@ -33,6 +34,7 @@ async function loadResult(idx) {
 
 /** Show a result from a file (project and placements). */
 function showLoadedResult(geometry) {
+  cancelPendingEdit();
   lastGeo = geometry;
   edited = false;
   selUnit = null;

@@ -95,8 +95,16 @@ function addUnit() {
   pushEdit();
 }
 
+/** Forget an edit check that has not been sent yet (the shown geometry is replaced). */
+function cancelPendingEdit() {
+  clearTimeout(editTimer);
+  editTimer = null;
+}
+
 /** Back to the state before editing (also for results loaded from a file). */
 async function resetEdits() {
+  // Leaving an edited field fires its change event right before this click. Its check must not undo the reset
+  cancelPendingEdit();
   editError = "";
   if (resultSource === "job" && jobId) { await loadResult(solIndex); return; }
   if (!originalPlacements) return;
@@ -112,6 +120,7 @@ async function resetEdits() {
 function pushEdit() {
   clearTimeout(editTimer);
   editTimer = setTimeout(async () => {
+    if (!lastGeo) return;
     const keep = lastGeo.units.findIndex((u) => u.id === selUnit);
     const response = await validateLatest({ project: cfg, placements: placementsOf(lastGeo) });
     if (!response) return;
