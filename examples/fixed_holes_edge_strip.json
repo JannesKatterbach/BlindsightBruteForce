@@ -1,0 +1,10 @@
+{
+  "name": "Feste Löcher mit Randbereich für Motoren",
+  "bounds": {"width": 110.0, "height": 110.0, "border": true, "border_width": 15.0},
+  "holes": [[30, 30], [55, 30], [80, 30], [30, 55], [55, 55], [80, 55], [30, 80], [55, 80], [80, 80]],
+  "search": {
+    "optimizer": "fixed_holes",
+    "time_limit_s": 6,
+    "weights": {"layers": 2, "border": 6, "alignment": 2}
+  }
+}

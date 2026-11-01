@@ -1,15 +1,6 @@
 "use strict";
-// Start of the UI, tabs, language switch, loading configurations and wiring of the controls.
-
-function switchTab(name) {
-  if (name === "sketch" && window.skReload) setTimeout(skReload, 0);
-  if (name === "holes") setTimeout(holesChanged, 0);  // the build area may have changed
-  $$("#tabs button").forEach((b) => {
-    b.classList.toggle("active", b.dataset.tab === name);
-    b.setAttribute("aria-selected", String(b.dataset.tab === name));
-  });
-  $$(".tab").forEach((t) => t.classList.toggle("active", t.id === "tab-" + name));
-}
+// Start of the UI, language switch, loading configurations and wiring of the controls. The steps of the
+// guided workflow live in steps.js, the modes in modes.js.
 
 /** Recursive merge. Objects are merged, lists and values replaced. */
 function mergeConfig(base, update) {
@@ -21,18 +12,21 @@ function mergeConfig(base, update) {
   return base;
 }
 
+// Start and "Defaults" of the UI. The guided workflow starts in the pattern mode, the core default is free distribution
+const UI_START = { search: { optimizer: "periodic_tile" } };
+
 /** Load a configuration (missing values from the defaults). */
 async function loadCfg(obj) {
   cfg = mergeConfig(clone(defaults), obj || {});
+  loadHolesFromCfg();
   writeInputs();
   await refresh();
   if (window.skReload) skReload();
 }
 
 function bindHeader() {
-  $$("#tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
   $("#btnSave").addEventListener("click", () => downloadJson("blindsight-config.json", cfg));
-  $("#btnReset").addEventListener("click", () => { if (confirm(t("ui.confirm.reset"))) loadCfg({}); });
+  $("#btnReset").addEventListener("click", () => { if (confirm(t("ui.confirm.reset"))) loadCfg(UI_START); });
   onFile("#fileLoad", async (file) => {
     let obj;
     try { obj = JSON.parse(await file.text()); } catch (err) { alert(t("ui.main.bad_config_file")); return; }
@@ -49,8 +43,7 @@ function bindTabs() {
   $("#btnExport").addEventListener("click", doExport);
   $("#btnSaveResult").addEventListener("click", saveResult);
   onFile("#fileResult", loadResultFile);
-  $("#btnGoOptim").addEventListener("click", () => switchTab("optim"));
-  $$("[data-preset]").forEach((b) => b.addEventListener("click", () => applyWeightPreset(b.dataset.preset)));
+  $("#btnGoOptim").addEventListener("click", () => switchTab("run"));
   $("#obsAdd").addEventListener("click", addObstacle);
   $("#zoneAdd").addEventListener("click", addZone);
 }
@@ -87,6 +80,7 @@ async function changeLanguage(language) {
   buildForms();
   buildExportFormats();
   buildHoleFillPatterns();
+  buildModeTexts();
   writeInputs();
   holesChanged();
   await refresh();
@@ -115,6 +109,8 @@ async function init() {
   buildLanguageSelect();
   buildForms();
   buildExportFormats();
+  initSteps();
+  initModes();
   initMotorPreview();
   initLibrary();
   if (window.initSketch) initSketch();
@@ -122,9 +118,9 @@ async function init() {
   initEdit();
   bindHeader();
   bindTabs();
-  await loadExamples();
-  await loadCfg({});
   initHoles();
+  await loadExamples();
+  await loadCfg(UI_START);
 }
 
 window.addEventListener("load", init);

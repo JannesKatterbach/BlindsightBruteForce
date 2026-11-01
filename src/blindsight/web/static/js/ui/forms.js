@@ -2,8 +2,17 @@
 // Forms from the schema (FIELD_META of the core), reading and writing the fields, field errors.
 
 const GROUP_TARGET = { general: "f-general", rod: "f-rod", motor: "f-motor", stack: "f-stack", bounds: "f-bounds", search: "f-search" };
-// These fields are edited in the table per motor layer (otherwise there would be two editors for one value)
-const TABLE_FIELDS = new Set(["stack.allowed_planes", "stack.thicknesses"]);
+// Fields with their own place in the workflow (otherwise the group decides). target_count moves between
+// pattern and free distribution (modes.js)
+const FIELD_PLACE = {
+  target_count: "f-pattern",
+  "search.pattern_task": "f-pattern", "search.pattern_fill": "f-pattern", "search.pattern_pitch": "f-pattern",
+  "search.pattern_pitch_y": "f-pattern", "search.tile_rods": "f-pattern", "search.tile_width": "f-pattern",
+  "search.tile_height": "f-pattern", "search.max_block_holes": "f-pattern", "search.tile_step": "f-pattern",
+  "search.layout_goal": "f-free", "search.patterns": "f-free", "search.fixed_pitch": "f-free",
+};
+// Not shown as fields. Edited in the table per motor layer, or chosen with the cards of the modes
+const HIDDEN_FIELDS = new Set(["stack.allowed_planes", "stack.thicknesses", "search.optimizer", "search.pattern"]);
 // Rarely changed fields. They sit in a folded part "More settings" below their form and stay editable there
 const ADVANCED_FIELDS = new Set([
   "tolerance", "rod.length_tolerance", "rod.retract_depth", "rod.hole_clearance",
@@ -11,7 +20,7 @@ const ADVANCED_FIELDS = new Set([
   "motor.own_clearance",
   "search.patterns", "search.fixed_pitch", "search.angle_step", "search.angle_min", "search.angle_max", "search.allowed_angles",
   "search.max_candidates", "search.seed", "search.top_k", "search.refine_fraction", "search.stagnation_s", "search.workers",
-  "search.tile_step", "search.max_block_holes",
+  "search.tile_step", "search.max_block_holes", "bounds.edge_margin", "bounds.parts_in_bounds",
 ]);
 
 const fieldByPath = (path) => schema.fields.find((f) => f.path === path);
@@ -23,22 +32,28 @@ function optionLabel(path, value) {
 }
 
 // Fields that only matter for some settings. They are hidden otherwise (the values stay in cfg)
-const usesPattern = (c) => c.search.optimizer === "periodic_tile";
+const modeIs = (c, mode) => (MODE_OF_OPTIMIZER[c.search.optimizer] || "free") === mode;
+const block = (c) => c.search.optimizer === "periodic_tile";  // 2a, holes and motors repeat
+const lattice = (c) => c.search.pattern !== "free";
+const task = (c, ...names) => names.includes(c.search.pattern_task);
 const FIELD_VISIBLE = {
-  "target_count": (c) => c.search.optimizer !== "fixed_holes",
-  "search.pattern": usesPattern,
-  "search.pattern_pitch": (c) => usesPattern(c) && c.search.pattern !== "free",
-  "search.pattern_pitch_y": (c) => usesPattern(c) && ["rectangle", "staggered"].includes(c.search.pattern),
-  "search.max_block_holes": (c) => usesPattern(c) && c.search.pattern !== "free",
-  "search.tile_rods": (c) => usesPattern(c) && c.search.pattern === "free",
-  "search.tile_width": (c) => usesPattern(c) && c.search.pattern === "free",
-  "search.tile_height": (c) => usesPattern(c) && c.search.pattern === "free",
-  "search.tile_step": usesPattern,
+  "target_count": (c) => modeIs(c, "free") || (modeIs(c, "pattern") && (task(c, "count") || (task(c, "dense") && !c.search.pattern_fill))),
+  "search.pattern_task": (c) => modeIs(c, "pattern"),
+  "search.pattern_fill": (c) => modeIs(c, "pattern") && task(c, "dense"),
+  "search.pattern_pitch": (c) => modeIs(c, "pattern") && task(c, "pitch") && lattice(c),
+  "search.pattern_pitch_y": (c) => modeIs(c, "pattern") && ["rectangle", "staggered"].includes(c.search.pattern),
+  "search.max_block_holes": (c) => block(c) && lattice(c),
+  "search.tile_rods": (c) => block(c) && !lattice(c),
+  "search.tile_width": (c) => block(c) && !lattice(c),
+  "search.tile_height": (c) => block(c) && !lattice(c),
+  "search.tile_step": (c) => modeIs(c, "pattern"),
+  "search.layout_goal": (c) => modeIs(c, "free"),
   "search.patterns": (c) => c.search.optimizer === "pattern_greedy",
   "search.fixed_pitch": (c) => ["pattern_greedy", "exhaustive_small"].includes(c.search.optimizer),
   "stack.uniform_spacing": (c) => c.stack.mode === "uniform",
   "stack.gaps": (c) => c.stack.mode === "gaps",
   "stack.distances": (c) => c.stack.mode === "distances",
+  "bounds.border_width": (c) => c.bounds.border,
 };
 
 /** Show only the fields that matter for the current settings. */
@@ -53,20 +68,23 @@ function updateFieldVisibility() {
     if (next && next.classList.contains("errmsg")) next.hidden = !show;
   }
   updateAdvancedParts();
-  renderHolesInfo();
+  renderModes();
+  renderWeightsForMode();
 }
 
-/** Folded part "More settings" of a form group, created on first use right below the form. */
-function advancedBox(group) {
-  const id = GROUP_TARGET[group] + "-more";
+/** Folded part "More settings" of a form, created on first use right below the form. */
+function advancedBox(formId) {
+  const id = formId + "-more";
   if (!$("#" + id)) {
     const details = document.createElement("details");
     details.className = "advanced";
     details.innerHTML = `<summary></summary><div class="form" id="${id}"></div>`;
-    $("#" + GROUP_TARGET[group]).insertAdjacentElement("afterend", details);
+    $("#" + formId).insertAdjacentElement("afterend", details);
   }
   return $("#" + id);
 }
+
+const formOf = (field) => FIELD_PLACE[field.path] || GROUP_TARGET[field.group];
 
 /** Summary of the folded parts with the number of changed values. Parts without visible fields are hidden. */
 function updateAdvancedParts() {
@@ -80,11 +98,13 @@ function updateAdvancedParts() {
 const inputId = (path) => "in-" + path.replace(/\./g, "-");
 
 function buildForms() {
-  for (const id of Object.values(GROUP_TARGET)) $("#" + id).innerHTML = "";
+  for (const id of [...Object.values(GROUP_TARGET), "f-pattern"]) $("#" + id).innerHTML = "";
+  for (const node of $$("#f-free [data-path], #f-free [data-label-for]")) node.remove();  // the method select stays
   for (const box of $$("details.advanced .form")) box.innerHTML = "";  // the folded parts keep their open state
   for (const field of schema.fields) {
-    if (!(field.group in GROUP_TARGET) || TABLE_FIELDS.has(field.path)) continue;
-    const box = ADVANCED_FIELDS.has(field.path) ? advancedBox(field.group) : $("#" + GROUP_TARGET[field.group]);
+    if (!(field.group in GROUP_TARGET) || HIDDEN_FIELDS.has(field.path)) continue;
+    const form = formOf(field);
+    const box = ADVANCED_FIELDS.has(field.path) ? advancedBox(form) : $("#" + form);
     const label = document.createElement("label");
     setFieldLabel(label, field, lenLabel(field.label, field.kind));
     label.title = field.tip;
@@ -100,6 +120,9 @@ function createInput(field) {
   if (field.kind === "enum") {
     input = document.createElement("select");
     for (const [value, text] of field.options) input.add(new Option(text, value));
+  } else if (field.kind === "bool") {
+    input = document.createElement("input");
+    input.type = "checkbox";
   } else {
     input = document.createElement("input");
     input.type = field.kind === "text" || kindOf(field.kind).list ? "text" : "number";
@@ -126,6 +149,7 @@ function createInput(field) {
 /** Take the field value into cfg. false for invalid input (cfg stays unchanged then). */
 function readInput(input) {
   const path = input.dataset.path;
+  if (input.type === "checkbox") { setPath(cfg, path, input.checked); return true; }
   const text = input.value;
   if (text.trim() === "") {
     if (input.dataset.optional) { setPath(cfg, path, null); clearFieldError(input); return true; }
@@ -141,7 +165,8 @@ function readInput(input) {
 function writeInputs() {
   for (const input of $$("[data-path]")) {
     const value = getPath(cfg, input.dataset.path);
-    input.value = value == null ? "" : kindOf(input.dataset.kind).write(value);
+    if (input.type === "checkbox") input.checked = !!value;
+    else input.value = value == null ? "" : kindOf(input.dataset.kind).write(value);
   }
   for (const label of $$("[data-label-for]")) {
     const field = fieldByPath(label.dataset.labelFor);
@@ -164,6 +189,7 @@ function markFieldError(input, message) {
   box.className = "errmsg";
   box.textContent = message;
   input.insertAdjacentElement("afterend", box);
+  renderStepStates();
 }
 
 function clearFieldError(input) {
@@ -181,6 +207,7 @@ function showFieldErrors(errors) {
     const input = match && document.querySelector(`[data-path="${match[1]}"]`);
     if (input) markFieldError(input, match[2]);
   }
+  renderStepStates();
   const banner = $("#banner");  // role alert in index.html, screen readers announce it
   banner.hidden = errors.length === 0;
   banner.innerHTML = errors.length ? "<ul>" + errors.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>" : "";

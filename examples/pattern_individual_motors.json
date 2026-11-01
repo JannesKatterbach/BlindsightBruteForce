@@ -1,0 +1,12 @@
+{
+  "name": "Muster mit einzeln gedrehten Motoren",
+  "target_count": 14,
+  "bounds": {"width": 120.0, "height": 110.0, "border": true, "border_width": 8.0},
+  "search": {
+    "optimizer": "pattern_holes",
+    "pattern": "hex",
+    "pattern_task": "dense",
+    "time_limit_s": 8,
+    "weights": {"layers": 6, "border": 2, "alignment": 2}
+  }
+}

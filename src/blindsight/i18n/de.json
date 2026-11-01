@@ -43,7 +43,7 @@
  "config.gaps_count": "stack.gaps. Modus 'gaps' braucht {n} Abstände (G0-G1, G1-G2, ...)",
  "config.gaps_positive": "stack.gaps. Alle Ebenenabstände müssen positiv sein",
  "config.holes_format": "holes. Jedes Loch muss [x, y] mit endlichen Zahlen sein",
- "config.holes_missing": "holes. Der Optimierer 'Feste Löcher' braucht ein Lochbild (mindestens ein Loch)",
+ "config.holes_missing": "holes. Im Modus Löcher vorgeben fehlt noch mindestens ein Loch (Schritt Löcher)",
  "config.invalid_json": "Ungültiges JSON. {error}",
  "config.json_too_deep": "JSON zu tief verschachtelt",
  "config.no_angles": "search.allowed_angles. Keine zulässigen Motorwinkel",

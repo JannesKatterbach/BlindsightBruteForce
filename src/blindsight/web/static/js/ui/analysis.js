@@ -68,8 +68,11 @@ function drawBounds() {
   const m = Math.max(w, h) * 0.04, thin = w / 600;
   svg.setAttribute("viewBox", `${-m} ${-h - m} ${w + 2 * m} ${h + 2 * m}`);
   el("rect", { x: 0, y: -h, width: w, height: h, fill: "none", stroke: "currentColor", "stroke-width": w / 400 }, svg);
-  const e = b.edge_margin;
-  if (e > 0) el("rect", { x: e, y: -h + e, width: w - 2 * e, height: h - 2 * e, fill: "none", stroke: "#888", "stroke-dasharray": "2 2", "stroke-width": thin }, svg);
+  // Edge strip only for motors (light) between the keep out edge and the area of the holes (dashed)
+  const e = b.edge_margin, holes = e + (b.border ? b.border_width : 0);
+  const frame = (m) => `M ${m} ${-h + m} H ${w - m} V ${-m} H ${m} Z`;
+  if (b.border && b.border_width > 0) el("path", { d: frame(e) + " " + frame(holes), "fill-rule": "evenodd", fill: COLORS.gear, "fill-opacity": 0.18 }, svg);
+  if (holes > 0) el("path", { d: frame(holes), fill: "none", stroke: "#888", "stroke-dasharray": "2 2", "stroke-width": thin }, svg);
   const obstacleStyle = { fill: COLORS.obstacle, stroke: COLORS.obstacleStroke, "stroke-width": thin };
   for (const o of cfg.obstacles) {
     if (o.shape === "circle") el("circle", { cx: o.x, cy: -o.y, r: o.r, ...obstacleStyle }, svg);

@@ -191,3 +191,14 @@ def test_check_fixed_distance_needs_a_distance():
 def test_older_pattern_files_get_a_task(search, task):
     p = Project.from_dict({"search": {"optimizer": "periodic_tile", **search}})
     assert p.search.pattern_task == task
+
+
+def test_repeating_block_counts_as_clean_alignment():
+    p = Project()
+    p.target_count = 12
+    p.search.optimizer = "periodic_tile"
+    p.search.pattern = "centered_square"
+    p.search.time_limit_s = 5
+    model = Model(p)
+    best = get_optimizer("periodic_tile").run(model).best
+    assert len(best.placements) == 12 and best.score.terms["alignment"] == 1.0

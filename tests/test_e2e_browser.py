@@ -38,7 +38,7 @@ def test_full_flow(browser, base_url):
     pg.on("pageerror", lambda e: errors.append(str(e)))
     pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     pg.goto(base_url)
-    pg.wait_for_selector("#in-motor-width")
+    pg.wait_for_selector("#in-rod-diameter")
     pg.select_option("#exampleSel", "small_hex")
     pg.wait_for_function("document.querySelector('#in-target_count').value === '7'")
     # field errors are shown at the field
@@ -54,7 +54,7 @@ def test_full_flow(browser, base_url):
     assert "[mm]" in pg.inner_text("[data-label-for='rod.diameter']")
     assert pg.locator("#in-bounds-xmin").count() == 0 and pg.locator("#in-bounds-width").count() == 1
     # Optimierung
-    pg.click("[data-tab=optim]")
+    pg.click("[data-step=run]")
     # Time buffer for full test runs. Once the target count is reached, stagnation ends the run early
     pg.fill("#in-search-time_limit_s", "10")
     pg.dispatch_event("#in-search-time_limit_s", "change")

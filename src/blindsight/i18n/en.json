@@ -43,7 +43,7 @@
  "config.gaps_count": "stack.gaps. Mode 'gaps' needs {n} distances (G0-G1, G1-G2, ...)",
  "config.gaps_positive": "stack.gaps. All layer distances must be positive",
  "config.holes_format": "holes. Every hole must be [x, y] with finite numbers",
- "config.holes_missing": "holes. The optimizer 'fixed holes' needs a hole pattern (at least one hole)",
+ "config.holes_missing": "holes. The mode Give the holes still needs at least one hole (step Holes)",
  "config.invalid_json": "Invalid JSON. {error}",
  "config.json_too_deep": "JSON nested too deeply",
  "config.no_angles": "search.allowed_angles. No permitted motor angles",

@@ -18,42 +18,57 @@
   <label class="btn"><span data-i18n="ui.header.load">Konfig laden</span><input type="file" id="fileLoad" accept=".json" hidden></label>
   <select id="langSel" data-i18n-title="ui.header.language" aria-label="Sprache"></select>
 </header>
-<nav id="tabs" role="tablist">
-  <button role="tab" data-tab="geometry" class="active" aria-selected="true" data-i18n="ui.tab.geometry">Geometrie</button>
-  <button role="tab" data-tab="sketch" data-i18n="ui.tab.sketch">Motor Skizze</button>
-  <button role="tab" data-tab="levels" data-i18n="ui.tab.levels">Ebenen</button>
-  <button role="tab" data-tab="bounds" data-i18n="ui.tab.bounds">Bauraum</button>
-  <button role="tab" data-tab="holes" data-i18n="ui.tab.holes">Lochbild</button>
-  <button role="tab" data-tab="optim" data-i18n="ui.tab.optim">Optimierung</button>
-  <button role="tab" data-tab="results" data-i18n="ui.tab.results">Ergebnisse</button>
+<!-- Guided workflow. The steps run from left to right, js/ui/steps.js adds Back and Next to every step -->
+<nav id="steps" role="tablist">
+  <button role="tab" data-step="basics" class="active" aria-selected="true"><span class="num">1</span><span data-i18n="ui.step.basics">Grundlagen</span><i class="state"></i></button>
+  <button role="tab" data-step="motor"><span class="num">2</span><span data-i18n="ui.step.motor">Motor</span><i class="state"></i></button>
+  <button role="tab" data-step="mode"><span class="num">3</span><span data-i18n="ui.step.mode">Modus</span><i class="state"></i></button>
+  <button role="tab" data-step="board"><span class="num">4</span><span data-i18n="ui.step.board">Platte und Rand</span><i class="state"></i></button>
+  <button role="tab" data-step="holes"><span class="num">5</span><span id="stepHolesLabel" data-i18n="ui.step.holes">Löcher</span><i class="state"></i></button>
+  <button role="tab" data-step="run"><span class="num">6</span><span data-i18n="ui.step.run">Ziele und Berechnen</span><i class="state"></i></button>
+  <button role="tab" data-step="results"><span class="num">7</span><span data-i18n="ui.step.results">Ergebnis</span><i class="state"></i></button>
 </nav>
 <div id="banner" class="errors" role="alert" hidden></div>
 <main>
-  <section id="tab-geometry" class="tab active">
+  <section id="tab-basics" class="tab active">
     <div class="cols">
-      <div><h2 data-i18n="ui.geometry.general">Allgemein</h2><div class="form" id="f-general"></div>
-        <h2 data-i18n="ui.geometry.rod">Gewindestange</h2><div class="form" id="f-rod"></div></div>
-      <div><h2 data-i18n="ui.geometry.motor">Motor und Zahnrad</h2><div class="form" id="f-motor"></div></div>
-      <div>
-        <h2 data-i18n="ui.geometry.preview" data-help="ui.help.preview">Motor Vorschau, Draufsicht</h2>
-        <svg id="motorPreview" viewBox="0 0 100 100"></svg>
-        <p class="hint" data-i18n="ui.geometry.preview_hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehäuse.</p>
-        <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Form kommt aus der Motor Skizze. Breite, Tiefe, Zahnrad und Achsabstand werden aus der Skizze übernommen.</span>
-          <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button></div>
-        <div class="toolbar"><button id="btnOpenSketch" class="primary" data-i18n="ui.geometry.open_sketch">Kontur in der Motor Skizze bearbeiten</button></div>
-        <details><summary data-i18n="ui.geometry.svg_import" data-help="ui.help.svg_import">SVG Import</summary>
-          <p class="hint" data-i18n="ui.geometry.svg_hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Maßstab nicht eindeutig, wird er abgefragt. Das Ergebnis ist eine Skizze.</p>
-          <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
-        </details>
-        <details><summary data-i18n="ui.library.title" data-help="ui.help.library">Motor Bibliothek (lokal im Browser)</summary>
-          <div class="toolbar"><input id="libName" data-i18n-placeholder="ui.library.name" placeholder="Name" size="14"><button id="libSave" data-i18n="ui.library.save">Speichern</button></div>
-          <div class="toolbar"><select id="libSel"></select><button id="libLoad" data-i18n="ui.library.load">Laden</button><button id="libDel" data-i18n="ui.library.delete">Löschen</button></div>
-          <div class="toolbar"><button id="libExport" data-i18n="ui.library.export">Motor als JSON</button><label class="btn"><span data-i18n="ui.library.import">Motor JSON laden</span><input type="file" id="libImport" accept=".json" hidden></label></div>
-        </details>
-      </div>
+      <div><h2 data-i18n="ui.geometry.rod">Gewindestange</h2><div class="form" id="f-rod"></div>
+        <h2 data-i18n="ui.geometry.general">Allgemein</h2><div class="form" id="f-general"></div></div>
+      <div><h2 data-i18n="ui.levels.layers">Ebenen</h2><div class="form" id="f-stack"></div>
+        <details><summary data-i18n="ui.levels.per_layer" data-help="ui.help.plane_table">Einstellungen je Motorebene</summary><div id="planeTable"></div>
+          <p class="hint" data-i18n="ui.levels.hint">Leer lassen heißt Standard. Winkel als Liste mit Komma. Maximale Motoranzahl, erlaubte Ebene und eigene Dicke sind optional.</p></details></div>
+      <div><h2 data-i18n="ui.levels.computed" data-help="ui.help.levels">Berechnete Ebenen und Stangenlängen</h2><div id="levelInfo"></div>
+        <svg id="sectionPreview" viewBox="0 0 300 200"></svg></div>
     </div>
   </section>
-  <section id="tab-sketch" class="tab">
+  <section id="tab-motor" class="tab">
+    <div class="seg" role="group">
+      <button data-motor-view="dims" class="active" data-i18n="ui.motor.view_dims">Maße</button>
+      <button data-motor-view="sketch" data-i18n="ui.motor.view_sketch">Skizze</button>
+    </div>
+    <div id="motorDims" class="view active">
+      <div class="cols">
+        <div><h2 data-i18n="ui.geometry.motor">Motor und Zahnrad</h2><div class="form" id="f-motor"></div></div>
+        <div>
+          <h2 data-i18n="ui.geometry.preview" data-help="ui.help.preview">Motor Vorschau, Draufsicht</h2>
+          <svg id="motorPreview" viewBox="0 0 100 100"></svg>
+          <p class="hint" data-i18n="ui.geometry.preview_hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehäuse.</p>
+          <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Form kommt aus der Motor Skizze. Breite, Tiefe, Zahnrad und Achsabstand werden aus der Skizze übernommen.</span>
+            <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button></div>
+          <div class="toolbar"><button id="btnOpenSketch" data-i18n="ui.geometry.open_sketch">Kontur in der Motor Skizze bearbeiten</button></div>
+          <details><summary data-i18n="ui.geometry.svg_import" data-help="ui.help.svg_import">SVG Import</summary>
+            <p class="hint" data-i18n="ui.geometry.svg_hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Maßstab nicht eindeutig, wird er abgefragt. Das Ergebnis ist eine Skizze.</p>
+            <input type="file" id="svgMotor" accept=".svg"> <span id="svgMotorMsg" class="hint"></span>
+          </details>
+          <details><summary data-i18n="ui.library.title" data-help="ui.help.library">Motor Bibliothek (lokal im Browser)</summary>
+            <div class="toolbar"><input id="libName" data-i18n-placeholder="ui.library.name" placeholder="Name" size="14"><button id="libSave" data-i18n="ui.library.save">Speichern</button></div>
+            <div class="toolbar"><select id="libSel"></select><button id="libLoad" data-i18n="ui.library.load">Laden</button><button id="libDel" data-i18n="ui.library.delete">Löschen</button></div>
+            <div class="toolbar"><button id="libExport" data-i18n="ui.library.export">Motor als JSON</button><label class="btn"><span data-i18n="ui.library.import">Motor JSON laden</span><input type="file" id="libImport" accept=".json" hidden></label></div>
+          </details>
+        </div>
+      </div>
+    </div>
+    <div id="tab-sketch" class="view">
     <div id="skRoot">
       <div id="skToolbar" class="skToolbar" role="toolbar">
         <div class="skGroup">
@@ -109,81 +124,95 @@
       </div>
       <div id="skStatus" class="statusBox"></div>
     </div>
+  </div>
   </section>
-  <section id="tab-levels" class="tab">
-    <div class="cols">
-      <div><h2 data-i18n="ui.levels.layers">Ebenen</h2><div class="form" id="f-stack"></div>
-        <h2 data-i18n="ui.levels.per_layer" data-help="ui.help.plane_table">Einstellungen je Motorebene</h2><div id="planeTable"></div>
-        <p class="hint" data-i18n="ui.levels.hint">Leer lassen heißt Standard. Winkel als Liste mit Komma. Maximale Motoranzahl, erlaubte Ebene und eigene Dicke sind optional.</p></div>
-      <div><h2 data-i18n="ui.levels.computed" data-help="ui.help.levels">Berechnete Ebenen und Stangenlängen</h2><div id="levelInfo"></div>
-        <svg id="sectionPreview" viewBox="0 0 300 200"></svg></div>
+  <section id="tab-mode" class="tab">
+    <h2 data-i18n="ui.mode.title" data-help="ui.help.mode">Was soll berechnet werden?</h2>
+    <div class="cards">
+      <button class="card" data-mode="holes"><span class="pic" data-pic="holes"></span><b data-i18n="ui.mode.holes.title">Löcher vorgeben</b>
+        <span data-i18n="ui.mode.holes.text">Du setzt die Löcher auf G0 selbst. Das Programm sucht für jedes Loch Ebene, Drehung und Achsabstand des Motors oder sagt, warum es nicht geht.</span></button>
+      <button class="card" data-mode="pattern"><span class="pic" data-pic="pattern"></span><b data-i18n="ui.mode.pattern.title">Muster wählen</b>
+        <span data-i18n="ui.mode.pattern.text">Die Löcher bilden ein regelmäßiges Muster wie Quadrat, Würfel Fünf oder Hexagon. Das Programm sucht Lochabstand und Lage der Motoren.</span></button>
     </div>
+    <details id="moreModes"><summary data-i18n="ui.mode.more">Weitere Modi</summary>
+      <div class="cards"><button class="card small" data-mode="free"><b data-i18n="ui.mode.free.title">Frei verteilen</b>
+        <span data-i18n="ui.mode.free.text">Ohne festes Muster möglichst viele Stangen unterbringen, mit mehreren Suchverfahren.</span></button></div>
+    </details>
   </section>
-  <section id="tab-bounds" class="tab">
+  <section id="tab-board" class="tab">
     <div class="cols">
-      <div><h2 data-i18n="ui.bounds.title">Bauraum (Draufsicht)</h2><div class="form" id="f-bounds"></div>
+      <div><h2 data-i18n="ui.board.title" data-help="ui.help.board">Platte</h2><div class="form" id="f-bounds"></div>
         <svg id="boundsPreview" viewBox="0 0 100 100"></svg>
-        <p class="hint" data-i18n="ui.bounds.origin">Ursprung (0, 0) unten links, alle Längen in mm.</p></div>
-      <div><h2 data-i18n="ui.bounds.obstacles" data-help="ui.help.obstacles">Feste Hindernisse und Sperrzonen</h2><div id="obsTable"></div>
-        <button id="obsAdd" data-i18n="ui.bounds.add_obstacle">Hindernis hinzufügen</button>
-        <p class="hint" data-i18n="ui.bounds.obstacle_hint">Ohne Ebene gilt das Hindernis über alle Ebenen. Mit Ebene ist es eine Sperrzone nur für diese Motorebene.</p>
-        <h2 data-i18n="ui.bounds.zones" data-help="ui.help.zones">Montagebereiche je Ebene</h2><div id="zoneTable"></div>
-        <button id="zoneAdd" data-i18n="ui.bounds.add_zone">Bereich hinzufügen</button>
-        <p class="hint" data-i18n="ui.bounds.zone_hint">Gehäuse müssen vollständig in einem der Bereiche der Ebene liegen. Ohne Eintrag gilt der ganze Bauraum.</p></div>
+        <p class="hint" data-i18n="ui.board.hint">Ursprung (0, 0) unten links, alle Längen in mm. Gestrichelt der Bereich der Löcher, hell der Randbereich nur für Motoren.</p></div>
+      <div>
+        <details><summary data-i18n="ui.bounds.obstacles" data-help="ui.help.obstacles">Feste Hindernisse und Sperrzonen</summary><div id="obsTable"></div>
+          <button id="obsAdd" data-i18n="ui.bounds.add_obstacle">Hindernis hinzufügen</button>
+          <p class="hint" data-i18n="ui.bounds.obstacle_hint">Ohne Ebene gilt das Hindernis über alle Ebenen. Mit Ebene ist es eine Sperrzone nur für diese Motorebene.</p></details>
+        <details><summary data-i18n="ui.bounds.zones" data-help="ui.help.zones">Montagebereiche je Ebene</summary><div id="zoneTable"></div>
+          <button id="zoneAdd" data-i18n="ui.bounds.add_zone">Bereich hinzufügen</button>
+          <p class="hint" data-i18n="ui.bounds.zone_hint">Gehäuse müssen vollständig in einem der Bereiche der Ebene liegen. Ohne Eintrag gilt der ganze Bauraum.</p></details>
+      </div>
     </div>
   </section>
   <section id="tab-holes" class="tab">
-    <div class="cols">
-      <div><h2 data-i18n="ui.holes.title" data-help="ui.help.holes">Lochbild Generator</h2>
-        <p class="hint" data-i18n="ui.holes.intro">Löcher von G0 in mm eingeben, Ursprung (0, 0) unten links. Das Ergebnis ist eine JSON Datei für feste Löcher oder eine eigene, sich wiederholende Kachel.</p>
-        <div class="toolbar">
-          <label><input type="radio" name="holeMode" value="fixed" checked> <span data-i18n="ui.holes.mode_fixed">Festes Lochbild (G0)</span></label>
-          <label><input type="radio" name="holeMode" value="tile"> <span data-i18n="ui.holes.mode_tile">Eigene Kachel (wiederholt sich)</span></label>
-        </div>
-        <div id="holeTileBox" class="form" hidden>
-          <label for="holeTileW" data-i18n="ui.holes.tile_width">Kachelbreite [mm]</label><input id="holeTileW" type="number" step="any" min="0" value="30">
-          <label for="holeTileH" data-i18n="ui.holes.tile_height">Kachelhöhe [mm]</label><input id="holeTileH" type="number" step="any" min="0" value="30">
-          <label for="holeTileScalable" data-i18n="ui.holes.scalable" data-i18n-title="ui.holes.scalable_tip">Skalierbar</label><input id="holeTileScalable" type="checkbox">
-        </div>
-        <h2 data-i18n="ui.holes.holes" data-help="ui.help.hole_table">Löcher</h2>
-        <div id="holeTable"></div>
-        <div class="toolbar"><button id="holeAdd" data-i18n="ui.holes.add">Loch hinzufügen</button><button id="holeClear" data-i18n="ui.holes.clear">Alle löschen</button></div>
-        <details><summary data-i18n="ui.holes.paste">Aus Text einfügen</summary>
-          <p class="hint" data-i18n="ui.holes.paste_hint">Ein Loch je Zeile, x und y getrennt durch Semikolon, Komma, Leerzeichen oder Tabulator (zum Beispiel aus Excel).</p>
-          <textarea id="holePaste" rows="6" style="width:100%"></textarea>
-          <div class="toolbar"><button id="holePasteAdd" data-i18n="ui.holes.paste_add">Anhängen</button><button id="holePasteReplace" data-i18n="ui.holes.paste_replace">Ersetzen</button></div>
-        </details>
-        <details><summary data-i18n="ui.holes.fill" data-help="ui.help.hole_fill">Mit Muster füllen</summary>
-          <div class="form">
-            <label for="holeFillPattern" data-i18n="ui.holes.fill_pattern">Muster</label><select id="holeFillPattern"></select>
-            <label for="holeFillPitch" data-i18n="ui.holes.fill_pitch">Lochabstand [mm]</label><input id="holeFillPitch" type="number" step="any" min="0" value="20">
-            <label for="holeFillMargin" data-i18n="ui.holes.fill_margin">Randabstand [mm]</label><input id="holeFillMargin" type="number" step="any" min="0" value="15">
+    <div id="patternPanel" class="view">
+      <h2 data-i18n="ui.pattern.title">Musterform</h2>
+      <div class="cards patterns" id="patternCards"></div>
+      <h2 data-i18n="ui.pattern.repeat" data-help="ui.help.pattern_repeat">Was wiederholt sich?</h2>
+      <div class="choices">
+        <label><input type="radio" name="patternRepeat" value="periodic_tile"> <span data-i18n="ui.pattern.repeat_block">Löcher und Motoren, als Block beliebig erweiterbar</span></label>
+        <label><input type="radio" name="patternRepeat" value="pattern_holes"> <span data-i18n="ui.pattern.repeat_holes">Nur die Löcher, jeder Motor einzeln gedreht</span></label>
+      </div>
+      <h2 data-i18n="ui.pattern.task">Aufgabe</h2><div class="form" id="f-pattern"></div>
+    </div>
+    <div id="freePanel" class="view">
+      <h2 data-i18n="ui.free.title">Freie Verteilung</h2>
+      <div class="form" id="f-free"><label for="freeMethod" data-i18n="ui.free.method">Verfahren</label><select id="freeMethod"></select></div>
+    </div>
+    <div id="holeEditor" class="view">
+      <div class="cols">
+        <div><h2 id="holeEditorTitle" data-i18n="ui.holes.heading" data-help="ui.help.holes">Löcher auf G0</h2>
+          <p class="hint" id="holeEditorIntro" data-i18n="ui.holes.intro_fixed">Löcher in mm eingeben, Ursprung (0, 0) unten links. Klick in die Vorschau setzt ein Loch.</p>
+          <div id="holeTileBox" class="form" hidden>
+            <label for="holeTileW" data-i18n="ui.holes.tile_width">Kachelbreite [mm]</label><input id="holeTileW" type="number" step="any" min="0" value="30">
+            <label for="holeTileH" data-i18n="ui.holes.tile_height">Kachelhöhe [mm]</label><input id="holeTileH" type="number" step="any" min="0" value="30">
+            <label for="holeTileScalable" data-i18n="ui.holes.scalable" data-i18n-title="ui.holes.scalable_tip">Skalierbar</label><input id="holeTileScalable" type="checkbox">
           </div>
-          <div class="toolbar"><button id="holeFillBtn" data-i18n="ui.holes.fill_run">Füllen</button></div>
-        </details></div>
-      <div><h2 data-i18n="ui.holes.preview" data-help="ui.help.hole_preview">Vorschau</h2>
-        <svg id="holePreview" viewBox="0 0 100 100"></svg>
-        <p class="hint" data-i18n="ui.holes.preview_hint">Klicken setzt ein Loch, Ziehen verschiebt es, Rechtsklick löscht es.</p>
-        <div id="holeStatus" class="statusBox"></div>
-        <ul id="holeProblems"></ul>
-        <div class="toolbar">
-          <button id="holeDownload" data-i18n="ui.holes.download">JSON herunterladen</button>
-          <label class="btn"><span data-i18n="ui.holes.load">JSON laden</span><input type="file" id="holeLoad" accept=".json" hidden></label>
-          <button id="holeUse" class="primary" data-i18n="ui.holes.use">Für Optimierung verwenden</button>
-        </div></div>
+          <h2 data-i18n="ui.holes.holes" data-help="ui.help.hole_table">Löcher</h2>
+          <div id="holeTable"></div>
+          <div class="toolbar"><button id="holeAdd" data-i18n="ui.holes.add">Loch hinzufügen</button><button id="holeClear" data-i18n="ui.holes.clear">Alle löschen</button></div>
+          <details><summary data-i18n="ui.holes.paste">Aus Text einfügen</summary>
+            <p class="hint" data-i18n="ui.holes.paste_hint">Ein Loch je Zeile, x und y getrennt durch Semikolon, Komma, Leerzeichen oder Tabulator (zum Beispiel aus Excel).</p>
+            <textarea id="holePaste" rows="6" style="width:100%"></textarea>
+            <div class="toolbar"><button id="holePasteAdd" data-i18n="ui.holes.paste_add">Anhängen</button><button id="holePasteReplace" data-i18n="ui.holes.paste_replace">Ersetzen</button></div>
+          </details>
+          <details><summary data-i18n="ui.holes.fill" data-help="ui.help.hole_fill">Mit Muster füllen</summary>
+            <div class="form">
+              <label for="holeFillPattern" data-i18n="ui.holes.fill_pattern">Muster</label><select id="holeFillPattern"></select>
+              <label for="holeFillPitch" data-i18n="ui.holes.fill_pitch">Lochabstand [mm]</label><input id="holeFillPitch" type="number" step="any" min="0" value="20">
+              <label for="holeFillMargin" data-i18n="ui.holes.fill_margin">Randabstand [mm]</label><input id="holeFillMargin" type="number" step="any" min="0" value="15">
+            </div>
+            <div class="toolbar"><button id="holeFillBtn" data-i18n="ui.holes.fill_run">Füllen</button></div>
+          </details>
+          <div class="toolbar">
+            <button id="holeDownload" data-i18n="ui.holes.download">JSON herunterladen</button>
+            <label class="btn"><span data-i18n="ui.holes.load">JSON laden</span><input type="file" id="holeLoad" accept=".json" hidden></label>
+          </div></div>
+        <div><h2 data-i18n="ui.holes.preview" data-help="ui.help.hole_preview">Vorschau</h2>
+          <svg id="holePreview" viewBox="0 0 100 100"></svg>
+          <p class="hint" data-i18n="ui.holes.preview_hint">Klicken setzt ein Loch, Ziehen verschiebt es, Rechtsklick löscht es.</p>
+          <div id="holeStatus" class="statusBox"></div>
+          <ul id="holeProblems"></ul></div>
+      </div>
     </div>
   </section>
-  <section id="tab-optim" class="tab">
+  <section id="tab-run" class="tab">
+    <div id="runSummary" class="statusBox"></div>
     <div class="cols">
-      <div><h2 data-i18n="ui.optim.priorities" data-help="ui.help.weights">Prioritäten der Ziele</h2><div id="weights"></div>
-        <div class="toolbar"><span data-i18n="ui.optim.preset">Voreinstellung</span>
-          <button data-preset="count" data-i18n="ui.optim.preset_count">Viele Stangen</button>
-          <button data-preset="area" data-i18n="ui.optim.preset_area">Kleine Fläche</button>
-          <button data-preset="uniform" data-i18n="ui.optim.preset_uniform">Gleichmäßig</button>
-          <button data-preset="balanced" data-i18n="ui.optim.preset_balanced">Ausgewogen</button></div>
-        <p class="hint" data-i18n="ui.optim.weights_hint">Relative Gewichte, werden normiert.</p>
-        <h2 data-i18n="ui.optim.search">Suche</h2><div class="form" id="f-search"></div>
-        <p id="holesInfo" class="hint" hidden></p></div>
+      <div><h2 data-i18n="ui.run.goals" data-help="ui.help.goals">Was ist dir wichtig?</h2><div id="weights"></div>
+        <div class="toolbar" id="presets"></div>
+        <p class="hint" data-i18n="ui.run.goals_hint">Die Prozente verteilen sich automatisch auf 100.</p>
+        <h2 data-i18n="ui.optim.search">Suche</h2><div class="form" id="f-search"></div></div>
       <div><h2 data-i18n="ui.optim.computation" data-help="ui.help.computation">Berechnung</h2>
         <button id="btnStart" class="primary" data-i18n="ui.optim.start">Optimierung starten</button>
         <button id="btnCancel" disabled data-i18n="ui.optim.cancel">Abbrechen</button>
@@ -252,6 +281,8 @@
 <script src="/static/js/ui/edit.js"></script>
 <script src="/static/js/ui/export.js"></script>
 <script src="/static/js/ui/holes.js"></script>
+<script src="/static/js/ui/modes.js"></script>
+<script src="/static/js/ui/steps.js"></script>
 <script src="/static/js/sketch/state.js"></script>
 <script src="/static/js/sketch/geom.js"></script>
 <script src="/static/js/sketch/client.js"></script>

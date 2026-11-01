@@ -1,6 +1,7 @@
 "use strict";
-// Hole pattern generator. Fixed G0 holes or an own repeating tile, written as a JSON file in the format
-// blindsight.holes (see src/blindsight/holes.py). The core checks the holes (/api/holes/check).
+// Hole editor. Fixed G0 holes (mode holes) or the own tile of the pattern mode, both written straight into the
+// configuration (cfg.holes, cfg.search.custom_tile) and as a JSON file in the format blindsight.holes
+// (see src/blindsight/holes.py). The core checks the holes (/api/holes/check).
 
 const HOLE_FORMAT = "blindsight.holes";
 const HOLE_CHECK_DEBOUNCE_MS = 200;
@@ -17,7 +18,6 @@ const holeList = () => (holeState.mode === "tile" ? holeState.tileHoles : holeSt
 const holeTile = () => ({ width: parseFloat($("#holeTileW").value), height: parseFloat($("#holeTileH").value), scalable: $("#holeTileScalable").checked });
 
 function initHoles() {
-  $$("input[name=holeMode]").forEach((r) => r.addEventListener("change", () => { holeState.mode = r.value; holesChanged(); }));
   ["#holeTileW", "#holeTileH", "#holeTileScalable"].forEach((id) => $(id).addEventListener("change", holesChanged));
   $("#holeAdd").addEventListener("click", () => {
     const area = holeArea();
@@ -34,7 +34,6 @@ function initHoles() {
   $("#holeFillBtn").addEventListener("click", fillHoles);
   $("#holeDownload").addEventListener("click", () => downloadJson("blindsight-holes.json", holeDocument()));
   onFile("#holeLoad", loadHoleFile);
-  $("#holeUse").addEventListener("click", useHoles);
   initHolePreview();
   buildHoleFillPatterns();
   holesChanged();
@@ -53,9 +52,32 @@ function holeArea() {
   return { width: cfg.bounds.width, height: cfg.bounds.height };
 }
 
-/** Called after every change. Redraw table and preview, check the holes. */
+/** Take the holes of the configuration into the editor (after loading a configuration). */
+function loadHolesFromCfg() {
+  holeState.holes = (cfg.holes || []).map((p) => [...p]);
+  const tile = cfg.search.custom_tile;
+  holeState.tileHoles = tile ? tile.holes.map((p) => [...p]) : [];
+  if (tile) {
+    $("#holeTileW").value = tile.width;
+    $("#holeTileH").value = tile.height;
+    $("#holeTileScalable").checked = !!tile.scalable;
+  }
+}
+
+/** Write the holes of the editor into the configuration. */
+function syncHolesToCfg() {
+  if (holeState.mode === "tile") cfg.search.custom_tile = { ...holeTile(), holes: holeState.tileHoles.map((p) => [...p]) };
+  else cfg.holes = holeState.holes.length ? holeState.holes.map((p) => [...p]) : null;
+}
+
+/** Called after every change. Redraw table and preview, take the holes over and check them. */
 function holesChanged() {
+  if (!cfg) return;
   $("#holeTileBox").hidden = holeState.mode !== "tile";
+  $("#holeEditorTitle").firstChild.textContent = t(holeState.mode === "tile" ? "ui.holes.heading_tile" : "ui.holes.heading");
+  $("#holeEditorIntro").textContent = t(holeState.mode === "tile" ? "ui.holes.intro_tile" : "ui.holes.intro_fixed");
+  syncHolesToCfg();
+  renderRunSummary();
   renderHoleTable();
   drawHolePreview();
   scheduleHoleCheck();
@@ -249,35 +271,13 @@ async function loadHoleFile(file) {
     $("#holeTileH").value = doc.tile.height;
     $("#holeTileScalable").checked = !!doc.tile.scalable;
   }
+  // A file with holes chooses the mode holes, a file with only a tile the pattern mode with an own tile
   holeState.mode = doc.holes.length ? "fixed" : "tile";
-  $$("input[name=holeMode]").forEach((r) => { r.checked = r.value === holeState.mode; });
-  holesChanged();
-}
-
-/** Put the holes into the configuration and switch to the Optimization tab. */
-function useHoles() {
-  if (holeState.mode === "tile") {
-    const tile = holeTile();
-    cfg.search.custom_tile = { ...tile, holes: holeState.tileHoles.map((p) => [...p]) };
+  if (doc.holes.length) cfg.search.optimizer = "fixed_holes";
+  else {
+    cfg.search.optimizer = currentMode() === "pattern" ? cfg.search.optimizer : modeMemory.pattern;
     cfg.search.pattern = "custom";
-    cfg.search.optimizer = "periodic_tile";
-  } else {
-    cfg.holes = holeState.holes.map((p) => [...p]);
-    cfg.search.optimizer = "fixed_holes";
   }
-  writeInputs();
-  refresh();
-  switchTab("optim");
-}
-
-/** Hint on the Optimization tab about the hole pattern in use. */
-function renderHolesInfo() {
-  const box = $("#holesInfo");
-  if (!box || !cfg) return;
-  const s = cfg.search;
-  if (s.optimizer === "fixed_holes") box.textContent = t("ui.holes.info_fixed", { n: (cfg.holes || []).length });
-  else if (s.optimizer === "periodic_tile" && s.pattern === "custom" && s.custom_tile) {
-    box.textContent = t("ui.holes.info_tile", { n: s.custom_tile.holes.length, width: round(s.custom_tile.width, 2), height: round(s.custom_tile.height, 2) });
-  } else { box.hidden = true; return; }
-  box.hidden = false;
+  holesChanged();
+  modesChanged();
 }

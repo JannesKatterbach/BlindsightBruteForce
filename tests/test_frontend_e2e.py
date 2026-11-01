@@ -39,11 +39,16 @@ def page(browser, base_url):
     pg.errors = []
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
     pg.goto(base_url)
-    pg.wait_for_selector("#in-motor-width")
+    pg.wait_for_selector("#in-rod-diameter")
     pg.wait_for_function("cfg && document.querySelector('#planeTable table')")
     yield pg
     assert pg.errors == []
     pg.close()
+
+
+def open_details(pg, inside):
+    """Open the folded part that holds the element."""
+    pg.evaluate(f"document.querySelector('{inside}').closest('details').open = true")
 
 
 def change(pg, selector, value):
@@ -56,13 +61,14 @@ def result_file(placements):
     return {"name": "ergebnis.json", "mimeType": "application/json", "buffer": json.dumps(data).encode()}
 
 
+STEP_RESULTS = "[data-step=results] span[data-i18n]"
 GOOD = [{"x": 30, "y": 60, "plane": 1, "angle": 0}, {"x": 90, "y": 60, "plane": 2, "angle": 0}]
 
 
 def test_plane_table_follows_plane_count(page):
     # The table used to stay at 3 rows and reading it crashed
-    page.click("[data-tab=levels]")
     change(page, "#in-stack-n_motor_planes", "5")
+    open_details(page, "#planeTable")
     page.wait_for_selector("[data-pt='cap'][data-i='5']")
     change(page, "[data-pt='cap'][data-i='5']", "2")
     assert page.evaluate("cfg.stack.max_per_plane[5]") == 2
@@ -79,15 +85,16 @@ def test_empty_required_field_is_marked_and_keeps_value(page):
 
 
 def test_weights_above_slider_range_are_kept(page):
-    page.evaluate("loadCfg({search: {weights: {count: 50, area: 1, uniformity: 1, regularity: 1}}})")
-    page.wait_for_function("document.querySelector('#wv-count').textContent === '50'")
+    page.evaluate("loadCfg({search: {weights: {count: 50, area: 1, uniformity: 1, regularity: 1}}})")  # free mode
+    page.wait_for_function("document.querySelector('#wv-count').textContent === '94 %'")  # shares in percent
     assert page.evaluate("cfg.search.weights.count") == 50
     assert float(page.get_attribute("[data-w='count']", "max")) >= 50
 
 
 def test_zone_add_with_null_zones_does_not_crash(page):
     page.evaluate("cfg.stack.mount_zones = null")
-    page.click("[data-tab=bounds]")
+    page.click("[data-step=board]")
+    open_details(page, "#zoneTable")
     page.click("#zoneAdd")
     assert page.evaluate("Object.keys(cfg.stack.mount_zones)") == ["1"]
 
@@ -96,6 +103,7 @@ def test_tooltip_returns_after_dropping_the_sketch(page):
     tip = page.get_attribute("#in-motor-width", "title")
     page.evaluate("cfg.motor.sketch = {points: [[-20,-10],[-2,-10]], entities: [{type: 'line', points: [0, 1]}], constraints: []}; drawMotor()")
     assert page.is_disabled("#in-motor-width")
+    page.click("[data-step=motor]")
     page.once("dialog", lambda dialog: dialog.accept())  # discarding asks first
     page.click("#btnDropSketch")
     page.wait_for_function("!document.querySelector('#in-motor-width').disabled")
@@ -145,7 +153,8 @@ def test_sketch_drag_with_slow_server_answers(page):
         page.wait_for_timeout(150)
         route.continue_()
 
-    page.click("[data-tab=sketch]")
+    page.click("[data-step=motor]")
+    page.click("[data-motor-view=sketch]")
     page.wait_for_function("__sk.sk.entities.length && __sk.res && __sk.busy === 0")
     page.route("**/api/sketch/solve", slow)
     handle = page.locator("#skCanvas circle[data-sk-ref='p2']").bounding_box()  # top right corner of the housing
@@ -162,10 +171,12 @@ def test_sketch_drag_with_slow_server_answers(page):
 def test_repeating_tile_run_shows_tile_outlines(page):
     page.select_option("#exampleSel", "repeating_tile")
     page.wait_for_function("cfg.search.optimizer === 'periodic_tile'")
-    page.click("[data-tab=optim]")
+    page.click("[data-step=holes]")
     # Only the fields of the chosen pattern are shown
-    assert page.locator("#in-search-pattern_pitch").is_visible() and page.locator("#in-search-tile_rods").is_hidden()
+    assert page.locator("#patternCards [data-pattern=centered_square].chosen").count() == 1
+    assert page.locator("#in-search-pattern_task").is_visible() and page.locator("#in-search-tile_rods").is_hidden()
     assert page.locator("#in-search-patterns").is_hidden()
+    page.click("[data-step=run]")
     change(page, "#in-search-time_limit_s", "4")
     page.click("#btnStart")
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
@@ -191,26 +202,32 @@ def test_language_switch_translates_the_whole_ui(page):
     german = page.inner_text(label)
     page.select_option("#langSel", "en")
     page.wait_for_function("document.querySelector('#collisions').innerText.includes('No collisions')")
-    assert page.inner_text("[data-tab=results]") == "Results"
+    assert page.inner_text(STEP_RESULTS) == "Result"
     assert page.inner_text(label) != german and "[mm]" in page.inner_text(label)
     assert "2 of" in page.inner_text("#statusBox") and "No collisions" in page.inner_text("#collisions")
     assert page.evaluate("document.documentElement.lang") == "en"
     page.select_option("#langSel", "fr")
     page.wait_for_function("document.querySelector('#collisions').innerText.includes('Aucune collision')")
-    assert page.inner_text("[data-tab=results]") == "Résultats"
+    assert page.inner_text(STEP_RESULTS) == "Résultat"
     # Errors of the core come in the chosen language too
-    page.click("[data-tab=geometry]")
+    page.click("[data-step=basics]")
     change(page, "#in-rod-diameter", "-1")
     page.wait_for_function("document.querySelector('#banner').innerText.includes('Doit être supérieur')")
     page.reload()
-    page.wait_for_selector("#in-motor-width")
-    assert page.inner_text("[data-tab=results]") == "Résultats"  # the choice is remembered
+    page.wait_for_selector("#in-rod-diameter")
+    assert page.inner_text(STEP_RESULTS) == "Résultat"  # the choice is remembered
     page.select_option("#langSel", "de")
-    page.wait_for_function("document.querySelector('[data-tab=results]').textContent === 'Ergebnisse'")
+    page.wait_for_function(f"document.querySelector('{STEP_RESULTS}').textContent === 'Ergebnis'")
+
+
+def choose_mode(page, mode):
+    page.click("[data-step=mode]")
+    page.click(f"[data-mode={mode}]")
+    page.click("[data-step=holes]")
 
 
 def test_hole_generator_builds_a_file_and_runs_fixed_holes(page):
-    page.click("[data-tab=holes]")
+    choose_mode(page, "holes")
     page.click("text=Aus Text einfügen")
     page.fill("#holePaste", "30;30\n60;30\n90;30\n30,5;60\n60 60\n90\t60")
     page.click("#holePasteReplace")
@@ -232,9 +249,9 @@ def test_hole_generator_builds_a_file_and_runs_fixed_holes(page):
         page.click("#holeDownload")
     data = json.loads(open(download.value.path(), encoding="utf-8").read())
     assert data["format"] == "blindsight.holes" and len(data["holes"]) == 6 and data["holes"][3]["x"] == 30.5
-    page.click("#holeUse")
-    page.wait_for_function("cfg.search.optimizer === 'fixed_holes' && cfg.holes.length === 6")
-    assert "6 Löchern" in page.inner_text("#holesInfo")
+    page.wait_for_function("cfg.search.optimizer === 'fixed_holes' && cfg.holes.length === 6")  # taken over at once
+    page.click("[data-step=run]")
+    assert "6 Löcher" in page.inner_text("#runSummary")
     change(page, "#in-search-time_limit_s", "4")
     page.click("#btnStart")
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
@@ -243,8 +260,9 @@ def test_hole_generator_builds_a_file_and_runs_fixed_holes(page):
 
 
 def test_hole_generator_tile_mode_sets_an_own_pattern(page):
-    page.click("[data-tab=holes]")
-    page.check("input[name=holeMode][value=tile]")
+    choose_mode(page, "pattern")
+    page.click("#patternCards [data-pattern=custom]")
+    page.wait_for_selector("#holeTileBox:not([hidden])")
     page.fill("#holeTileW", "40")
     page.dispatch_event("#holeTileW", "change")
     page.fill("#holeTileH", "34")
@@ -254,10 +272,9 @@ def test_hole_generator_tile_mode_sets_an_own_pattern(page):
     page.click("#holePasteReplace")
     page.wait_for_function("document.querySelector('#holeProblems').innerText.includes('Loch 3')")
     page.click("#holeTable [data-hole-del='2']")
-    page.click("#holeUse")
     page.wait_for_function("cfg.search.pattern === 'custom' && cfg.search.custom_tile.holes.length === 2")
     assert cfg_value(page, "search.optimizer") == "periodic_tile"
-    assert "40 x 34 mm" in page.inner_text("#holesInfo")
+    assert cfg_value(page, "search.custom_tile.width") == 40
 
 
 def cfg_value(page, path):
@@ -265,7 +282,6 @@ def cfg_value(page, path):
 
 
 def test_help_buttons_explain_fields_and_sections(page):
-    page.click("[data-tab=geometry]")
     page.click("label[data-label-for='rod.stroke'] .helpBtn")
     pop = page.locator("#helpPop")
     assert pop.is_visible() and "G0" in pop.inner_text() and "Hub" in pop.inner_text()
@@ -274,24 +290,24 @@ def test_help_buttons_explain_fields_and_sections(page):
     assert pop.is_hidden()
     # Simple fields get no help button, complex ones do
     assert page.locator("label[data-label-for='rod.diameter'] .helpBtn").count() == 0
-    page.click("[data-tab=bounds]")
-    page.click("#tab-bounds h2[data-help='ui.help.obstacles'] .helpBtn")
+    page.click("[data-step=board]")
+    page.click("#tab-board summary[data-help='ui.help.obstacles'] .helpBtn")
     assert "Sperrzone" in pop.inner_text()
     page.mouse.click(5, 5)  # a click elsewhere closes it
     assert pop.is_hidden()
     # Help follows a language switch
     page.select_option("#langSel", "en")
-    page.wait_for_function("document.querySelector('[data-tab=results]').textContent === 'Results'")
-    page.click("[data-tab=optim]")
-    page.wait_for_selector("label[data-label-for='search.optimizer'] .helpBtn")
-    page.click("label[data-label-for='search.optimizer'] .helpBtn")
-    assert "Repeating pattern" in pop.inner_text()
-    page.click("#tab-optim h2[data-help='ui.help.weights'] .helpBtn")
-    assert "Only the ratio" in pop.inner_text()
+    page.wait_for_function(f"document.querySelector('{STEP_RESULTS}').textContent === 'Result'")
+    page.click("[data-step=mode]")
+    page.click("#tab-mode h2[data-help='ui.help.mode'] .helpBtn")
+    assert "Give the holes fits" in pop.inner_text()
+    page.click("[data-step=run]")
+    page.click("#tab-run h2[data-help='ui.help.goals'] .helpBtn")
+    assert "every served hole" in pop.inner_text()
 
 
 def test_rarely_changed_fields_are_folded(page):
-    page.click("[data-tab=optim]")
+    page.click("[data-step=run]")
     assert page.locator("#in-search-time_limit_s").is_visible() and page.locator("#in-search-seed").is_hidden()
     more = page.locator("#f-search-more").locator("xpath=..")
     assert more.locator("summary").inner_text() == "Weitere Einstellungen"
@@ -299,14 +315,13 @@ def test_rarely_changed_fields_are_folded(page):
     change(page, "#in-search-seed", "7")
     assert more.locator("summary").inner_text() == "Weitere Einstellungen · 1 geändert"
     # An error in a folded field opens its part
-    page.click("[data-tab=geometry]")
+    page.click("[data-step=basics]")
     assert page.locator("#in-tolerance").is_hidden()
     page.evaluate("showFieldErrors(['tolerance. Muss größer als 0 sein'])")
     assert page.locator("#in-tolerance").is_visible()
 
 
 def test_only_the_spacing_field_of_the_mode_is_shown(page):
-    page.click("[data-tab=levels]")
     assert page.locator("#in-stack-uniform_spacing").is_visible() and page.locator("#in-stack-gaps").is_hidden()
     page.select_option("#in-stack-mode", "gaps")
     page.dispatch_event("#in-stack-mode", "change")
@@ -315,19 +330,21 @@ def test_only_the_spacing_field_of_the_mode_is_shown(page):
 
 
 def test_empty_states_and_tabs(page):
-    page.click("[data-tab=results]")
-    assert page.get_attribute("[data-tab=results]", "aria-selected") == "true"
-    assert page.get_attribute("[data-tab=geometry]", "aria-selected") == "false"
+    page.click("[data-step=results]")
+    assert page.get_attribute("[data-step=results]", "aria-selected") == "true"
+    assert page.get_attribute("[data-step=basics]", "aria-selected") == "false"
     assert page.locator("#noResult label[for=fileResult]").is_visible()
     page.click("#btnGoOptim")
-    assert page.locator("#tab-optim").is_visible()
-    page.click("[data-tab=bounds]")
+    assert page.locator("#tab-run").is_visible()
+    page.click("[data-step=board]")
+    open_details(page, "#obsTable")
     assert page.inner_text("#obsTable") == "Noch keine Einträge." and page.locator("#obsTable table").count() == 0
     page.click("#obsAdd")
     assert page.locator("#obsTable table [data-obdel='0']").count() == 1
 
 
 def test_reset_asks_before_discarding_inputs(page):
+    page.click("[data-step=motor]")
     change(page, "#in-motor-width", "33")
     page.once("dialog", lambda dialog: dialog.dismiss())
     page.click("#btnReset")
@@ -335,3 +352,77 @@ def test_reset_asks_before_discarding_inputs(page):
     page.once("dialog", lambda dialog: dialog.accept())
     page.click("#btnReset")
     page.wait_for_function("cfg.motor.width === defaults.motor.width")
+
+
+# --- Guided workflow (phase 8) ---------------------------------------------------------------------------------
+def test_steps_lead_from_left_to_right(page):
+    assert page.locator("#tab-basics").is_visible()
+    page.click("#tab-basics [data-goto=motor]")
+    assert page.locator("#tab-motor").is_visible() and page.locator("#in-motor-width").is_visible()
+    assert page.inner_text("[data-step=basics] .state") == "✓"
+    page.click("[data-motor-view=sketch]")
+    page.wait_for_function("document.querySelector('#tab-sketch').classList.contains('active')")
+    page.click("#tab-motor [data-goto=basics]")
+    assert not page.evaluate("document.querySelector('#tab-sketch').classList.contains('active')")  # keys of the sketch are off
+    # A field error marks its step
+    change(page, "#in-rod-diameter", "-2")
+    page.wait_for_function("document.querySelector('[data-step=basics]').dataset.state === 'problem'")
+    assert page.inner_text("[data-step=basics] .state") == "!"
+
+
+def test_pattern_mode_with_individual_motors(page):
+    choose_mode(page, "pattern")
+    assert page.inner_text("#stepHolesLabel") == "Muster"
+    page.click("#patternCards [data-pattern=hex]")
+    page.check("input[name=patternRepeat][value=pattern_holes]")
+    page.wait_for_function("cfg.search.optimizer === 'pattern_holes' && cfg.search.pattern === 'hex'")
+    assert page.locator("#patternCards [data-pattern=free]").is_disabled()  # 2b needs a lattice
+    page.select_option("#in-search-pattern_task", "pitch")
+    page.dispatch_event("#in-search-pattern_task", "change")
+    assert page.locator("#in-search-pattern_pitch").is_visible() and page.locator("#in-target_count").is_hidden()
+    change(page, "#in-search-pattern_pitch", "24")
+    page.click("[data-step=board]")
+    page.check("#in-bounds-border")
+    page.dispatch_event("#in-bounds-border", "change")
+    assert page.locator("#in-bounds-border_width").is_visible()
+    page.click("[data-step=run]")
+    assert "Hexagonal" in page.inner_text("#runSummary") and "Randbereich 10 mm" in page.inner_text("#runSummary")
+    assert page.locator("[data-w=layers]").is_visible() and page.locator("[data-w=count]").is_hidden()
+    page.click("#presets [data-preset=border]")
+    assert page.inner_text("#wv-border") == "71 %"
+    change(page, "#in-search-time_limit_s", "4")
+    page.click("#btnStart")
+    page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
+    assert "jeder Motor einzeln" in page.inner_text("#messages")
+    assert "Tiefe im Randbereich" in page.inner_text("#metrics") and "(hat Vorrang)" in page.inner_text("#terms")
+    page.wait_for_function("document.querySelector('#collisions').innerText.includes('Keine Kollisionen')")
+
+
+def test_free_mode_is_folded_and_keeps_its_method(page):
+    page.click("[data-step=mode]")
+    assert not page.evaluate("document.querySelector('#moreModes').open")
+    page.click("#moreModes summary")
+    page.click("[data-mode=free]")
+    page.click("[data-step=holes]")
+    assert page.inner_text("#stepHolesLabel") == "Verteilung"
+    assert page.locator("#f-free #in-target_count").is_visible()
+    page.select_option("#freeMethod", "anneal_free")
+    page.dispatch_event("#freeMethod", "change")
+    assert page.evaluate("cfg.search.optimizer") == "anneal_free"
+    page.click("[data-step=mode]")
+    page.click("[data-mode=pattern]")
+    page.click("[data-mode=free]")
+    assert page.evaluate("cfg.search.optimizer") == "anneal_free"  # the mode remembers its method
+    page.click("[data-step=run]")
+    assert page.locator("[data-w=count]").is_visible() and page.locator("[data-w=layers]").is_hidden()
+    assert page.locator("[data-w=border]").is_hidden()
+
+
+def test_edge_goal_needs_the_edge_strip(page):
+    page.click("[data-step=run]")
+    assert page.locator("[data-w=border]").is_disabled()
+    page.click("[data-step=board]")
+    page.check("#in-bounds-border")
+    page.dispatch_event("#in-bounds-border", "change")
+    page.click("[data-step=run]")
+    assert page.locator("[data-w=border]").is_enabled()

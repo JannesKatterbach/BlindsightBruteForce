@@ -41,8 +41,9 @@ def page(browser, base_url):
     pg.on("pageerror", lambda e: pg.errors.append(str(e)))
     pg.on("console", lambda m: pg.errors.append(m.text) if m.type == "error" else None)
     pg.goto(base_url)
-    pg.wait_for_selector("#in-motor-width")
-    pg.click("[data-tab=sketch]")
+    pg.wait_for_selector("#in-rod-diameter")
+    pg.click("[data-step=motor]")
+    pg.click("[data-motor-view=sketch]")
     pg.wait_for_function("__sk.res && __sk.sk.entities.length && __sk.busy === 0")
     # A view with free space right of the motor for drawing
     pg.evaluate("__sk.view = {cx: 8, cy: -12, k: 0.05}; skRender()")
@@ -274,10 +275,10 @@ def test_gear_dimensions_drive_the_motor(page):
     settle(page)
     page.wait_for_function("cfg.motor.center_distance > 6.99 && cfg.motor.sketch")
     assert "Achsabstand 7 mm" in page.inner_text("#skStatus")
-    page.click("[data-tab=geometry]")
+    page.click("[data-motor-view=dims]")
     page.wait_for_function("document.querySelector('#in-motor-center_distance').value === '7'")  # written debounced
     assert page.locator("#in-motor-center_distance").is_disabled()
-    page.click("[data-tab=sketch]")
+    page.click("[data-motor-view=sketch]")
     page.keyboard.press("g")
     click(page, -20, 10)
     assert "schon ein Zahnrad" in page.inner_text("#skStatus")
@@ -299,7 +300,7 @@ def test_constraint_list_and_language(page):
 def test_sketch_motor_is_used_by_the_optimization(page):
     draw_rect(page, (8, -26), (14, -18))  # widens the housing hull
     page.wait_for_function("cfg.motor.width > 20")
-    page.click("[data-tab=optim]")
+    page.click("[data-step=run]")
     page.fill("#in-search-time_limit_s", "4")
     page.dispatch_event("#in-search-time_limit_s", "change")
     page.click("#btnStart")

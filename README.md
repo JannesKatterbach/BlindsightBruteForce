@@ -78,7 +78,7 @@ Exitcodes der Kommandozeile
 | `export/` | `build_geometry` (formatneutral), Register `EXPORTERS` mit SVG, Schraubenpositionen JSON, JSON, DXF, Bohrliste CSV |
 | `service.py` | Hintergrundläufe in Threads mit Fortschritt, Abbruch und Herunterfahren |
 | `web/server.py` | HTTP Server (stdlib) mit Routentabelle, einheitlicher Fehlerform, Host, Origin und Content Type Prüfung |
-| `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand, Sprachen), `i18n` (Kataloge der UI), `ui` (Reiter), `sketch` (Skizze) |
+| `web/static/js/` | Oberfläche als klassische Skripte ohne Build Schritt. `core` (Hilfen, Zustand, Sprachen), `i18n` (Kataloge der UI), `ui` (Schritte `steps.js`, Modi `modes.js`, Formulare und Ansichten), `sketch` (Skizze) |
 | `motor_import.py` | Motorkontur aus SVG (Polygon), fragt nach dem Maßstab, wenn er nicht eindeutig ist |
 | `docs.py` | erzeugt die Parametertabelle aus `FIELD_META` |
 | `cli.py` | Optimierung ohne UI |
@@ -153,7 +153,7 @@ unteres Ende (ausgefahren) = z_Achse - engage_below - length_tolerance
 Länge                      = stroke - unteres Ende
 ```
 
-Jede tiefere Ebene bekommt damit automatisch eine längere Stange (Tabelle im Reiter Ebenen). Für die Kollisionsprüfung
+Jede tiefere Ebene bekommt damit automatisch eine längere Stange (Tabelle im Schritt Grundlagen). Für die Kollisionsprüfung
 gilt die Stange als Zylinder über den gesamten Verfahrweg, von der eingefahrenen Stellung bis `G0 + Hub`. Deshalb stoßen
 Stangen tiefer Ebenen auch an Motoren auf den Ebenen darüber. Durchgangslöcher (Durchmesser Stange plus `2 x hole_clearance`)
 werden im SVG je Ebene gezeichnet.
@@ -161,6 +161,52 @@ werden im SVG je Ebene gezeichnet.
 Kollisionsregel. Alle Paare fremder Bauteile (Gehäuse, Zahnrad, Stange, Hindernis, Bauraumgrenze) brauchen einen echten
 Mindestabstand im Raum von mindestens `clearance + tolerance`. Der eigene Eingriff Zahnrad zu Stange ist keine Kollision.
 Zusätzlich muss das Gehäuse samt Zahnrad vertikal zwischen die Ebenen passen und die eigene Stange freihalten.
+
+## Ablauf und Modi
+
+Die Oberfläche führt in sieben Schritten von links nach rechts. Jeder Schritt hat Zurück und Weiter, springen ist jederzeit
+möglich. Die Schrittleiste zeigt mit ✓ besuchte Schritte und mit ! Schritte mit einem Fehler.
+
+1. Grundlagen. Gewindestange (Durchmesser, Überstand über G0, Gewinde), Sicherheitsabstand, Ebenen (höchstens N Ebenen,
+   Abstände, Plattendicke) mit berechneten Stangenlängen und Seitenschnitt
+2. Motor. Umschalter Maße oder Skizze (Motor Skizze wie Onshape, siehe unten)
+3. Modus. Karten "Löcher vorgeben" und "Muster wählen", eingeklappt "Frei verteilen"
+4. Platte und Rand. Plattengröße und Randbereich nur für Motoren, eingeklappt Hindernisse und Montagebereiche
+5. Löcher, Muster oder Verteilung, je nach Modus
+6. Ziele und Berechnen. Prioritäten in Prozent, Zusammenfassung, Start, Fortschritt
+7. Ergebnis
+
+Den Modus bestimmt der Optimierer (`config.mode_of`)
+
+| Modus | Optimierer | Was das Programm tut |
+|---|---|---|
+| Löcher vorgeben | `fixed_holes` | Löcher von Hand (Tabelle, Excel, Klick in die Vorschau, Datei). Je Loch Ebene, Winkel und Achsabstand, oder Beweis und Grund, warum es nicht geht |
+| Muster 2a | `periodic_tile` | Löcher und Motoren wiederholen sich als Block, beliebig erweiterbar |
+| Muster 2b | `pattern_holes` | Nur die Löcher bilden das Muster, jeder Motor wird einzeln gedreht |
+| Frei verteilen | `pattern_greedy`, `anneal_free`, `exhaustive_small` | ohne festes Muster möglichst viele Stangen |
+
+Aufgaben im Muster Modus (`search.pattern_task`)
+- `dense` so dicht wie möglich. Kleinster Lochabstand, bei dem alle Motoren passen. Die Zielanzahl in der Mitte oder mit
+  `search.pattern_fill` die ganze Platte
+- `count` feste Anzahl verteilt. Größter Abstand, mit dem die Zielanzahl gleichmäßig auf die Platte passt
+- `pitch` fester Abstand prüfen. Der Abstand `search.pattern_pitch` füllt die Platte, nicht bedienbare Löcher werden mit Grund
+  gemeldet (2b) bzw. ausgelassen (2a)
+
+Randbereich (`bounds.border`, `bounds.border_width`). Am Plattenrand ein Streifen, in den nur Motoren und Zahnräder ragen
+dürfen. Die Löcher bleiben im inneren Lochbereich, nichts ragt über die Platte. Gilt in allen Modi. Dazu bleiben der Sperrrand
+für alle Bauteile (`bounds.edge_margin`) und "Motoren dürfen über die Platte hinaus" (`bounds.parts_in_bounds` = `rods`).
+
+Ziele der Modi Löcher und Muster (Gewichte in `search.weights`, in der Oberfläche als Prozent)
+
+| Ziel | Bedeutung |
+|---|---|
+| `layers` | Wenig Ebenen. 1 minus Anteil der benötigten Motorebenen bis zur tiefsten genutzten |
+| `border` | Kleiner Rand. 1 minus wie tief Motoren in den Randbereich ragen, relativ zu seiner Breite |
+| `alignment` | Saubere Ausrichtung. Anteil gleicher Ebene und Drehung zwischen Löchern 1 bis 4 Gitterschritte entlang der zwei Hauptrichtungen (reihenweise abwechselnd zählt als sauber) |
+
+Jedes bediente Loch zählt mehr als alle Ziele zusammen, Gesamtwert = (Anzahl + gewichtete Ziele) / (Zielanzahl + 1). Mit
+Priorität 0 für Wenig Ebenen dürfen alle N Ebenen frei genutzt werden. Bei festen Löchern und im Muster 2b verbessert eine
+eigene Phase nach der ersten gültigen Lösung die Ziele (erst die gleiche Lage für alle Löcher, dann einzelne Löcher).
 
 ## Optimierung
 
@@ -170,7 +216,7 @@ Zusätzlich muss das Gehäuse samt Zahnrad vertikal zwischen die Ebenen passen u
 3. Lokale Suche (Simulated Annealing) verschiebt Stangen zur Mitte, ändert Winkel und Ebenen und ergänzt fehlende Einheiten
 4. Bewertung und Top K Lösungen. Jede ausgegebene Lösung wird zusätzlich vollständig neu auf Kollisionen geprüft
 
-Zielfunktion (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
+Zielfunktion des freien Modus (alle Teilziele in 0 bis 1, Gewichte relativ und normiert)
 
 | Ziel | Bedeutung |
 |---|---|
@@ -183,7 +229,8 @@ Gleichmäßigkeit gilt für eine einzelne Einheit als erfüllt. Regelmäßigkeit
 
 ## Wiederholendes Muster (`periodic_tile`)
 
-Für ein regelmäßiges, leicht zu bohrendes Lochbild. Eingabe im Reiter Optimierung, sichtbar sind nur die Felder des gewählten Musters
+Muster 2a, Löcher und Motoren wiederholen sich. Eingabe im Schritt Muster mit Bildkarten, sichtbar sind nur die Felder des
+gewählten Musters und der Aufgabe. Das Muster 2b (`pattern_holes`) nutzt dieselben Gitter (außer `free`)
 
 | Muster (`search.pattern`) | Lochbild | Abstände |
 |---|---|---|
@@ -195,14 +242,15 @@ Für ein regelmäßiges, leicht zu bohrendes Lochbild. Eingabe im Reiter Optimie
 | `free` | frühere Kachel. `tile_rods` Schrauben je Kachel, optional `tile_width` und `tile_height` | in x und y getrennt gesucht |
 | `custom` | eigene Kachel aus dem Lochbild Generator (`search.custom_tile`), fest oder skalierbar | wie gezeichnet |
 
-- a ist `search.pattern_pitch`, b ist `search.pattern_pitch_y`. Leer heißt automatisch. `compact` sucht den kleinsten Abstand
-  auf dem Raster `search.tile_step`, `spread` den größten, bei dem die Zielanzahl in den Bauraum passt
+- a ist `search.pattern_pitch` (nur bei der Aufgabe `pitch`), b ist `search.pattern_pitch_y`. Sonst wird a auf dem Raster
+  `search.tile_step` gesucht, bei `dense` der kleinste, bei `count` der größte, bei dem die Zielanzahl auf die Platte passt
 - Ebene, Motorwinkel und Achsabstand je Loch werden per Backtracking für einen Block aus m x n Zellen gesucht und wiederholen
   sich mit dem Block. Blöcke werden nach Lochzahl aufsteigend probiert (höchstens `search.max_block_holes` Löcher), die
   Motoranordnung wiederholt sich also so früh wie möglich. Ein Block ist gültig, wenn er gegen alle seine Kopien in Reichweite
   kollisionsfrei ist. Dann ist das ganze unendliche Gitter gültig, und jede Teilmenge davon auch
 - Platziert werden einzelne Löcher des Gitters, jedes muss Rand, Hindernisse, Montagebereiche und Kapazität einhalten. Die
-  Anzahl ist genau die Zielanzahl. Die Ergebnisansicht zeigt Muster, Abstand und Wiederholblock (gestrichelte Blockgrenzen)
+  Anzahl ist genau die Zielanzahl (bei `pitch` und "Ganze Platte füllen" so viele wie passen). Die Ergebnisansicht zeigt
+  Muster, Abstand und Wiederholblock (gestrichelte Blockgrenzen). Unter gleich vollen Platzierungen entscheiden die Ziele
 - Der gefundene Abstand ist der kleinste auf dem Raster gefundene, nicht als kleinster bewiesen
 
 ## Feste Löcher (`fixed_holes`) und Lochbild Generator
@@ -216,10 +264,11 @@ Sind die Löcher von G0 vorgegeben, bestimmt `fixed_holes` je Loch Motorebene, M
   den bedienten Löchern 3, 4 und 8, Kapazität erschöpft)
 - Die Löcher stehen in `holes` der Konfiguration, die Zielanzahl ist dann die Lochzahl
 
-Reiter Lochbild (Generator). Löcher als Tabelle eingeben, aus Text oder Excel einfügen (`x;y`, `x,y`, Tabulator), mit einem
-Muster füllen, in der Vorschau klicken, ziehen und per Rechtsklick löschen. Der Kern prüft live auf Löcher außerhalb des
-Bauraums und zu nahe Löcher. Umschalter Eigene Kachel für ein wiederholendes Muster (Breite, Höhe, Löcher in der Kachel,
-fest oder skalierbar). Knöpfe JSON herunterladen, JSON laden und Für Optimierung verwenden.
+Schritt Löcher (Lochbild Editor). Löcher als Tabelle eingeben, aus Text oder Excel einfügen (`x;y`, `x,y`, Tabulator), mit
+einem Muster füllen, in der Vorschau klicken, ziehen und per Rechtsklick löschen. Jede Änderung geht direkt in die
+Konfiguration. Der Kern prüft live auf Löcher außerhalb des Bauraums und zu nahe Löcher. Im Muster Modus mit der Karte
+"Eigene Kachel" bearbeitet derselbe Editor die Kachel (Breite, Höhe, Löcher in der Kachel, fest oder skalierbar). Knöpfe
+JSON herunterladen und JSON laden.
 
 Dateiformat `blindsight.holes` (mm, Ursprung unten links). Gelesen wird auch der Export der Schraubenpositionen, so lässt
 sich ein Ergebnis wieder als festes Lochbild laden
@@ -241,7 +290,7 @@ Fläche A und Umfang P, N <= 2/sqrt(3) A/d² + P/(2d) + 1. Motoren bleiben dabei
 
 ## Motor Skizze (CAD Stil wie Onshape)
 
-Im Reiter "Motor Skizze" wird der Motor in der Draufsicht wie in einer Onshape Skizze gezeichnet. Einfache Elemente
+Im Schritt Motor mit dem Umschalter "Skizze" wird der Motor in der Draufsicht wie in einer Onshape Skizze gezeichnet. Einfache Elemente
 zeichnen, Beziehungen und Maße direkt in der Zeichnung setzen, fertig. Daneben gibt es nur eine Statuszeile und eine
 einklappbare Liste der Beziehungen.
 
@@ -307,9 +356,9 @@ Gehäuse und Zahnrad
   Durchmesser ist die Ausdehnung in x, Breite die in y, Achsabstand der Abstand der Mitte zum Ursprung. Das Werkzeug legt
   dazu eine Konstruktionsdiagonale und einen Mittelpunkt an, das Maß Ursprung zu Mittelpunkt ist der Achsabstand
 - Mit Skizze werden `width`, `depth`, `gear_diameter`, `gear_width` und `center_distance` aus der Skizze übernommen
-  (auch beim Laden im Kern), die Felder im Reiter Geometrie sind dann gesperrt. `shaft_x`, `gear_gap` und `outline`
+  (auch beim Laden im Kern), die Felder unter "Maße" sind dann gesperrt. `shaft_x`, `gear_gap` und `outline`
   werden ignoriert
-- Ohne Skizze zeigt der Reiter eine Vorschau aus den Motorfeldern (voll bemaßtes Rechteck plus Zahnrad). Die erste
+- Ohne Skizze zeigt die Skizze eine Vorschau aus den Motorfeldern (voll bemaßtes Rechteck plus Zahnrad). Die erste
   Änderung übernimmt sie in die Konfiguration, "Skizze verwerfen" geht zurück zu den Feldern
 
 Datenformat in der Konfiguration (`motor.sketch`, mm im Stangenrahmen)
@@ -360,10 +409,11 @@ Regeln und Grenzen
 | `pattern_greedy` | Quadrat und Hexagonalraster, gierige Zuordnung, Teilungssuche, lokale Suche | beste gefundene Lösung |
 | `anneal_free` | freie Verteilung, Mehrfachstart, Simulated Annealing | beste gefundene Lösung |
 | `exhaustive_small` | Backtracking auf diskretem Raster, Fenster der Stangenmitten mit den wenigsten Rasterpunkten | bewiesen nur bezogen auf das Raster und nur ohne Knotenlimit, bis 14 Stangen |
-| `periodic_tile` | wiederholendes Lochbild, Motoranordnung je Block per Backtracking (siehe oben) | kleinster gefundener Abstand auf dem Raster |
-| `fixed_holes` | vorgegebene Löcher, exaktes Backtracking mit Vorausprüfung, sonst größte Teilmenge | Unmöglichkeit bewiesen, wenn die Suche vollständig war |
+| `periodic_tile` | Muster 2a, Motoranordnung je Block per Backtracking (siehe oben) | kleinster gefundener Abstand auf dem Raster |
+| `pattern_holes` | Muster 2b, Gitterlöcher plus Zuordnung wie bei festen Löchern, Abstand per Halbierung | kleinster gefundener Abstand auf dem Raster |
+| `fixed_holes` | vorgegebene Löcher, exaktes Backtracking mit Vorausprüfung, sonst größte Teilmenge, danach Verbesserung der Ziele | Unmöglichkeit bewiesen, wenn die Suche vollständig war |
 
-Anordnungsziel `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
+Anordnungsziel der freien Verfahren `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
 `search.workers` größer 1 startet unabhängige Seeds in getrennten Prozessen und führt die Ergebnisse zusammen.
 Mit `search.stagnation_s` endet ein Lauf früh, sobald die bestbewertete Lösung die Zielanzahl erreicht und sich so lange nichts
 mehr verbessert. Hat die bestbewertete Lösung wegen der Gewichtung weniger Einheiten als eine andere, steht das in den Hinweisen.
@@ -495,18 +545,15 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 - Kopfzeile. Sprachwahl Deutsch, Englisch, Französisch (gemerkt im Browser, Start in der Browsersprache)
 - Hilfe. Komplexere Felder und Bereiche haben einen i Knopf mit einer Erklärung (Texte in den Katalogen, Felder unter `field.<pfad>.help`, Bereiche unter `ui.help.*` mit `data-help` in `index.html`)
 - Einfach zuerst. Selten geänderte Felder liegen eingeklappt unter "Weitere Einstellungen" (die Zusammenfassung zeigt, wie viele davon geändert sind, ein Fehler klappt sie auf). Felder, die zur aktuellen Wahl nicht passen, sind ausgeblendet (zum Beispiel nur das Abstandsfeld des gewählten Abstandsmodus). Die Liste der eingeklappten Felder steht in `ADVANCED_FIELDS` (`js/ui/forms.js`)
-- Rückfragen vor Standardwerte, Skizze verwerfen und Alle Löcher löschen. Leere Tabellen und der Reiter Ergebnisse ohne Lauf sagen, was als Nächstes zu tun ist
+- Rückfragen vor Standardwerte, Skizze verwerfen und Alle Löcher löschen. Leere Tabellen und der Schritt Ergebnis ohne Lauf sagen, was als Nächstes zu tun ist
 - Tastatur. Alle Knöpfe sind mit Tab erreichbar (auch die Dateiauswahl), der Fokus ist sichtbar, Symbolknöpfe und Auswahllisten haben Beschriftungen für Screenreader
-- Reiter Geometrie. Formulare mit Tooltips, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
-  SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
-- Reiter Motor Skizze. Motor wie in Onshape zeichnen, Beziehungen und Maße setzen, Zahnrad und Achsabstand (siehe oben)
-- Reiter Ebenen. Abstandsmodi, Tabelle je Ebene (erlaubt, Kapazität, Winkel, Dicke), berechnete Stangenlängen und Seitenschnitt
-- Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
-- Reiter Lochbild. Generator für feste Löcher und eigene Kacheln (siehe oben)
-- Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter (nur die zum Optimierer und Muster passenden), Fortschritt, Live Vorschau der besten Lösung
-- Reiter Ergebnisse. Erste Zeile Ansicht (Lösung, Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht mit der Maus drehen,
+- Schritte statt Reiter (siehe Ablauf und Modi). Grundlagen mit Stange und Ebenen, Motor mit Maßen (Vorschau, SVG Import,
+  lokale Bibliothek) oder Skizze, Modus als Karten, Platte und Rand mit Vorschau von Lochbereich und Randbereich, Löcher bzw.
+  Muster mit Bildkarten, Ziele mit Prozentreglern und Voreinstellungen, Fortschritt mit Live Vorschau
+- Schritt Ergebnis. Erste Zeile Ansicht (Lösung, Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht mit der Maus drehen,
   Abstände, manuelles Bearbeiten mit sofortiger Prüfung), zweite Zeile Dateien (Export SVG, Schraubenpositionen, DXF, CSV, JSON,
-  Ergebnis speichern und laden). Daneben Kennzahlen, Kollisionen, engste Stellen und Vergleich der Top Lösungen
+  Ergebnis speichern und laden). Daneben Kennzahlen (in den Modi Löcher und Muster auch genutzte Ebenen und Tiefe im
+  Randbereich), Kollisionen, engste Stellen und Vergleich der Top Lösungen
 
 Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten,
 `Origin: null` wird abgewiesen), nimmt POST nur als `application/json` an, weist NaN und zu tief verschachteltes JSON ab und

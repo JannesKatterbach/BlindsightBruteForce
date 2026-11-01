@@ -498,5 +498,5 @@ def test_cli_exit_codes(tmp_path):
 def test_version_has_one_source():
     text = open(Path(__file__).resolve().parents[1] / "pyproject.toml", encoding="utf-8").read()
     assert 'dynamic = ["version"]' in text and "blindsight.__version__" in text
-    assert __version__ == "0.7.0"
+    assert __version__ == "0.8.0"
     assert 'blindsight = "blindsight.web.server:main"' in text

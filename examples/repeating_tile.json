@@ -68,6 +68,7 @@
     "tile_step": 0.5,
     "pattern": "centered_square",
     "pattern_pitch": null,
-    "max_block_holes": 12
+    "max_block_holes": 12,
+    "pattern_task": "dense"
   }
 }

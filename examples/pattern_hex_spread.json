@@ -64,7 +64,6 @@
       "hex_x",
       "hex_y"
     ],
-    "layout_goal": "spread",
     "fixed_pitch": null,
     "angle_step": 15.0,
     "angle_min": 0.0,
@@ -85,7 +84,8 @@
     "tile_rods": 2,
     "tile_width": null,
     "tile_height": null,
-    "tile_step": 0.5
+    "tile_step": 0.5,
+    "pattern_task": "count"
   },
   "holes": null
 }

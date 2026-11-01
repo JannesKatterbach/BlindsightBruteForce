@@ -29,6 +29,7 @@ from __future__ import annotations
 import cmath
 import math
 from dataclasses import asdict, dataclass, field
+from functools import cached_property
 from typing import Callable, Optional
 
 from collections import Counter
@@ -78,7 +79,12 @@ class LayoutStats:
     layer_count: int = 1  # motor layers available
     border_depth: float = 0.0  # mm, deepest reach of a motor into the edge strip
     border_width: float = 0.0  # mm, 0 without edge strip
-    alignment: float = 1.0
+    placements: list = field(default_factory=list, repr=False)
+
+    @cached_property
+    def alignment(self) -> float:
+        """Only computed when a goal needs it (quadratic in the number of units)."""
+        return _alignment(self.placements)
 
     @property
     def mean_nn(self) -> float:
@@ -181,8 +187,10 @@ def _hull_and_border(model: Model, placements: list[Placement]) -> tuple[float, 
 
 
 def _lattice_directions(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """The two most frequent independent neighbour vectors (rounded, pointing to positive x or up)."""
+    """The two most frequent independent neighbour vectors (pointing to positive x or up). Votes are counted on
+    rounded vectors, the result is their exact mean (rounding errors would add up over several steps)."""
     votes: Counter = Counter()
+    sums: dict[tuple[float, float], list[float]] = {}
     for i, (px, py) in enumerate(points):
         dists = [(math.hypot(qx - px, qy - py), qx - px, qy - py) for j, (qx, qy) in enumerate(points) if j != i]
         if not dists:
@@ -192,9 +200,14 @@ def _lattice_directions(points: list[tuple[float, float]]) -> list[tuple[float, 
             if d <= nearest * NEIGHBOR_SLACK:
                 if dx < -LATTICE_TOL or (abs(dx) <= LATTICE_TOL and dy < 0):
                     dx, dy = -dx, -dy
-                votes[(round(dx, 1), round(dy, 1))] += 1
+                key = (round(dx, 1), round(dy, 1))
+                votes[key] += 1
+                total = sums.setdefault(key, [0.0, 0.0])
+                total[0] += dx
+                total[1] += dy
     out: list[tuple[float, float]] = []
-    for vector, _ in votes.most_common():
+    for key, count in votes.most_common():
+        vector = (sums[key][0] / count, sums[key][1] / count)
         if not out or abs(out[0][0] * vector[1] - out[0][1] * vector[0]) > LATTICE_TOL * math.hypot(*vector):
             out.append(vector)
         if len(out) == 2:
@@ -287,7 +300,7 @@ def layout_stats(model: Model, placements: list[Placement], target: int) -> Layo
         layer_count=project.stack.n_motor_planes,
         border_depth=border_depth,
         border_width=bounds.border_width if bounds.border else 0.0,
-        alignment=_alignment(placements),
+        placements=placements,
     )
 
 

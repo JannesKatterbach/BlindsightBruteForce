@@ -43,7 +43,7 @@
  "config.gaps_count": "stack.gaps. Le mode 'gaps' nécessite {n} distances (G0-G1, G1-G2, ...)",
  "config.gaps_positive": "stack.gaps. Toutes les distances entre couches doivent être positives",
  "config.holes_format": "holes. Chaque trou doit être [x, y] avec des nombres finis",
- "config.holes_missing": "holes. L'optimiseur 'trous fixes' nécessite un plan de perçage (au moins un trou)",
+ "config.holes_missing": "holes. Le mode Imposer les trous nécessite au moins un trou (étape Trous)",
  "config.invalid_json": "JSON invalide. {error}",
  "config.json_too_deep": "JSON trop profondément imbriqué",
  "config.no_angles": "search.allowed_angles. Aucun angle de moteur autorisé",

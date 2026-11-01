@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.8.0
+Geführter Ablauf mit Modi und Zielen
+- Die Oberfläche führt in sieben Schritten von links nach rechts (Grundlagen, Motor, Modus, Platte und Rand, Löcher bzw.
+  Muster, Ziele und Berechnen, Ergebnis), mit Zurück und Weiter, Schrittleiste mit ✓ und ! und freiem Springen. Motor Maße
+  und Motor Skizze sind ein Schritt mit Umschalter
+- Moduswahl als Karten. Löcher vorgeben (feste Löcher, direkt im Editor eingegeben), Muster wählen und eingeklappt Frei
+  verteilen (die bisherigen freien Verfahren)
+- Muster mit Bildkarten und der Frage "Was wiederholt sich?". 2a Löcher und Motoren als Block (wie bisher), 2b neu nur die
+  Löcher mit einzeln gedrehten Motoren (`pattern_holes`)
+- Aufgaben im Muster Modus statt Anordnungsziel und festem Abstand. So dicht wie möglich (Zielanzahl oder ganze Platte),
+  feste Anzahl verteilt, fester Abstand prüfen
+- Randbereich nur für Motoren in allen Modi. Die Löcher bleiben innen, die Motoren dürfen in den Streifen ragen, nichts ragt
+  über die Platte. Vorschau von Lochbereich und Randbereich
+- Ziele mit Prioritäten in Prozent für Löcher und Muster. Wenig Ebenen, Kleiner Rand, Saubere Ausrichtung, dazu
+  Voreinstellungen. Jedes bediente Loch hat Vorrang vor den Zielen. Feste Löcher und Muster 2b verbessern die Ziele nach der
+  ersten gültigen Lösung
+- Ergebnis zeigt genutzte Ebenen und die Tiefe im Randbereich, eine Zusammenfassung steht vor dem Start
+- Neue Beispiele `pattern_individual_motors.json` und `fixed_holes_edge_strip.json`
+
+Änderungen
+- Der Knopf "Für Optimierung verwenden" entfällt, Löcher und eigene Kachel gehen direkt in die Konfiguration
+- Dateien mit `periodic_tile` bekommen beim Laden eine Aufgabe (`spread` wird verteilt, fester Abstand wird prüfen)
+- Die Oberfläche startet im Muster Modus, der Kern behält die freie Verteilung als Standard
+
 ## 0.7.0
 Oberfläche einfacher (Prüfung mit den Skills usability-psychologist und ui-ux-pro-max, die Motor Skizze bleibt wie Onshape)
 - Selten geänderte Felder liegen eingeklappt unter "Weitere Einstellungen" (Geometrie und Optimierung). Die Zusammenfassung

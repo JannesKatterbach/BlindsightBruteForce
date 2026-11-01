@@ -75,7 +75,7 @@ function renderStatusBox() {
   const optimality = t(r.proven_optimal ? "ui.result.proven" : "ui.result.not_proven");
   const box = $("#statusBox");
   box.className = "statusBox" + (warn ? " warn" : "");
-  box.innerHTML = `<b>${esc(t("ui.status." + r.status))}.</b> ${esc(t("ui.result.placed", { n, target: r.target, optimizer: r.optimizer }))} ` +
+  box.innerHTML = `<b>${esc(t("ui.status." + r.status))}.</b> ${esc(t("ui.result.placed", { n, target: r.target, optimizer: optionLabel("search.optimizer", r.optimizer) }))} ` +
     (edited ? `<b>${esc(t("ui.result.edited"))}</b>` : `<b>${esc(optimality)}</b><br>${esc(r.optimality_note)}`);
   const tile = currentTile();
   if (tile) {
@@ -129,9 +129,14 @@ function renderMetrics() {
     [t("ui.metric.upper_bound"), r.upper_bound], [t("ui.metric.candidates"), fmtCount(r.candidates)], [t("ui.metric.time"), r.elapsed.toFixed(1) + " s"],
   ];
   for (const key of Object.keys(M).filter((k) => k.startsWith("plane_"))) rows.push([t("ui.metric.units_on", { plane: key.split("_")[1] }), M[key]]);
+  if ("layers" in score.terms) {  // modes holes and pattern
+    rows.push([t("ui.metric.layers_used"), t("ui.metric.layers_of", { k: M.layers_used, n: cfg.stack.n_motor_planes })]);
+    if (cfg.bounds.border) rows.push([t("ui.metric.border_depth"), `${M.border_depth.toFixed(1)} / ${round(cfg.bounds.border_width, 2)} mm`]);
+  }
   $("#metrics").innerHTML = rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
-  $("#terms").innerHTML = Object.entries(score.terms).map(([k, v]) =>
-    `<tr><td>${esc(t("ui.metric.weight", { term: t("ui.term." + k), percent: (score.weights[k] * 100).toFixed(0) }))}</td><td>${v.toFixed(3)}</td></tr>`).join("") +
+  // The count has no weight in the modes holes and pattern, every hole counts more than the goals
+  const termLabel = (k) => (k in score.weights ? t("ui.metric.weight", { term: t("ui.term." + k), percent: (score.weights[k] * 100).toFixed(0) }) : t("ui.metric.first", { term: t("ui.term." + k) }));
+  $("#terms").innerHTML = Object.entries(score.terms).map(([k, v]) => `<tr><td>${esc(termLabel(k))}</td><td>${v.toFixed(3)}</td></tr>`).join("") +
     `<tr><td><b>${esc(t("ui.metric.total"))}</b></td><td><b>${score.total.toFixed(3)}</b></td></tr>`;
 }
 
