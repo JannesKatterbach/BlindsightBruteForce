@@ -123,7 +123,8 @@ def _main(argv: list[str]) -> int:
     best = result.best
     print(tr("cli.best", count=len(best.placements), target=result.target, score=best.score.total))
     for name, value in best.score.terms.items():
-        print(tr("cli.term", name=name, value=value, weight=best.score.weights[name]))
+        weight = best.score.weights.get(name)  # the count has precedence over the goals in the modes holes and pattern
+        print(tr("cli.term", name=name, value=value, weight=weight) if weight is not None else tr("cli.term_first", name=name, value=value))
     geometry = build_geometry(model, best.placements)
     try:
         if args.svg:

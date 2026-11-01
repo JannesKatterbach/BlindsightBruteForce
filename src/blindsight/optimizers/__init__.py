@@ -16,13 +16,14 @@ from .exhaustive_small import ExhaustiveSmallOptimizer
 from .fixed_holes import FixedHolesOptimizer
 from .parallel import run_parallel
 from .pattern_greedy import PatternGreedyOptimizer
+from .pattern_holes import PatternHolesOptimizer
 from .periodic_tile import PeriodicTileOptimizer
 from .registry import OPTIMIZERS, get_optimizer, register
 
 __all__ = [
     "OPTIMIZERS", "get_optimizer", "register", "Optimizer", "OptimizationResult", "ProgressInfo", "Solution",
     "StopToken", "PatternGreedyOptimizer", "AnnealFreeOptimizer", "ExhaustiveSmallOptimizer", "PeriodicTileOptimizer",
-    "FixedHolesOptimizer", "run_optimizer",
+    "FixedHolesOptimizer", "PatternHolesOptimizer", "run_optimizer",
 ]
 
 

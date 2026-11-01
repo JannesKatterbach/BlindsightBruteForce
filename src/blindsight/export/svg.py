@@ -109,12 +109,14 @@ class _Sheet:
         b = self.geometry["bounds"]
         w, h = b["xmax"] - b["xmin"], b["ymax"] - b["ymin"]
         out = [f'<rect class="bounds" x="0" y="0" width="{_f(w)}" height="{_f(h)}" fill="none" stroke="#000" stroke-width="0.3"/>']
-        margin = b["edge_margin"]
-        if margin > 0:
-            out.append(
-                f'<rect class="edge-margin" x="{_f(margin)}" y="{_f(margin)}" width="{_f(w - 2 * margin)}" '
-                f'height="{_f(h - 2 * margin)}" fill="none" stroke="#888" stroke-width="0.15" stroke-dasharray="1 1"/>'
-            )
+        # Keep out strip of all parts and, if the motor strip is on, the area of the holes
+        margins = {"edge-margin": b["edge_margin"], "hole-area": b.get("rod_margin", b["edge_margin"])}
+        for name, margin in margins.items():
+            if margin > 0 and (name == "edge-margin" or margin > b["edge_margin"]):
+                out.append(
+                    f'<rect class="{name}" x="{_f(margin)}" y="{_f(margin)}" width="{_f(w - 2 * margin)}" '
+                    f'height="{_f(h - 2 * margin)}" fill="none" stroke="#888" stroke-width="0.15" stroke-dasharray="1 1"/>'
+                )
         title = tr("svg.top_title") if self.plane is None else tr("svg.plane_title", plane=self.plane)
         out.append(f'<text x="2" y="{_f(h - 2)}" font-size="4" fill="#333">{escape(title)}</text>')
         return out

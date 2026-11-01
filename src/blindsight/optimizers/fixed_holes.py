@@ -13,6 +13,12 @@ Search
      not all holes can be served at the same time.
   3. Partial result. Without a complete solution, greedy assignments in several orders give the largest
      set of served holes found. The remaining holes are listed with the most frequent reason.
+  4. Goals. The served holes keep their units, but the choice of layer, angle and centre distance is
+     improved for the goals of the mode (few layers, small edge, clean alignment). First the same option
+     for all holes is tried where possible, then single holes move to better options (HoleGoals).
+
+HoleSearch also serves the pattern mode with individually turned motors (pattern_holes.py), there the
+holes come from the lattice instead of project.holes.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from ..geometry import prism_distance
 from ..i18n import tr
 from ..layout import Counter, Layout, Placement
 from ..model import Model
+from ..scoring import GOALS_BY_MODE, alignment_value, lattice_pairs, normalized_weights, unit_edge_reach
 from ..units import EPS
 from .base import OptimizationResult, Optimizer, ProgressCallback, StopToken, finish
 from .common import SearchBase
@@ -53,29 +60,74 @@ class FixedHolesOptimizer(Optimizer):
         complete = search.exact(lambda: search.halted() or stop.elapsed > se.time_limit_s * EXACT_SHARE)
         if not search.solutions:
             search.partial(search.halted)
+        search.improve(search.halted)
         out = finish(res, search, stop, counter)
         out.messages[:0] = search.notes(complete)
         return out
 
 
+class HoleGoals:
+    """Fast rating of the goals for one set of served holes (same definitions as scoring.OBJECTIVES).
+    The lattice pairs and the reach of every option into the edge strip are computed once."""
+
+    def __init__(self, search: "HoleSearch", served: list[int]):
+        proj = search.model.project
+        self.search = search
+        self.weights = normalized_weights(proj.search.weights, GOALS_BY_MODE[proj.mode])
+        self.layer_count = proj.stack.n_motor_planes
+        self.border_width = proj.bounds.border_width if proj.bounds.border else 0.0
+        self.served = served
+        self.pairs = lattice_pairs([search.holes[i] for i in served])
+        self._reach: dict[tuple[int, Option], float] = {}
+
+    def reach(self, i: int, option: Option) -> float:
+        key = (i, option)
+        if key not in self._reach:
+            self._reach[key] = unit_edge_reach(self.search.model, self.search.placement(i, option))
+        return self._reach[key]
+
+    def value(self, assignment: dict[int, Option]) -> float:
+        w = self.weights
+        deepest = max(o[0] for o in assignment.values())
+        layers = 1.0 - (deepest - 1) / (self.layer_count - 1) if self.layer_count > 1 else 1.0
+        border = 1.0
+        if self.border_width > 0 and w["border"] > 0:
+            border = max(0.0, 1.0 - max(self.reach(i, o) for i, o in assignment.items()) / self.border_width)
+        keys = [(assignment[i][0], round(assignment[i][1], 3), assignment[i][2]) for i in self.served]
+        return w["layers"] * layers + w["border"] * border + w["alignment"] * alignment_value(self.pairs, keys)
+
+
 class HoleSearch(SearchBase):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, holes: Optional[list] = None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.holes = [(float(x), float(y)) for x, y in self.proj.holes or []]
+        source = holes if holes is not None else self.proj.holes or []
+        self.holes = [(float(x), float(y)) for x, y in source]
         self.target = len(self.holes)
+        self.assignment: Optional[dict[int, Option]] = None  # complete solution or largest partial one
+        self.dropped = 0  # lattice holes left out by the pattern mode (no room for a motor)
         self.phase = tr("phase.fixed_holes")
         empty = Layout(self.model, self.counter)
         self.reach = empty.reach
         self.options: list[list[Option]] = []
         for i, (x, y) in enumerate(self.holes):
-            start = i % len(self.usable)
-            planes = self.usable[start:] + self.usable[:start]
+            planes = self.plane_order(i)
             self.options.append([(plane, angle, cd) for plane in planes for angle, cd in self.options_for(plane)
                                  if empty.check(Placement(x, y, plane, angle, cd)).ok])
-        self.neighbors = [[j for j, (u, v) in enumerate(self.holes) if j != i and math.hypot(u - x, v - y) <= self.reach]
-                          for i, (x, y) in enumerate(self.holes)]
         self._compat: dict[tuple, bool] = {}
         self.capacity = self.model.capacity
+        self._link()
+
+    def _link(self) -> None:
+        self.neighbors = [[j for j, (u, v) in enumerate(self.holes) if j != i and math.hypot(u - x, v - y) <= self.reach]
+                          for i, (x, y) in enumerate(self.holes)]
+
+    def select(self, indices: list[int]) -> None:
+        """Keep only these holes (in this order). Used by the pattern mode to drop lattice holes."""
+        self.holes = [self.holes[i] for i in indices]
+        self.options = [self.options[i] for i in indices]
+        self.target = len(self.holes)
+        self._compat = {}
+        self._link()
 
     # -- Pair check ------------------------------------------------------------------
     def placement(self, i: int, option: Option) -> Placement:
@@ -113,6 +165,7 @@ class HoleSearch(SearchBase):
 
         def solve(domains: list[list[Option]]) -> bool:
             if len(chosen) == n:
+                self.assignment = dict(chosen)
                 self.consider([self.placement(i, chosen[i]) for i in range(n)])
                 return True
             i = min((k for k in range(n) if k not in chosen), key=lambda k: len(domains[k]))
@@ -172,8 +225,57 @@ class HoleSearch(SearchBase):
             self.report(tr("progress.fixed_holes", done=len(served), total=n))
         most = max((len(r) for r in results), default=0)
         for served in results:
-            if len(served) == most:  # only the largest sets count, the rest would just dilute the ranking
+            if len(served) == most and most:  # only the largest sets count, the rest would just dilute the ranking
                 self.consider([self.placement(i, served[i]) for i in sorted(served)])
+                if self.assignment is None:
+                    self.assignment = served
+
+    # -- Goals --------------------------------------------------------------------------
+    def improve(self, halt) -> None:
+        """Better options for the served holes (goals of the mode). Every improvement is kept."""
+        served = dict(self.assignment or {})
+        if len(served) < 1:
+            return
+        self.phase = tr("phase.goals")
+        goals = HoleGoals(self, sorted(served))
+        best = goals.value(served)
+
+        def keep(candidate: dict[int, Option]) -> None:
+            nonlocal served, best
+            value = goals.value(candidate)
+            if value > best + EPS:
+                served, best = dict(candidate), value
+                self.consider([self.placement(i, served[i]) for i in sorted(served)])
+
+        # The same option for all holes where it fits (clean alignment, often also few layers)
+        first = min(served)
+        for option in self.options[first]:
+            if halt():
+                break
+            uniform: dict[int, Option] = {}
+            for i in sorted(served):
+                choice = option if option in self.options[i] and self._fits(i, option, uniform) else self._free_option(i, uniform)
+                if choice is None:
+                    break
+                uniform[i] = choice
+            if len(uniform) == len(served):
+                keep(uniform)
+        # Single holes to better options until nothing improves
+        improved = True
+        while improved and not halt():
+            improved = False
+            order = sorted(served)
+            self.rng.shuffle(order)
+            for i in order:
+                for option in self.options[i]:
+                    if halt():
+                        return
+                    if option == served[i] or not self._fits(i, option, served, skip=i):
+                        continue
+                    before = best
+                    keep({**served, i: option})
+                    improved = improved or best > before
+            self.report(tr("progress.goals", value=best))
 
     def _fits(self, i: int, option: Option, served: dict[int, Option], skip: int = -1) -> bool:
         cap = self.capacity.get(option[0])

@@ -25,9 +25,12 @@ Search
   2. Distance. For every block a binary search finds the smallest distance with a valid assignment. The
      result is the smallest distance found on the raster, it is not proven to be the smallest.
   3. Placement. Holes of the lattice are placed one by one, each must satisfy all rules of the real build
-     area (edge, obstacles, mounting zones, capacity). compact takes the holes closest to the centre,
-     spread takes the largest distance at which the target count fits and centres the lattice. The number
-     of holes is exactly the target count (or fewer, then the result says so).
+     area (edge, obstacles, mounting zones, capacity). The task (search.pattern_task) decides
+       dense  holes closest to the centre at the smallest distance, target_count of them or as many as
+              fit with search.pattern_fill
+       count  the largest distance at which the target count fits, the lattice centred
+       pitch  the given distance search.pattern_pitch, as many holes as fit
+     The goals of the mode (few layers, small edge) choose among equally full placements.
 """
 
 from __future__ import annotations
@@ -52,6 +55,7 @@ NODE_LIMIT = 2500  # assignment nodes per evaluated block and distance, per hole
 SEARCH_SHARE = 0.7  # share of the time limit for the lattice search, the rest places holes
 PHASES = 3  # lattice shifts per direction tried when placing compact
 TILES_TO_PLACE = 3  # best blocks that are placed into the build area
+FILL_TARGET = 10 ** 6  # target while filling the board, replaced by the largest count afterwards
 SPREAD_TRIES = 8  # larger distances tried for the goal spread
 SIZE_DIGITS = 6
 SQRT2, SQRT3 = math.sqrt(2.0), math.sqrt(3.0)
@@ -216,6 +220,7 @@ class PeriodicChecker:
         project = copy.deepcopy(model.project)
         project.bounds.width = project.bounds.height = HELPER_AREA
         project.bounds.edge_margin = 0.0
+        project.bounds.border = False
         project.obstacles = []
         project.stack.mount_zones = {}
         project.stack.max_per_plane = {}
@@ -311,6 +316,9 @@ class PeriodicTileOptimizer(Optimizer):
             if search.halted():
                 break
             search.place(tile)
+        if search.fill:
+            search.retarget(search.max_count)
+            res.target = res.upper_bound = search.max_count
         out = finish(res, search, stop, counter)
         out.messages[:0] = search.notes(tiles)
         return out
@@ -322,6 +330,10 @@ class TileSearch(SearchBase):
         self.checker = PeriodicChecker(self.model, self.counter)
         self.step = self.se.tile_step
         self.pattern = self.se.pattern
+        self.task = self.se.pattern_task
+        self.fill = self.task == "pitch" or (self.task == "dense" and self.se.pattern_fill)
+        if self.fill:
+            self.target = FILL_TARGET
         self._cache: dict[tuple, Optional[Tile]] = {}
         self.incomplete = False
 
@@ -331,11 +343,12 @@ class TileSearch(SearchBase):
         if self.pattern == "free":
             return self._free_families()
         b = se.pattern_pitch_y
+        pitch = se.pattern_pitch if self.task == "pitch" else None  # the other tasks search the distance
         if self.pattern == "custom":
             tile = se.custom_tile
-            fixed = se.pattern_pitch if se.pattern_pitch is not None else (None if tile.scalable else tile.width)
+            fixed = pitch if pitch is not None else (None if tile.scalable else tile.width)
             return [Family(("custom",), lambda a: pattern_cell("custom", a, None, tile), fixed)]
-        return [Family((self.pattern, b), lambda a: pattern_cell(self.pattern, a, b), se.pattern_pitch)]
+        return [Family((self.pattern, b), lambda a: pattern_cell(self.pattern, a, b), pitch)]
 
     def _free_families(self) -> list[Family]:
         """Pattern free. One family per sub grid shape (and aspect when both tile sizes are searched)."""
@@ -359,10 +372,8 @@ class TileSearch(SearchBase):
 
     # -- Evaluation ----------------------------------------------------------------------
     def _options(self, index: int) -> list[tuple[int, float, Optional[float]]]:
-        """Plane, angle and centre distance options of hole index (planes start rotated for balance)."""
-        start = index % len(self.usable)
-        planes = self.usable[start:] + self.usable[:start]
-        return [(plane, angle, cd) for plane in planes for angle, cd in self.options_for(plane)]
+        """Plane, angle and centre distance options of hole index."""
+        return [(plane, angle, cd) for plane in self.plane_order(index) for angle, cd in self.options_for(plane)]
 
     def evaluate(self, family: Family, block: tuple[int, int], param: float, halt: Halt) -> Optional[Tile]:
         """Block with a valid assignment for this lattice parameter, or None."""
@@ -484,7 +495,7 @@ class TileSearch(SearchBase):
 
     def place(self, tile: Tile) -> None:
         self.phase = tr("phase.pattern_place")
-        if self.se.layout_goal == "spread" and tile.family.fixed is None and self._place_spread(tile):
+        if self.task == "count" and tile.family.fixed is None and self._place_spread(tile):
             return
         self._place_compact(tile)
 
@@ -551,6 +562,6 @@ class TileSearch(SearchBase):
         best = tiles[0]
         out = [tr("pattern.summary", pattern=pattern_label, pitch=best.cell.nearest_distance(), cols=best.cols, rows=best.rows,
                   holes=len(best.units), width=best.width, height=best.height)]
-        if best.family.fixed is None:
+        if best.family.fixed is None and self.task == "dense":
             out.append(tr("pattern.not_proven"))
         return out

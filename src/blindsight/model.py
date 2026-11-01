@@ -355,17 +355,20 @@ class Model:
 
     # -- Build area --------------------------------------------------------------
     def within_bounds(self, parts: list[Part], plane_index: int) -> Optional[str]:
-        """None if everything lies inside the build area (and the mounting areas), otherwise a message."""
+        """None if everything lies inside the build area (and the mounting areas), otherwise a message.
+
+        Rods keep bounds.rod_margin from the edge (the motor strip included), the other parts edge_margin.
+        With parts_in_bounds "rods" only the rods are checked."""
         bounds = self.project.bounds
-        margin = bounds.edge_margin
-        x0, y0 = bounds.xmin + margin, bounds.ymin + margin
-        x1, y1 = bounds.xmax - margin, bounds.ymax - margin
         for part in parts:
-            if bounds.parts_in_bounds == "rods" and part.kind != KIND_ROD:
+            is_rod = part.kind == KIND_ROD
+            if bounds.parts_in_bounds == "rods" and not is_rod:
                 continue
+            margin = bounds.rod_margin if is_rod else bounds.edge_margin
             bx0, by0, bx1, by1 = part.prism.fp.bbox
-            if bx0 < x0 - EPS or by0 < y0 - EPS or bx1 > x1 + EPS or by1 > y1 + EPS:
-                return tr("model.outside_bounds", part=part.label)
+            if (bx0 < bounds.xmin + margin - EPS or by0 < bounds.ymin + margin - EPS
+                    or bx1 > bounds.xmax - margin + EPS or by1 > bounds.ymax - margin + EPS):
+                return tr("model.outside_border" if is_rod and bounds.border else "model.outside_bounds", part=part.label)
         zones = self.project.stack.mount_zones.get(str(plane_index))
         if zones:
             for part in parts:

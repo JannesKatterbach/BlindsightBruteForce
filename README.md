@@ -412,9 +412,11 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `stack.allowed_planes` | Erlaubte Motorebenen (Liste, leer = alle) (optional). Nur diese Ebenen dürfen Motoren tragen |  |  |
 | `bounds.width` | Breite (x). Ausdehnung des Bauraums in x ab dem Ursprung unten links | mm | > 0, <= 1e+06 |
 | `bounds.height` | Höhe (y). Ausdehnung des Bauraums in y ab dem Ursprung unten links | mm | > 0, <= 1e+06 |
-| `bounds.edge_margin` | Randabstand. Zusätzlicher Abstand aller Bauteile zum Rand | mm | >= 0, <= 1e+06 |
-| `bounds.parts_in_bounds` | Im Bauraum müssen liegen. Alle Bauteile oder nur die Stangen |  | `all` / `rods` |
-| `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` / `periodic_tile` / `fixed_holes` |
+| `bounds.edge_margin` | Sperrrand für alle Bauteile. Zusätzlicher Abstand aller Bauteile zum Plattenrand | mm | >= 0, <= 1e+06 |
+| `bounds.parts_in_bounds` | Über den Plattenrand ragen dürfen. Ob Motoren und Zahnräder über die Platte hinausragen dürfen |  | `all` / `rods` |
+| `bounds.border` | Randbereich nur für Motoren. Am Plattenrand ein Streifen, in den nur Motoren ragen dürfen, die Löcher bleiben innerhalb |  |  |
+| `bounds.border_width` | Breite des Randbereichs. So breit ist der Streifen am Plattenrand, in den nur Motoren ragen dürfen | mm | >= 0, <= 1e+06 |
+| `search.optimizer` | Optimierer. Suchstrategie |  | `pattern_greedy` / `anneal_free` / `exhaustive_small` / `periodic_tile` / `pattern_holes` / `fixed_holes` |
 | `search.layout_goal` | Anordnungsziel. compact packt dicht (kleine Fläche), spread verteilt gleichmäßig über den ganzen Bauraum |  | `compact` / `spread` |
 | `search.patterns` | Muster (square, hex_x, hex_y). Verteilungsstruktur der Kandidaten |  |  |
 | `search.fixed_pitch` | Feste Teilung (optional). Nur diese Rasterteilung verwenden statt sie zu suchen | mm | > 0, <= 100000 |
@@ -429,6 +431,8 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `search.refine_fraction` | Anteil lokale Suche. Zeitanteil der Verfeinerung (0 bis 0.9) |  | >= 0, <= 0.9 |
 | `search.stagnation_s` | Stagnation (s, optional). Beenden, wenn das Ziel erreicht ist und sich so lange nichts verbessert |  | > 0, <= 86400 |
 | `search.pattern` | Muster. Wiederholendes Muster. Form des Lochbilds. Die Motoranordnung je Loch sucht das Programm und wiederholt sie |  | `square` / `centered_square` / `hex` / `hex_rotated` / `staggered` / `rectangle` / `free` / `custom` |
+| `search.pattern_task` | Aufgabe. Was das Programm mit dem Muster erreichen soll |  | `dense` / `count` / `pitch` |
+| `search.pattern_fill` | Ganze Platte füllen. Statt der gewünschten Anzahl so viele Löcher setzen, wie auf die Platte passen |  |  |
 | `search.pattern_pitch` | Lochabstand (optional). Wiederholendes Muster. Abstand zum nächsten Loch. Leer heißt automatisch (kompakt kleinster, verteilt größter passender Abstand). Bei eigener Kachel die Kachelbreite | mm | > 0, <= 100000 |
 | `search.pattern_pitch_y` | Zweiter Abstand (optional). Rechteck. Abstand in y. Versetzte Reihen. Reihenabstand. Leer heißt gleich dem Lochabstand (Rechteck) bzw. dicht wie Kreise (versetzte Reihen) | mm | > 0, <= 100000 |
 | `search.max_block_holes` | Größter Wiederholblock. Wiederholendes Muster. Höchstens so viele Löcher umfasst der Block, nach dem sich die Motoranordnung wiederholt |  | >= 1, <= 36 |
@@ -441,6 +445,9 @@ Alle Längen in mm (die UI rechnet auf Wunsch aus cm und inch um). Die Tabelle w
 | `search.weights.area` | Kleine Grundfläche. Gewicht des Ziels Grundfläche |  | >= 0, <= 1000 |
 | `search.weights.uniformity` | Gleichmäßige Verteilung. Gewicht der gleichmäßigen Nachbarabstände |  | >= 0, <= 1000 |
 | `search.weights.regularity` | Regelmäßiges Muster. Gewicht der Quadrat oder Hexagonalordnung |  | >= 0, <= 1000 |
+| `search.weights.layers` | Wenig Ebenen. Motoren möglichst auf die oberen Ebenen legen, damit weniger Platten nötig sind |  | >= 0, <= 1000 |
+| `search.weights.border` | Kleiner Rand. Motoren ragen möglichst wenig in den Randbereich |  | >= 0, <= 1000 |
+| `search.weights.alignment` | Saubere Ausrichtung. Die Richtungen der Motoren wiederholen sich regelmäßig |  | >= 0, <= 1000 |
 <!-- PARAMS:END -->
 
 Weitere Felder ohne Tabellenzeile

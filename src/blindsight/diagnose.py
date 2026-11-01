@@ -43,9 +43,9 @@ def single_unit_report(model: Model) -> list[str]:
 
 
 def _probe_points(model: Model) -> list[tuple[float, float]]:
-    """Uniform grid across the build area minus the edge margin (centre first)."""
+    """Uniform grid across the area of the rod holes (centre first)."""
     bounds = model.project.bounds
-    margin = bounds.edge_margin
+    margin = bounds.rod_margin
     x0, x1 = bounds.xmin + margin, bounds.xmax - margin
     y0, y1 = bounds.ymin + margin, bounds.ymax - margin
     if x1 < x0:

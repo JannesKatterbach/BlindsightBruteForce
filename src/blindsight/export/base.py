@@ -58,7 +58,8 @@ def build_geometry(model: Model, placements: list[Placement]) -> dict:
     return {
         "name": proj.name,
         "units_of_length": "mm",
-        "bounds": {"xmin": b.xmin, "ymin": b.ymin, "xmax": b.xmax, "ymax": b.ymax, "edge_margin": b.edge_margin},
+        "bounds": {"xmin": b.xmin, "ymin": b.ymin, "xmax": b.xmax, "ymax": b.ymax, "edge_margin": b.edge_margin,
+                   "rod_margin": b.rod_margin},
         "clearance": proj.clearance,
         "tolerance": proj.tolerance,
         "required_gap": model.gap,

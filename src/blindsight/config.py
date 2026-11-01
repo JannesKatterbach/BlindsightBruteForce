@@ -39,8 +39,20 @@ MAX_ANGLE_COUNT = 100_000  # protection against tiny angle steps
 STACK_MODES = ("uniform", "gaps", "distances")
 MOUNT_MODES = ("top", "bottom")
 OBSTACLE_SHAPES = ("rect", "circle")
-# Hole patterns of the optimizer periodic_tile (see optimizers/periodic_tile.py)
+# Hole patterns of the optimizers periodic_tile and pattern_holes (see optimizers/periodic_tile.py)
 PATTERN_KINDS = ("square", "centered_square", "hex", "hex_rotated", "staggered", "rectangle", "free", "custom")
+# Tasks of the pattern mode. dense (smallest distance), count (given number spread over the board),
+# pitch (given distance, fill the board and check)
+PATTERN_TASKS = ("dense", "count", "pitch")
+OPTIMIZERS = ("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile", "pattern_holes", "fixed_holes")
+# Modes of the guided UI. The optimizer decides the mode, every other optimizer distributes freely
+MODE_HOLES, MODE_PATTERN, MODE_FREE = "holes", "pattern", "free"
+_MODE_OF_OPTIMIZER = {"fixed_holes": MODE_HOLES, "periodic_tile": MODE_PATTERN, "pattern_holes": MODE_PATTERN}
+
+
+def mode_of(optimizer: str) -> str:
+    """Mode of an optimizer. holes (given holes), pattern (2a periodic_tile, 2b pattern_holes) or free."""
+    return _MODE_OF_OPTIMIZER.get(optimizer, MODE_FREE)
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +223,15 @@ class BoundsSpec:
 
     width: float = 120.0
     height: float = 120.0
-    edge_margin: float = 0.0
-    parts_in_bounds: str = "all"
+    edge_margin: float = 0.0  # keep out strip at the edge for all parts
+    parts_in_bounds: str = "all"  # "rods" lets motors reach beyond the board
+    border: bool = False  # strip along the edge only for motors, the holes stay inside
+    border_width: float = 10.0  # mm
+
+    @property
+    def rod_margin(self) -> float:
+        """Distance of the rod holes from the board edge (keep out strip plus the motor strip, if on)."""
+        return self.edge_margin + (self.border_width if self.border else 0.0)
 
     # Corner coordinates for the geometry code. The origin is fixed at the bottom left corner.
     xmin = 0.0
@@ -258,6 +277,10 @@ class WeightsSpec:
     area: float = 8.0
     uniformity: float = 2.0
     regularity: float = 1.0
+    # Goals of the modes holes and pattern (scoring.GOALS_BY_MODE)
+    layers: float = 1.0
+    border: float = 1.0
+    alignment: float = 1.0
 
     def as_dict(self) -> dict[str, float]:
         return dataclasses.asdict(self)
@@ -297,6 +320,8 @@ class SearchSpec:
     # Repeating pattern (optimizer periodic_tile). pattern chooses the hole lattice, pattern_pitch the distance to
     # the nearest hole (None = search it). The motor arrangement repeats in blocks of at most max_block_holes holes.
     pattern: str = "square"
+    pattern_task: str = "dense"  # PATTERN_TASKS
+    pattern_fill: bool = False  # task dense. True fills the board, False places target_count holes
     pattern_pitch: Optional[float] = None  # mm
     pattern_pitch_y: Optional[float] = None  # mm, second distance of rectangle and staggered rows
     max_block_holes: int = 12
@@ -327,6 +352,10 @@ class Project:
     holes: Optional[list[list[float]]] = None
 
     @property
+    def mode(self) -> str:
+        return mode_of(self.search.optimizer)
+
+    @property
     def required_gap(self) -> float:
         """Effective minimum distance of all parts."""
         return self.clearance + self.tolerance
@@ -342,7 +371,7 @@ class Project:
     def from_dict(cls, data: dict[str, Any]) -> "Project":
         """Read and validate a project. Raises ConfigError with all problems found."""
         errs: list[str] = []
-        proj = _build(cls, data, "", errs)
+        proj = _build(cls, _upgrade(data), "", errs)
         if errs:
             raise ConfigError(errs)
         proj.validate()
@@ -403,6 +432,21 @@ class Project:
         if own:
             return sorted({normalize_angle_deg(a) for a in own})
         return self.allowed_angle_list()
+
+
+def _upgrade(data: Any) -> Any:
+    """Files of version 0.7 and older. The repeating pattern chose compact or spread placement with
+    layout_goal and a fixed distance with pattern_pitch, both now are tasks (search.pattern_task)."""
+    search = data.get("search") if isinstance(data, dict) else None
+    if not isinstance(search, dict) or search.get("optimizer") != "periodic_tile" or "pattern_task" in search:
+        return data
+    if search.get("layout_goal") == "spread":
+        task = "count"
+    elif search.get("pattern_pitch") is not None:
+        task = "pitch"
+    else:
+        task = "dense"
+    return {**data, "search": {**search, "pattern_task": task}}
 
 
 def _check_motor(proj: Project, errs: list[str]) -> None:
@@ -502,6 +546,8 @@ def _check_bounds(proj: Project, errs: list[str]) -> None:
         errs.append(tr("config.bounds_area"))
     elif 2 * bounds.edge_margin >= min(bounds.width, bounds.height):
         errs.append(tr("config.edge_margin"))
+    elif 2 * bounds.rod_margin >= min(bounds.width, bounds.height):
+        errs.append(tr("config.border_too_wide"))
 
 
 def _check_obstacles(proj: Project, errs: list[str]) -> None:
@@ -534,6 +580,11 @@ def _check_search(proj: Project, errs: list[str]) -> None:
     if sum(search.weights.as_dict().values()) <= 0:
         errs.append(tr("config.weights_zero"))
     _check_custom_tile(search, errs)
+    if search.optimizer == "pattern_holes" and search.pattern == "free":
+        errs.append(tr("config.pattern_holes_free"))
+    if proj.mode == MODE_PATTERN and search.pattern_task == "pitch" and search.pattern_pitch is None and not (
+            search.pattern == "custom" and search.custom_tile is not None and not search.custom_tile.scalable):
+        errs.append(tr("config.pattern_pitch_missing"))
     if proj.holes is not None and any(len(h) != 2 for h in proj.holes):
         errs.append(tr("config.holes_format"))
     elif search.optimizer == "fixed_holes" and not proj.holes:
@@ -579,7 +630,7 @@ def _check_outline(outline: list[list[float]], errs: list[str]) -> None:
 
 # ---------------------------------------------------------------------------
 # 3. Field description. Source of validation, UI forms and documentation.
-#   kind  len (mm), lenlist (list of lengths in mm), num, int, text, enum,
+#   kind  len (mm), lenlist (list of lengths in mm), num, int, text, enum, bool,
 #         list (list of numbers without unit), listint, liststr
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -652,8 +703,9 @@ FIELD_META: list[Meta] = [
     Meta("bounds.height", "len", 0, 1e6, True, group="bounds"),
     Meta("bounds.edge_margin", "len", 0, 1e6, group="bounds"),
     Meta("bounds.parts_in_bounds", "enum", options=("all", "rods"), group="bounds"),
-    Meta("search.optimizer", "enum", options=("pattern_greedy", "anneal_free", "exhaustive_small", "periodic_tile", "fixed_holes"),
-         group="search"),
+    Meta("bounds.border", "bool", group="bounds"),
+    Meta("bounds.border_width", "len", 0, 1e6, group="bounds"),
+    Meta("search.optimizer", "enum", options=OPTIMIZERS, group="search"),
     Meta("search.layout_goal", "enum", options=("compact", "spread"), group="search"),
     Meta("search.patterns", "liststr", group="search"),
     Meta("search.fixed_pitch", "len", 0, 100000, True, group="search", optional=True),
@@ -668,6 +720,8 @@ FIELD_META: list[Meta] = [
     Meta("search.refine_fraction", "num", 0, 0.9, group="search"),
     Meta("search.stagnation_s", "num", 0, 86400, True, group="search", optional=True),
     Meta("search.pattern", "enum", options=PATTERN_KINDS, group="search"),
+    Meta("search.pattern_task", "enum", options=PATTERN_TASKS, group="search"),
+    Meta("search.pattern_fill", "bool", group="search"),
     Meta("search.pattern_pitch", "len", 0, 1e5, True, group="search", optional=True),
     Meta("search.pattern_pitch_y", "len", 0, 1e5, True, group="search", optional=True),
     Meta("search.max_block_holes", "int", 1, 36, group="search"),
@@ -680,6 +734,9 @@ FIELD_META: list[Meta] = [
     Meta("search.weights.area", "num", 0, 1000, group="weights"),
     Meta("search.weights.uniformity", "num", 0, 1000, group="weights"),
     Meta("search.weights.regularity", "num", 0, 1000, group="weights"),
+    Meta("search.weights.layers", "num", 0, 1000, group="weights"),
+    Meta("search.weights.border", "num", 0, 1000, group="weights"),
+    Meta("search.weights.alignment", "num", 0, 1000, group="weights"),
 ]
 META_BY_PATH = {m.path: m for m in FIELD_META}
 NUMERIC_KINDS = ("len", "num", "int")
@@ -709,6 +766,8 @@ def _validate_fields(proj: Project, errs: list[str]) -> None:
         elif meta.kind in NUMBER_LIST_KINDS:
             if not all(is_finite_number(x) for x in value):
                 errs.append(tr("value.list_numbers", path=meta.path))
+        elif meta.kind == "bool" and not isinstance(value, bool):
+            errs.append(tr("value.bool", path=meta.path))
     for i, obstacle in enumerate(proj.obstacles):
         for name in ("x", "y", "w", "h", "r", "angle", "z0", "z1"):
             if not is_finite_number(getattr(obstacle, name)):

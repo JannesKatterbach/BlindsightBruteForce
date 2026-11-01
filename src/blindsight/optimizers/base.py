@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from typing import Callable, Optional
 
+from ..config import MODE_FREE
 from ..diagnose import single_unit_report
 from ..i18n import tr
 from ..layout import Counter, Placement
@@ -173,7 +174,7 @@ class Optimizer(ABC):
 STATUS_WITH_MESSAGE = (STATUS_TIME_LIMIT, STATUS_CANDIDATE_LIMIT, STATUS_STAGNATION)
 
 
-def describe_result(res: OptimizationResult, grid_exact: bool = False) -> None:
+def describe_result(res: OptimizationResult, grid_exact: bool = False, free_mode: bool = True) -> None:
     """Set the hints and the honest statement about optimality.
 
     grid_exact. The search was complete on a discrete grid (only then is optimality with respect to
@@ -189,7 +190,8 @@ def describe_result(res: OptimizationResult, grid_exact: bool = False) -> None:
         return
     if found >= target:
         res.proven_optimal = False
-        res.optimality_note = tr("result.target_grid" if grid_exact else "result.target_reached", target=target)
+        key = "result.target_grid" if grid_exact else "result.target_reached" if free_mode else "result.target_reached_goals"
+        res.optimality_note = tr(key, target=target)
     elif found >= res.upper_bound:
         res.proven_optimal = True
         res.optimality_note = tr("result.upper_bound", found=found)
@@ -228,5 +230,5 @@ def finish(res: OptimizationResult, search, stop: StopToken, counter: Counter, g
     res.candidates = counter.checks
     res.elapsed = stop.elapsed
     res.status = stop.reason or STATUS_COMPLETED
-    describe_result(res, grid_exact)
+    describe_result(res, grid_exact, search.model.project.mode == MODE_FREE)
     return res

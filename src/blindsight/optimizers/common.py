@@ -18,6 +18,7 @@ from typing import Callable, Iterator, Optional
 from ..geometry import BBox
 from ..i18n import tr
 from ..layout import Counter, Layout, Placement, layout_from_placements, layout_signature
+from ..config import MODE_FREE
 from ..model import Model
 from ..scoring import Score, evaluate
 from .base import STATUS_STAGNATION, ProgressInfo, Solution, StopToken
@@ -41,7 +42,7 @@ class SearchBase:
         self.target = self.proj.target_count
         self.usable = model.usable_planes()
         bounds = self.proj.bounds
-        margin = bounds.edge_margin + model.rod_r
+        margin = bounds.rod_margin + model.rod_r
         # Permitted region of the rod axes and centre of the build area
         self.region = (bounds.xmin + margin, bounds.ymin + margin, bounds.xmax - margin, bounds.ymax - margin)
         self.center = ((bounds.xmin + bounds.xmax) / 2.0, (bounds.ymin + bounds.ymax) / 2.0)
@@ -57,6 +58,22 @@ class SearchBase:
         self.cds: list[Optional[float]] = [None] + [
             c for c in sorted(model.center_distances, key=lambda c: abs(c - nominal)) if abs(c - nominal) > IMPROVE_EPS
         ]
+
+    def plane_order(self, index: int) -> list[int]:
+        """Order in which the layers are tried for hole index. With the goal few layers (modes holes and
+        pattern) the upper layers first, otherwise rotated by the index so that the layers fill evenly."""
+        if self.proj.mode != MODE_FREE and self.se.weights.layers > 0:
+            return list(self.usable)
+        start = index % len(self.usable)
+        return self.usable[start:] + self.usable[:start]
+
+    def retarget(self, target: int) -> None:
+        """Rate the kept solutions again for a new target (tasks that fill the board)."""
+        self.target = max(1, target)
+        for solution in self.solutions.values():
+            solution.score = evaluate(self.model, solution.placements, self.se.weights, self.target)
+        if self.solutions:
+            self.best_total = max(s.score.total for s in self.solutions.values())
 
     # -- Stop ---------------------------------------------------------------
     def stagnated(self) -> bool:
