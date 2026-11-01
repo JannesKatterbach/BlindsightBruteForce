@@ -24,7 +24,11 @@ function initHoles() {
     holeList().push([round(area.width / 2, 3), round(area.height / 2, 3)]);
     holesChanged();
   });
-  $("#holeClear").addEventListener("click", () => { holeList().length = 0; holesChanged(); });
+  $("#holeClear").addEventListener("click", () => {
+    if (!holeList().length || !confirm(t("ui.confirm.clear_holes"))) return;
+    holeList().length = 0;
+    holesChanged();
+  });
   $("#holePasteAdd").addEventListener("click", () => pasteHoles(false));
   $("#holePasteReplace").addEventListener("click", () => pasteHoles(true));
   $("#holeFillBtn").addEventListener("click", fillHoles);
@@ -65,14 +69,15 @@ function holesChanged() {
 function renderHoleTable() {
   const holes = holeList();
   const bad = new Set(holeState.problems.map((p) => p.index));
+  const box = $("#holeTable");
+  if (!holes.length) { box.innerHTML = emptyTable("ui.holes.empty"); return; }
   let html = `<table class="grid"><tr><th>#</th><th>x [mm]</th><th>y [mm]</th><th></th></tr>`;
   holes.forEach(([x, y], i) => {
     html += `<tr class="${bad.has(i) ? "bad" : ""}"><td>${i + 1}</td>` +
       `<td><input type="number" step="any" data-hole="${i}" data-c="0" value="${esc(round(x, 4))}"></td>` +
       `<td><input type="number" step="any" data-hole="${i}" data-c="1" value="${esc(round(y, 4))}"></td>` +
-      `<td><button data-hole-del="${i}" title="${esc(t("ui.table.delete"))}">x</button></td></tr>`;
+      `<td>${deleteButton("data-hole-del", i)}</td></tr>`;
   });
-  const box = $("#holeTable");
   box.innerHTML = html + "</table>";
   $$("[data-hole]", box).forEach((input) => input.addEventListener("change", () => {
     const v = parseFloat(input.value);

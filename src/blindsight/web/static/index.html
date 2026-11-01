@@ -18,16 +18,16 @@
   <label class="btn"><span data-i18n="ui.header.load">Konfig laden</span><input type="file" id="fileLoad" accept=".json" hidden></label>
   <select id="langSel" data-i18n-title="ui.header.language" aria-label="Sprache"></select>
 </header>
-<nav id="tabs">
-  <button data-tab="geometry" class="active" data-i18n="ui.tab.geometry">Geometrie</button>
-  <button data-tab="sketch" data-i18n="ui.tab.sketch">Motor Skizze</button>
-  <button data-tab="levels" data-i18n="ui.tab.levels">Ebenen</button>
-  <button data-tab="bounds" data-i18n="ui.tab.bounds">Bauraum</button>
-  <button data-tab="holes" data-i18n="ui.tab.holes">Lochbild</button>
-  <button data-tab="optim" data-i18n="ui.tab.optim">Optimierung</button>
-  <button data-tab="results" data-i18n="ui.tab.results">Ergebnisse</button>
+<nav id="tabs" role="tablist">
+  <button role="tab" data-tab="geometry" class="active" aria-selected="true" data-i18n="ui.tab.geometry">Geometrie</button>
+  <button role="tab" data-tab="sketch" data-i18n="ui.tab.sketch">Motor Skizze</button>
+  <button role="tab" data-tab="levels" data-i18n="ui.tab.levels">Ebenen</button>
+  <button role="tab" data-tab="bounds" data-i18n="ui.tab.bounds">Bauraum</button>
+  <button role="tab" data-tab="holes" data-i18n="ui.tab.holes">Lochbild</button>
+  <button role="tab" data-tab="optim" data-i18n="ui.tab.optim">Optimierung</button>
+  <button role="tab" data-tab="results" data-i18n="ui.tab.results">Ergebnisse</button>
 </nav>
-<div id="banner" class="errors" hidden></div>
+<div id="banner" class="errors" role="alert" hidden></div>
 <main>
   <section id="tab-geometry" class="tab active">
     <div class="cols">
@@ -194,7 +194,12 @@
     </div>
   </section>
   <section id="tab-results" class="tab">
-    <div id="noResult" class="hint" data-i18n="ui.results.none">Noch kein Ergebnis. Auf dem Reiter Optimierung starten.</div>
+    <input type="file" id="fileResult" accept=".json" hidden>
+    <div id="noResult" class="statusBox empty">
+      <p data-i18n="ui.results.none">Noch kein Ergebnis. Auf dem Reiter Optimierung starten.</p>
+      <div class="toolbar"><button id="btnGoOptim" class="primary" data-i18n="ui.results.go_optim">Zur Optimierung</button>
+        <label class="btn" for="fileResult" data-i18n="ui.results.load">Ergebnis laden</label></div>
+    </div>
     <div id="resultBox" hidden>
       <div id="statusBox" class="statusBox"></div>
       <div class="toolbar">
@@ -208,10 +213,12 @@
         <label id="planeLabel"><span data-i18n="ui.results.layer">Ebene</span> <select id="planeSel"></select></label>
         <label><input type="checkbox" id="optDist" checked> <span data-i18n="ui.results.distances">Abstände</span></label>
         <label><input type="checkbox" id="optEdit"> <span data-i18n="ui.results.edit" data-help="ui.help.edit">Bearbeiten</span></label>
-        <select id="expFmt" data-i18n-title="ui.results.export_format"></select>
-        <button id="btnExport" data-i18n="ui.results.export">Exportieren</button><span data-help="ui.help.export" data-help-title="ui.results.export"></span>
-        <button id="btnSaveResult" data-i18n="ui.results.save">Ergebnis speichern</button>
-        <label class="btn"><span data-i18n="ui.results.load">Ergebnis laden</span><input type="file" id="fileResult" accept=".json" hidden></label>
+      </div>
+      <div class="toolbar">
+        <span class="group"><select id="expFmt" data-i18n-title="ui.results.export_format"></select>
+          <button id="btnExport" data-i18n="ui.results.export">Exportieren</button><span data-help="ui.help.export" data-help-title="ui.results.export"></span></span>
+        <span class="group"><button id="btnSaveResult" data-i18n="ui.results.save">Ergebnis speichern</button>
+          <label class="btn" for="fileResult" data-i18n="ui.results.load">Ergebnis laden</label></span>
       </div>
       <div id="editPanel" class="statusBox" hidden></div>
       <div class="cols resultCols">

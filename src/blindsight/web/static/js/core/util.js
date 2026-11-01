@@ -48,6 +48,11 @@ function setPath(obj, path, value) {
 /** List from text (separated by comma, semicolon or space). */
 const splitList = (text) => String(text).split(/[,; ]+/).filter(Boolean);
 
+/** Placeholder of an empty table (instead of a lone header row). */
+const emptyTable = (key = "ui.table.empty") => `<p class="hint">${esc(t(key))}</p>`;
+/** Delete button of a table row. */
+const deleteButton = (attr, value) => `<button ${attr}="${esc(value)}" title="${esc(t("ui.table.delete"))}" aria-label="${esc(t("ui.table.delete"))}">×</button>`;
+
 /** Offer a file for download. */
 function download(name, content, type) {
   const a = document.createElement("a");

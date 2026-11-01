@@ -66,12 +66,13 @@ function obstacleCell(obstacle, i, [field, kind]) {
 }
 
 function renderObstacles() {
+  const box = $("#obsTable");
+  if (!cfg.obstacles.length) { box.innerHTML = emptyTable(); return; }
   const head = OBSTACLE_COLUMNS.map(([field, kind]) => `<th>${esc(t("ui.obstacle." + field))}${kind === "len" ? " [mm]" : ""}</th>`).join("");
   let html = `<table class="grid"><tr>${head}<th></th></tr>`;
   cfg.obstacles.forEach((obstacle, i) => {
-    html += "<tr>" + OBSTACLE_COLUMNS.map((c) => obstacleCell(obstacle, i, c)).join("") + `<td><button data-obdel="${i}" title="${esc(t("ui.table.delete"))}">x</button></td></tr>`;
+    html += "<tr>" + OBSTACLE_COLUMNS.map((c) => obstacleCell(obstacle, i, c)).join("") + `<td>${deleteButton("data-obdel", i)}</td></tr>`;
   });
-  const box = $("#obsTable");
   box.innerHTML = html + "</table>";
   $$("[data-ob]", box).forEach((input) => input.addEventListener("change", () => { readObstacleCell(input); refresh(); }));
   $$("[data-obdel]", box).forEach((button) => button.addEventListener("click", () => {
@@ -104,14 +105,15 @@ const ZONE_TITLES = ["ui.zone.xmin", "ui.zone.ymin", "ui.zone.xmax", "ui.zone.ym
 function renderZones() {
   const rows = [];
   for (const [plane, zones] of Object.entries(cfg.stack.mount_zones || {})) zones.forEach((zone, j) => rows.push([plane, j, zone]));
+  const box = $("#zoneTable");
+  if (!rows.length) { box.innerHTML = emptyTable(); return; }
   let html = `<table class="grid"><tr><th>${esc(t("ui.table.layer"))}</th>${ZONE_TITLES.map((k) => `<th>${esc(t(k))} [mm]</th>`).join("")}<th></th></tr>`;
   for (const [plane, j, zone] of rows) {
     const key = `${esc(plane)}:${j}`;
     html += `<tr><td><input type="number" min="1" step="1" data-z="${key}" data-f="plane" value="${esc(plane)}"></td>` +
       zone.map((v, q) => `<td><input type="number" step="any" data-z="${key}" data-f="${q}" value="${esc(round(v))}"></td>`).join("") +
-      `<td><button data-zdel="${key}" title="${esc(t("ui.table.delete"))}">x</button></td></tr>`;
+      `<td>${deleteButton("data-zdel", `${plane}:${j}`)}</td></tr>`;
   }
-  const box = $("#zoneTable");
   box.innerHTML = html + "</table>";
   $$("[data-z]", box).forEach((input) => input.addEventListener("change", () => { readZones(); refresh(); }));
   $$("[data-zdel]", box).forEach((button) => button.addEventListener("click", () => {

@@ -4,6 +4,15 @@
 const GROUP_TARGET = { general: "f-general", rod: "f-rod", motor: "f-motor", stack: "f-stack", bounds: "f-bounds", search: "f-search" };
 // These fields are edited in the table per motor layer (otherwise there would be two editors for one value)
 const TABLE_FIELDS = new Set(["stack.allowed_planes", "stack.thicknesses"]);
+// Rarely changed fields. They sit in a folded part "More settings" below their form and stay editable there
+const ADVANCED_FIELDS = new Set([
+  "tolerance", "rod.length_tolerance", "rod.retract_depth", "rod.hole_clearance",
+  "motor.shaft_x", "motor.gear_gap", "motor.center_distance_min", "motor.center_distance_max", "motor.center_distance_steps",
+  "motor.own_clearance",
+  "search.patterns", "search.fixed_pitch", "search.angle_step", "search.angle_min", "search.angle_max", "search.allowed_angles",
+  "search.max_candidates", "search.seed", "search.top_k", "search.refine_fraction", "search.stagnation_s", "search.workers",
+  "search.tile_step", "search.max_block_holes",
+]);
 
 const fieldByPath = (path) => schema.fields.find((f) => f.path === path);
 /** Label of an option of an enum field in the current language (the value itself if unknown). */
@@ -27,6 +36,9 @@ const FIELD_VISIBLE = {
   "search.tile_step": usesPattern,
   "search.patterns": (c) => c.search.optimizer === "pattern_greedy",
   "search.fixed_pitch": (c) => ["pattern_greedy", "exhaustive_small"].includes(c.search.optimizer),
+  "stack.uniform_spacing": (c) => c.stack.mode === "uniform",
+  "stack.gaps": (c) => c.stack.mode === "gaps",
+  "stack.distances": (c) => c.stack.mode === "distances",
 };
 
 /** Show only the fields that matter for the current settings. */
@@ -40,15 +52,39 @@ function updateFieldVisibility() {
     const next = input.nextElementSibling;
     if (next && next.classList.contains("errmsg")) next.hidden = !show;
   }
+  updateAdvancedParts();
   renderHolesInfo();
+}
+
+/** Folded part "More settings" of a form group, created on first use right below the form. */
+function advancedBox(group) {
+  const id = GROUP_TARGET[group] + "-more";
+  if (!$("#" + id)) {
+    const details = document.createElement("details");
+    details.className = "advanced";
+    details.innerHTML = `<summary></summary><div class="form" id="${id}"></div>`;
+    $("#" + GROUP_TARGET[group]).insertAdjacentElement("afterend", details);
+  }
+  return $("#" + id);
+}
+
+/** Summary of the folded parts with the number of changed values. Parts without visible fields are hidden. */
+function updateAdvancedParts() {
+  for (const details of $$("details.advanced")) {
+    const inputs = $$("[data-path]", details);
+    const changed = inputs.filter((i) => JSON.stringify(getPath(cfg, i.dataset.path)) !== JSON.stringify(getPath(defaults, i.dataset.path))).length;
+    details.querySelector("summary").textContent = t("ui.form.advanced") + (changed ? ` · ${t("ui.form.changed", { n: changed })}` : "");
+    details.hidden = inputs.every((i) => i.hidden);
+  }
 }
 const inputId = (path) => "in-" + path.replace(/\./g, "-");
 
 function buildForms() {
   for (const id of Object.values(GROUP_TARGET)) $("#" + id).innerHTML = "";
+  for (const box of $$("details.advanced .form")) box.innerHTML = "";  // the folded parts keep their open state
   for (const field of schema.fields) {
     if (!(field.group in GROUP_TARGET) || TABLE_FIELDS.has(field.path)) continue;
-    const box = $("#" + GROUP_TARGET[field.group]);
+    const box = ADVANCED_FIELDS.has(field.path) ? advancedBox(field.group) : $("#" + GROUP_TARGET[field.group]);
     const label = document.createElement("label");
     setFieldLabel(label, field, lenLabel(field.label, field.kind));
     label.title = field.tip;
@@ -121,6 +157,8 @@ function writeInputs() {
 // --- Errors -------------------------------------------------------------------------------------------
 function markFieldError(input, message) {
   clearFieldError(input);
+  const folded = input.closest("details");
+  if (folded) folded.open = true;  // an error in "More settings" must not stay hidden
   input.classList.add("err");
   const box = document.createElement("div");
   box.className = "errmsg";
@@ -143,7 +181,7 @@ function showFieldErrors(errors) {
     const input = match && document.querySelector(`[data-path="${match[1]}"]`);
     if (input) markFieldError(input, match[2]);
   }
-  const banner = $("#banner");
+  const banner = $("#banner");  // role alert in index.html, screen readers announce it
   banner.hidden = errors.length === 0;
   banner.innerHTML = errors.length ? "<ul>" + errors.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>" : "";
 }

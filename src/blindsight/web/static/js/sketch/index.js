@@ -21,7 +21,7 @@
     $$("#skToolbar [data-sk-act]").forEach((b) => b.addEventListener("click", () => ACTIONS[b.dataset.skAct]()));
     $("#skRot").addEventListener("input", () => { SK.rot = +$("#skRot").value; $("#skRotVal").textContent = SK.rot; Sketch.render(); });
     for (const id of ["#skSweep", "#skShowHull", "#skSnap"]) $(id).addEventListener("change", () => Sketch.render());
-    $("#skDrop").addEventListener("click", () => Sketch.drop());
+    $("#skDrop").addEventListener("click", () => { if (confirm(t("ui.confirm.drop_sketch"))) Sketch.drop(); });
     const renderIfVisible = () => { if ($("#tab-sketch").classList.contains("active")) Sketch.render(); };
     window.addEventListener("resize", renderIfVisible);
     new ResizeObserver(renderIfVisible).observe($("#skCanvasWrap"));

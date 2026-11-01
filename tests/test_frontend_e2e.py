@@ -96,6 +96,7 @@ def test_tooltip_returns_after_dropping_the_sketch(page):
     tip = page.get_attribute("#in-motor-width", "title")
     page.evaluate("cfg.motor.sketch = {points: [[-20,-10],[-2,-10]], entities: [{type: 'line', points: [0, 1]}], constraints: []}; drawMotor()")
     assert page.is_disabled("#in-motor-width")
+    page.once("dialog", lambda dialog: dialog.accept())  # discarding asks first
     page.click("#btnDropSketch")
     page.wait_for_function("!document.querySelector('#in-motor-width').disabled")
     assert page.get_attribute("#in-motor-width", "title") == tip and tip
@@ -287,3 +288,50 @@ def test_help_buttons_explain_fields_and_sections(page):
     assert "Repeating pattern" in pop.inner_text()
     page.click("#tab-optim h2[data-help='ui.help.weights'] .helpBtn")
     assert "Only the ratio" in pop.inner_text()
+
+
+def test_rarely_changed_fields_are_folded(page):
+    page.click("[data-tab=optim]")
+    assert page.locator("#in-search-time_limit_s").is_visible() and page.locator("#in-search-seed").is_hidden()
+    more = page.locator("#f-search-more").locator("xpath=..")
+    assert more.locator("summary").inner_text() == "Weitere Einstellungen"
+    more.locator("summary").click()
+    change(page, "#in-search-seed", "7")
+    assert more.locator("summary").inner_text() == "Weitere Einstellungen · 1 geändert"
+    # An error in a folded field opens its part
+    page.click("[data-tab=geometry]")
+    assert page.locator("#in-tolerance").is_hidden()
+    page.evaluate("showFieldErrors(['tolerance. Muss größer als 0 sein'])")
+    assert page.locator("#in-tolerance").is_visible()
+
+
+def test_only_the_spacing_field_of_the_mode_is_shown(page):
+    page.click("[data-tab=levels]")
+    assert page.locator("#in-stack-uniform_spacing").is_visible() and page.locator("#in-stack-gaps").is_hidden()
+    page.select_option("#in-stack-mode", "gaps")
+    page.dispatch_event("#in-stack-mode", "change")
+    assert page.locator("#in-stack-gaps").is_visible() and page.locator("#in-stack-uniform_spacing").is_hidden()
+    assert page.locator("#in-stack-distances").is_hidden()
+
+
+def test_empty_states_and_tabs(page):
+    page.click("[data-tab=results]")
+    assert page.get_attribute("[data-tab=results]", "aria-selected") == "true"
+    assert page.get_attribute("[data-tab=geometry]", "aria-selected") == "false"
+    assert page.locator("#noResult label[for=fileResult]").is_visible()
+    page.click("#btnGoOptim")
+    assert page.locator("#tab-optim").is_visible()
+    page.click("[data-tab=bounds]")
+    assert page.inner_text("#obsTable") == "Noch keine Einträge." and page.locator("#obsTable table").count() == 0
+    page.click("#obsAdd")
+    assert page.locator("#obsTable table [data-obdel='0']").count() == 1
+
+
+def test_reset_asks_before_discarding_inputs(page):
+    change(page, "#in-motor-width", "33")
+    page.once("dialog", lambda dialog: dialog.dismiss())
+    page.click("#btnReset")
+    assert page.evaluate("cfg.motor.width") == 33
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.click("#btnReset")
+    page.wait_for_function("cfg.motor.width === defaults.motor.width")

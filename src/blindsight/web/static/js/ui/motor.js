@@ -73,7 +73,11 @@ function motorChanged() {
 
 function initMotorPreview() {
   $("#btnOpenSketch").addEventListener("click", () => switchTab("sketch"));
-  $("#btnDropSketch").addEventListener("click", () => { cfg.motor.sketch = null; motorChanged(); });
+  $("#btnDropSketch").addEventListener("click", () => {
+    if (!confirm(t("ui.confirm.drop_sketch"))) return;
+    cfg.motor.sketch = null;
+    motorChanged();
+  });
 }
 
 // --- Library --------------------------------------------------------------------------------------

@@ -36,7 +36,11 @@ const fmtCount = (value) => Number(value).toLocaleString(currentLanguage);
 /** Static texts of the page (data-i18n for the content, data-i18n-title and data-i18n-placeholder). */
 function applyStaticTexts(root = document) {
   for (const node of root.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
-  for (const node of root.querySelectorAll("[data-i18n-title]")) node.title = t(node.dataset.i18nTitle);
+  for (const node of root.querySelectorAll("[data-i18n-title]")) {
+    node.title = t(node.dataset.i18nTitle);
+    // Icon buttons and selects have no visible text of their own, screen readers read the tooltip
+    if (node.tagName === "SELECT" || !node.textContent.trim()) node.setAttribute("aria-label", node.title);
+  }
   for (const node of root.querySelectorAll("[data-i18n-placeholder]")) node.placeholder = t(node.dataset.i18nPlaceholder);
   document.documentElement.lang = currentLanguage;
   if (typeof attachStaticHelp === "function") attachStaticHelp(root);  // text changes removed the help buttons

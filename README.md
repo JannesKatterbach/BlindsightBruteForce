@@ -487,6 +487,9 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 
 - Kopfzeile. Sprachwahl Deutsch, Englisch, Französisch (gemerkt im Browser, Start in der Browsersprache)
 - Hilfe. Komplexere Felder und Bereiche haben einen i Knopf mit einer Erklärung (Texte in den Katalogen, Felder unter `field.<pfad>.help`, Bereiche unter `ui.help.*` mit `data-help` in `index.html`)
+- Einfach zuerst. Selten geänderte Felder liegen eingeklappt unter "Weitere Einstellungen" (die Zusammenfassung zeigt, wie viele davon geändert sind, ein Fehler klappt sie auf). Felder, die zur aktuellen Wahl nicht passen, sind ausgeblendet (zum Beispiel nur das Abstandsfeld des gewählten Abstandsmodus). Die Liste der eingeklappten Felder steht in `ADVANCED_FIELDS` (`js/ui/forms.js`)
+- Rückfragen vor Standardwerte, Skizze verwerfen und Alle Löcher löschen. Leere Tabellen und der Reiter Ergebnisse ohne Lauf sagen, was als Nächstes zu tun ist
+- Tastatur. Alle Knöpfe sind mit Tab erreichbar (auch die Dateiauswahl), der Fokus ist sichtbar, Symbolknöpfe und Auswahllisten haben Beschriftungen für Screenreader
 - Reiter Geometrie. Formulare mit Tooltips, Fehler direkt am Feld, Motor Vorschau mit Stange im Ursprung,
   SVG Import mit Maßstabsabfrage, lokale Motor Bibliothek
 - Reiter Motor Skizze. Motor wie in Onshape zeichnen, Beziehungen und Maße setzen, Zahnrad und Achsabstand (siehe oben)
@@ -494,8 +497,9 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
 - Reiter Bauraum. Rand, Hindernisse, Sperrzonen, Montagebereiche
 - Reiter Lochbild. Generator für feste Löcher und eigene Kacheln (siehe oben)
 - Reiter Optimierung. Gewichte mit Reglern und Voreinstellungen, Suchparameter (nur die zum Optimierer und Muster passenden), Fortschritt, Live Vorschau der besten Lösung
-- Reiter Ergebnisse. Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht (mit der Maus drehen), Kollisionen, engste Stellen,
-  Vergleich der Top Lösungen, manuelles Bearbeiten mit sofortiger Prüfung, Export (SVG, Schraubenpositionen, DXF, CSV, JSON), Ergebnis speichern und laden
+- Reiter Ergebnisse. Erste Zeile Ansicht (Lösung, Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht mit der Maus drehen,
+  Abstände, manuelles Bearbeiten mit sofortiger Prüfung), zweite Zeile Dateien (Export SVG, Schraubenpositionen, DXF, CSV, JSON,
+  Ergebnis speichern und laden). Daneben Kennzahlen, Kollisionen, engste Stellen und Vergleich der Top Lösungen
 
 Server Sicherheit. Der Server bindet standardmäßig nur an 127.0.0.1, prüft Host und Origin (Schutz gegen fremde Webseiten,
 `Origin: null` wird abgewiesen), nimmt POST nur als `application/json` an, weist NaN und zu tief verschachteltes JSON ab und
