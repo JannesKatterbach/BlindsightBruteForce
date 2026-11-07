@@ -41,7 +41,7 @@ function bindTabs() {
   ["viewSel", "planeSel", "optDist"].forEach((id) => $("#" + id).addEventListener("change", drawView));
   $("#optEdit").addEventListener("change", () => { editMode = $("#optEdit").checked; renderEditPanel(); drawView(); });
   $("#solSel").addEventListener("change", () => loadResult(+$("#solSel").value));
-  $("#btnExport").addEventListener("click", doExport);
+  initExportMenu();
   $("#btnSaveResult").addEventListener("click", saveResult);
   onFile("#fileResult", loadResultFile);
   $("#btnGoOptim").addEventListener("click", () => switchTab("run"));
@@ -79,7 +79,7 @@ async function changeLanguage(language) {
   $("#langSel").value = currentLanguage;
   schema = (await api("/api/schema")).data;
   buildForms();
-  buildExportFormats();
+  buildExportMenu();
   buildHoleFillPatterns();
   buildModeTexts();
   writeInputs();
@@ -109,7 +109,7 @@ async function init() {
   defaults = (await api("/api/default")).data;
   buildLanguageSelect();
   buildForms();
-  buildExportFormats();
+  buildExportMenu();
   initSteps();
   initModes();
   initMotorPreview();

@@ -46,6 +46,7 @@ table.grid td button{padding:0 5px;margin-left:2px}
 .statusBox{padding:10px 14px;border-radius:8px;border:1px solid var(--bd);background:var(--card);margin-bottom:8px}
 .statusBox.warn{border-color:var(--bad)}.statusBox b{font-weight:600}
 .statusBox.empty p{margin:0}
+.sketchErrors{color:var(--bad);margin:8px 0 0}
 .progress{height:10px;background:var(--bd);border-radius:5px;margin:12px 0;overflow:hidden}#bar{height:100%;width:0;background:var(--ac);transition:width .3s}
 
 /* Drawings */
@@ -78,7 +79,8 @@ svg{background:var(--card);border:1px solid var(--bd);border-radius:8px;width:10
 #skCanvas{height:70vh;min-height:440px;touch-action:none;cursor:crosshair;user-select:none;color:var(--fg)}
 #skCanvas.select{cursor:default}
 #skInput{position:absolute;width:96px;z-index:5;border:2px solid var(--ac)}
-.skHint{position:absolute;left:10px;top:8px;font-size:12px;color:var(--mut);pointer-events:none;max-width:70%}
+.skHint{position:absolute;left:10px;top:8px;font-size:12px;color:var(--mut);pointer-events:none;max-width:70%;background:color-mix(in srgb,var(--card) 88%,transparent);padding:2px 6px;border-radius:4px}
+.skHint:empty{display:none}
 #skList{width:300px;background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:4px 10px 10px;max-height:70vh;overflow:auto}
 #skStatus{margin-top:8px;line-height:1.7}
 .skcons{display:grid;grid-template-columns:20px 1fr 64px 18px 22px;gap:4px;align-items:center;padding:2px 0;border-bottom:1px solid var(--bd);font-size:12px}
@@ -87,6 +89,7 @@ svg{background:var(--card);border:1px solid var(--bd);border-radius:8px;width:10
 .skcons input.skval{width:64px;padding:2px 4px}.skcons button{padding:0 6px}
 .skcons:not(:has(.skval)){grid-template-columns:20px 1fr 18px 22px}
 @media (max-width:1100px){#skMain{grid-template-columns:1fr}#skList{width:auto}}
+@media (max-width:700px){.skHint{position:static;max-width:none;margin-top:4px;background:none;padding:0}}  /* below the drawing, not over it */
 
 /* Guided workflow. Step bar, Back and Next, sub views, cards of the modes and patterns */
 #steps{display:flex;gap:2px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--bd);overflow:auto}
@@ -121,3 +124,17 @@ svg{background:var(--card);border:1px solid var(--bd);border-radius:8px;width:10
 .weightSum{display:flex;gap:10px;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);font-weight:600}
 .weightSum .ok{color:var(--ok)}.weightSum .warn{color:var(--warn)}
 #tiledPreview,#blockPreview{max-width:640px}
+/* Export menu. A button that opens a box with preset, format, layer and contents */
+details.menu{position:relative;margin:0}
+details.menu>summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
+details.menu>summary::-webkit-details-marker{display:none}
+details.menu>summary::after{content:"";border:4px solid transparent;border-top-color:currentColor;margin-top:4px}
+details.menu[open]>summary{background:var(--ac);color:#fff;border-color:var(--ac)}
+.menuBox{position:absolute;z-index:30;left:0;top:calc(100% + 4px);width:min(440px,calc(100vw - 32px));background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:12px;box-shadow:0 6px 18px #0003}
+.menuBox .form{border:0;padding:0;grid-template-columns:auto 1fr}
+.menuBox .hint{margin:8px 0 0}
+#expContents{border:1px solid var(--bd);border-radius:6px;margin:10px 0 0;padding:6px 10px 8px}
+#expContents legend{color:var(--mut);padding:0 4px}
+#expContentList{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 12px}
+#expContentList label{display:flex;gap:6px;align-items:center}
+.menuBox .toolbar{margin:10px 0 0}

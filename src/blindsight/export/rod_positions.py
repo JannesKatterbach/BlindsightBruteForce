@@ -6,7 +6,7 @@ right and y up. Per layer the rods are split by when they reach into the layer
   present_when_retracted  only when the rod is retracted (lower layers)
   present_when_extended   only when the rod is extended
   present_during_travel   only between the end positions (rare, the rod is shorter than its travel)
-Rods that never reach a layer are not listed for it.
+Rods that never reach a layer are not listed for it. With one chosen layer only that layer is listed.
 
 ``motors`` lists the motor of every rod. Its layer, its angle (degrees, counter clockwise, 0 means the gear
 lies in -x of the rod), the centre distance and the position of the gear axis in top view.
@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import json
 import math
+from typing import Optional
 
-from .base import PRESENCE_ALWAYS, PRESENCE_EXTENDED, PRESENCE_RETRACTED, PRESENCE_TRAVEL, rod_presence
+from .base import PRESENCE_ALWAYS, PRESENCE_EXTENDED, PRESENCE_RETRACTED, PRESENCE_TRAVEL, ExportOptions, rod_presence
 
 FORMAT_ID = "blindsight.rod_positions"
 FORMAT_VERSION = 1
@@ -30,12 +31,14 @@ PRESENCE_KEYS = {
 }
 
 
-def rod_positions(geometry: dict) -> dict:
-    """Rod positions per layer as a JSON compatible dictionary."""
+def rod_positions(geometry: dict, only: Optional[int] = None) -> dict:
+    """Rod positions per layer as a JSON compatible dictionary, with only the index of a single layer."""
     bounds = geometry["bounds"]
     x0, y0 = bounds["xmin"], bounds["ymin"]  # origin of the build area (0, 0)
     layers = []
     for plane in geometry["planes"]:
+        if only is not None and plane["index"] != only:
+            continue
         layer = {"name": plane["name"], "index": plane["index"], "z_top": plane["z_top"], "z_bottom": plane["z_bottom"]}
         layer.update({key: [] for key in PRESENCE_KEYS.values()})
         for unit in geometry["units"]:
@@ -77,6 +80,9 @@ class RodPositionsExporter:
     extension = "json"
     filename = "blindsight-rods.json"
     mime = "application/json"
+    layer_choice = True
+    contents: tuple[str, ...] = ()
+    default_contents: tuple[str, ...] = ()
 
-    def export(self, geometry: dict) -> str:
-        return json.dumps(rod_positions(geometry), indent=2, ensure_ascii=False)
+    def export(self, geometry: dict, options: Optional[ExportOptions] = None) -> str:
+        return json.dumps(rod_positions(geometry, options.layer if options else None), indent=2, ensure_ascii=False)

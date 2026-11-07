@@ -147,6 +147,7 @@ def test_loaded_result_click_reset_and_export(page):
     page.evaluate("lastGeo = null")
     page.set_input_files("#fileResult", result_file(GOOD))
     page.wait_for_function("lastGeo && lastGeo.units.length === 2")
+    page.click("#exportMenu summary")
     page.select_option("#expFmt", "dxf")
     with page.expect_download() as download:
         page.click("#btnExport")
@@ -200,12 +201,44 @@ def test_repeating_tile_run_shows_tile_outlines(page):
 def test_rod_positions_download(page):
     page.set_input_files("#fileResult", result_file(GOOD))
     page.wait_for_selector("#resultBox:not([hidden])")
+    page.click("#exportMenu summary")
     page.select_option("#expFmt", "rods")
     with page.expect_download() as download:
         page.click("#btnExport")
     assert download.value.suggested_filename == "blindsight-rods.json"
     data = json.loads(open(download.value.path(), encoding="utf-8").read())
     assert data["layers"][0]["name"] == "G0" and len(data["layers"][0]["always_present"]) == 2
+
+
+def test_export_menu_kicad_preset_and_own_choice(page):
+    page.set_input_files("#fileResult", result_file(GOOD))
+    page.wait_for_selector("#resultBox:not([hidden])")
+    assert page.locator("#btnExport").is_hidden()  # inside the closed menu
+    page.click("#exportMenu summary")
+    # The layers come from the result (G0 to G3 of the default stack)
+    assert page.eval_on_selector_all("#expLayer option", "o => o.map(x => x.value)") == ["all", "0", "1", "2", "3"]
+    page.select_option("#expPreset", "kicad_edge")
+    assert page.input_value("#expFmt") == "dxf" and page.input_value("#expLayer") == "0"
+    checked = page.eval_on_selector_all("#expContentList input:checked", "o => o.map(x => x.value)")
+    assert checked == ["outline", "holes"] and "Edge.Cuts" in page.inner_text("#expHint")
+    assert page.locator("#expContentList [data-content=distances]").is_hidden()  # not in DXF
+    with page.expect_download() as download:
+        page.click("#btnExport")
+    assert download.value.suggested_filename == "blindsight-G0.dxf"
+    text = open(download.value.path(), encoding="utf-8").read()
+    assert "G0_HOLES" in text and "BOUNDS" in text and "TOP_RODS" not in text and "MOTOR" not in text
+    # A change by hand is an own choice. Nothing chosen blocks the download
+    page.uncheck("#expContentList [data-content=outline] input")
+    assert page.input_value("#expPreset") == "custom"
+    page.uncheck("#expContentList [data-content=holes] input")
+    assert page.is_disabled("#btnExport") and page.inner_text("#expProblem")
+    # JSON always holds everything, no layer and no contents to choose
+    page.select_option("#expFmt", "json")
+    assert page.is_disabled("#expLayer") and page.locator("#expContents").is_hidden() and page.is_enabled("#btnExport")
+    # Escape closes the menu
+    page.press("#expFmt", "Escape")
+    assert page.locator("#btnExport").is_hidden()
+    assert page.errors == []
 
 
 def test_language_switch_translates_the_whole_ui(page):

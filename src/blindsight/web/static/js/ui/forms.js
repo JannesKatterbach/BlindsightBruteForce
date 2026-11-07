@@ -210,16 +210,34 @@ function clearFieldError(input) {
 }
 
 /** Show messages of the form "path. text" at the field and all messages in the banner. */
+const ERROR_PATH = /^([\w.\[\]]+)\. (.*)$/;  // messages of the core start with the path of the field
+const SKETCH_PATH = /^motor\.sketch\b/;
+
+/** Error text for people. The path at the start becomes the label of the field (or the name of the sketch). */
+function readableError(message) {
+  const match = ERROR_PATH.exec(message);
+  if (!match) return message;
+  const field = fieldByPath(match[1]);
+  const name = field ? field.label : SKETCH_PATH.test(match[1]) ? t("ui.tab.sketch") : match[1];
+  return `${name}. ${match[2]}`;
+}
+
+/** Errors at their fields and in the banner. Errors of the sketch go to the motor step instead of the banner,
+ *  the sketch shows them in its status line and the banner would shift the drawing area. */
 function showFieldErrors(errors) {
   $$(".err").forEach((node) => node.classList.remove("err"));
   $$(".errmsg").forEach((node) => node.remove());
+  const general = [], sketch = [];
   for (const message of errors) {
-    const match = /^([\w.\[\]]+)\. (.*)$/.exec(message);
+    const match = ERROR_PATH.exec(message);
     const input = match && document.querySelector(`[data-path="${match[1]}"]`);
     if (input) markFieldError(input, match[2]);
+    if (match && SKETCH_PATH.test(match[1])) sketch.push(match[2]);
+    else general.push(readableError(message));
   }
+  showSketchErrors(sketch);
   renderStepStates();
   const banner = $("#banner");  // role alert in index.html, screen readers announce it
-  banner.hidden = errors.length === 0;
-  banner.innerHTML = errors.length ? "<ul>" + errors.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>" : "";
+  banner.hidden = general.length === 0;
+  banner.innerHTML = general.length ? "<ul>" + general.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>" : "";
 }

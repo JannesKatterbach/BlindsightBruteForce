@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.10.0
+Export Menü und Motor Skizze
+- Exportieren öffnet ein Menü mit Vorlage, Format, Ebene und Inhalt. Exportiert wird alles oder genau eine Ebene (G0 bis Gn,
+  nur die Ebenen des Ergebnisses), bei SVG und DXF mit wählbaren Teilen (Platinenumriss, Randbereich und Lochbereich, Löcher,
+  Stangen, Motorgehäuse, Zahnräder, Hindernisse, Beschriftung, im SVG auch Abstände und Kollisionen)
+- Vorlage Leiterplatte für KiCad (Edge.Cuts). DXF der Lochplatte G0 nur mit Platinenumriss und Löchern in mm, dazu
+  Bohrschablone zum Ausdrucken, Motorebene für CAD und Alles
+- Bohrliste und Schraubenpositionen lassen sich auf eine Ebene beschränken, der Dateiname nennt die Ebene
+- DXF mit `$INSUNITS` (mm) und auf Wunsch den Layern `EDGE_MARGIN`, `HOLE_AREA` und `LABELS`
+- API `layer` und `contents` für `/api/export-layout` und `/api/export/<job>.<format>`, Schema `export_menu`
+- Motor Skizze. Probleme der Skizze (zum Beispiel kein Gehäuse) stehen in der Skizze und als ! am Schritt Motor, nicht mehr
+  als Banner über der Seite, der die Zeichenfläche verschoben hat. Fehlermeldungen nennen Felder mit ihrer Bezeichnung statt
+  mit dem technischen Pfad. Die Meldung eines Werkzeugs verschwindet mit dem nächsten Werkzeug. Der Hinweis zum Werkzeug hat
+  einen Hintergrund und steht auf schmalen Bildschirmen unter der Zeichnung
+
 ## 0.9.0
 Rückmeldung zum geführten Ablauf
 - Muster mit zwei einfachen Fragen statt Aufgabe und "Ganze Platte füllen". Wie viele Löcher (so viele wie auf die Platte

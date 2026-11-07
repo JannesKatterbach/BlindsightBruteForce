@@ -33,7 +33,7 @@ from .. import sketch as sk
 from ..analysis import analyze
 from ..config import ConfigError, Project, motor_from_dict, schema
 from .. import holes as hole_files
-from ..export import EXPORTERS, build_geometry, exporter_schema
+from ..export import EXPORTERS, build_geometry, export_filename, export_menu_schema, export_options, exporter_schema
 from ..i18n import LANGUAGE_NAMES, LANGUAGES, LocalText, current_language, localize, negotiate, normalize_language, tr, use_language
 from ..layout import Placement
 from ..model import Model
@@ -263,6 +263,7 @@ class App:
         out = schema()
         out["sketch_constraints"] = sk.constraint_schema()
         out["exporters"] = exporter_schema()
+        out["export_menu"] = export_menu_schema()
         out["languages"] = [{"code": code, "name": LANGUAGE_NAMES[code]} for code in LANGUAGES]
         out["language"] = current_language()
         return json_response(out)
@@ -331,18 +332,20 @@ class App:
         if job.result is None or not job.result.solutions or name not in EXPORTERS:
             return error_response(404, tr("server.export_impossible"))
         idx = self._solution_index(req, len(job.result.solutions))
-        exporter = EXPORTERS[name]()
-        response = self._export(exporter, build_geometry(job.model, job.result.solutions[idx].placements))
-        response.headers["Content-Disposition"] = f'attachment; filename="{exporter.filename}"'
-        return response
+        query = {key: values[0] for key, values in req.query.items() if key in ("layer", "contents") and values}
+        return self._export(EXPORTERS[name](), build_geometry(job.model, job.result.solutions[idx].placements), query)
 
     @staticmethod
     def _solution_index(req: Request, count: int) -> int:
         return max(0, min(req.int_query("solution"), count - 1))
 
     @staticmethod
-    def _export(exporter, geometry: dict) -> Response:
-        return Response(200, exporter.export(geometry).encode(), exporter.mime + "; charset=utf-8")
+    def _export(exporter, geometry: dict, choice: dict) -> Response:
+        """File of an export. choice holds the layer and the contents of the export menu (both optional)."""
+        options = export_options(exporter, choice.get("layer"), choice.get("contents"), geometry)
+        response = Response(200, exporter.export(geometry, options).encode(), exporter.mime + "; charset=utf-8")
+        response.headers["Content-Disposition"] = f'attachment; filename="{export_filename(exporter, options)}"'
+        return response
 
     # -- Arrangements without a run ---------------------------------------------------------
     def _layout_request(self, req: Request) -> tuple[dict, Project, Model, list[Placement]]:
@@ -380,7 +383,7 @@ class App:
         fmt = data.get("format", "svg")
         if fmt not in EXPORTERS:
             raise BadRequest(tr("server.unknown_format", format=fmt))
-        return self._export(EXPORTERS[fmt](), build_geometry(model, placements))
+        return self._export(EXPORTERS[fmt](), build_geometry(model, placements), data)
 
     @route("POST", "/api/analyze")
     def analyze_project(self, req: Request) -> Response:

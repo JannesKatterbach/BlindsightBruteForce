@@ -79,6 +79,7 @@ def test_full_flow(browser, base_url):
     assert "Kein" not in pg.inner_text("#collisions")[:6]
     pg.click("#edReset")
     pg.wait_for_function("!document.querySelector('#statusBox').innerText.includes('Manuell bearbeitet')", timeout=10000)
+    pg.click("#exportMenu summary")
     with pg.expect_download() as dl:
         pg.click("#btnExport")
     assert dl.value.suggested_filename.endswith(".svg")

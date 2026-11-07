@@ -2,15 +2,37 @@
 
 All exporters (SVG, JSON, DXF, CSV, rod positions) work on the dictionary from build_geometry and know
 neither optimizers nor the UI.
+
+Export menu. An exporter may offer the choice of one layer (``layer_choice``) and of the parts it draws
+(``contents``, a selection of CONTENTS with ``default_contents`` as default). The choice arrives as
+ExportOptions, export_options checks a request against the exporter.
 """
 
 from __future__ import annotations
 
-from typing import Protocol
+from dataclasses import dataclass
+from typing import Any, Optional, Protocol
 
 from ..config import with_layers
+from ..i18n import tr
 from ..layout import Placement, layout_from_placements
 from ..model import Model
+
+
+# Parts a drawing can contain (labels in the catalogs as export.content.<name>)
+CONTENTS = ("outline", "margins", "holes", "rods", "housings", "gears", "obstacles", "labels", "distances", "collisions")
+ALL_LAYERS = "all"
+
+
+@dataclass(frozen=True)
+class ExportOptions:
+    """Choice of the export menu. layer None means all layers, otherwise the index of one layer (0 is G0).
+    contents are the parts to draw, None means the defaults of the exporter."""
+    layer: Optional[int] = None
+    contents: Optional[frozenset[str]] = None
+
+    def on_layer(self, index: int) -> bool:
+        return self.layer is None or self.layer == index
 
 
 class Exporter(Protocol):
@@ -18,8 +40,61 @@ class Exporter(Protocol):
     extension: str  # file extension
     filename: str  # suggested file name for downloads
     mime: str  # the label in the UI comes from the catalogs (key export.<name>)
+    layer_choice: bool  # one layer can be chosen
+    contents: tuple[str, ...]  # parts that can be chosen (from CONTENTS), empty if the format has no choice
+    default_contents: tuple[str, ...]
 
-    def export(self, geometry: dict) -> str: ...
+    def export(self, geometry: dict, options: Optional[ExportOptions] = None) -> str: ...
+
+
+def chosen_contents(exporter: Exporter, options: Optional[ExportOptions]) -> frozenset[str]:
+    """The parts to draw, the defaults of the exporter without a choice."""
+    if options is None or options.contents is None:
+        return frozenset(exporter.default_contents)
+    return options.contents
+
+
+def _layer_index(value: Any, count: int) -> Optional[int]:
+    """None for all layers, otherwise the index of a layer ("G2", "2" or 2)."""
+    if value is None or value == ALL_LAYERS:
+        return None
+    text = str(value).strip()
+    try:
+        index = int(text[1:] if text[:1] in ("G", "g") else text)
+    except ValueError:
+        index = -1
+    if isinstance(value, bool) or not 0 <= index < count:
+        raise ValueError(tr("export.bad_layer", layer=value, last=count - 1))
+    return index
+
+
+def export_options(exporter: Exporter, layer: Any = None, contents: Any = None, geometry: Optional[dict] = None) -> ExportOptions:
+    """Check the choice of a request. Parts the format cannot draw are ignored, unknown names are an error."""
+    count = len(geometry["planes"]) if geometry else 1 << 30
+    index = _layer_index(layer, count)
+    if index is not None and not exporter.layer_choice:
+        raise ValueError(tr("export.no_layer_choice", format=tr(f"export.{exporter.name}")))
+    if contents is None:
+        return ExportOptions(index, None)
+    if isinstance(contents, str):
+        contents = [c for c in contents.split(",") if c.strip()]
+    if not isinstance(contents, (list, tuple)) or not all(isinstance(c, str) for c in contents):
+        raise ValueError(tr("export.bad_contents"))
+    unknown = [c.strip() for c in contents if c.strip() not in CONTENTS]
+    if unknown:
+        raise ValueError(tr("export.unknown_content", content=", ".join(unknown), known=", ".join(CONTENTS)))
+    chosen = frozenset(c.strip() for c in contents) & frozenset(exporter.contents)
+    if exporter.contents and not chosen:
+        raise ValueError(tr("export.no_content"))
+    return ExportOptions(index, chosen)
+
+
+def export_filename(exporter: Exporter, options: Optional[ExportOptions] = None) -> str:
+    """File name for downloads, with the layer if only one is exported (blindsight-G0.dxf)."""
+    if options is None or options.layer is None:
+        return exporter.filename
+    stem, dot, ext = exporter.filename.rpartition(".")
+    return f"{stem}-G{options.layer}{dot}{ext}"
 
 
 def result_model(model: Model, placements: list[Placement]) -> Model:
@@ -124,11 +199,31 @@ def rod_passes(geometry: dict, unit: dict, plane_index: int) -> bool:
     return rod_presence(unit["rod"], geometry["planes"][plane_index]) is not None
 
 
-def holes_by_plane(geometry: dict) -> dict[int, list[dict]]:
-    """Through holes per layer (including G0). Every rod needs a hole in every layer it passes through."""
-    out: dict[int, list[dict]] = {p["index"]: [] for p in geometry["planes"]}
+def holes_by_plane(geometry: dict, layer: Optional[int] = None) -> dict[int, list[dict]]:
+    """Through holes per layer (including G0), with layer only of that layer. Every rod needs a hole in
+    every layer it passes through."""
+    planes = [p for p in geometry["planes"] if layer is None or p["index"] == layer]
+    out: dict[int, list[dict]] = {p["index"]: [] for p in planes}
     for u in geometry["units"]:
-        for p in geometry["planes"]:
+        for p in planes:
             if rod_passes(geometry, u, p["index"]):
                 out[p["index"]].append({"unit": u["id"], "x": u["x"], "y": u["y"], "d": geometry["hole_diameter"]})
     return out
+
+
+def obstacles_of_layer(geometry: dict, layer: Optional[int]) -> list[dict]:
+    """Obstacles of a drawing. For one layer those that reach into the plate or the motors of the layer."""
+    if layer is None:
+        return geometry["obstacles"]
+    plane = geometry["planes"][layer]
+    spans = [(plane["z_bottom"], plane["z_top"])]
+    spans += [(p["z0"], p["z1"]) for u in geometry["units"] if u["plane"] == layer for p in u["parts"]]
+    return [o for o in geometry["obstacles"] if any(o["z0"] <= top and o["z1"] >= bottom for bottom, top in spans)]
+
+
+def margin_rects(bounds: dict) -> list[tuple[str, float]]:
+    """Inner frames of the board. The keep out strip of all parts and, if the edge strip is on, the area of
+    the holes. (name, distance to the board edge)"""
+    edge, rods = bounds["edge_margin"], bounds.get("rod_margin", bounds["edge_margin"])
+    out = [("edge-margin", edge)] if edge > 0 else []
+    return out + ([("hole-area", rods)] if rods > edge else [])

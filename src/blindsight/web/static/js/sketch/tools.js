@@ -6,6 +6,7 @@
   /** Active tool. Drawing tools start a new draft, relation and dimension tools collect clicks. */
   function setTool(tool) {
     SK.tool = tool;
+    SK.msg = "";  // a message of the last tool does not belong to the new one
     SK.draft = null;
     SK.pick = [];
     SK.dimPlace = null;

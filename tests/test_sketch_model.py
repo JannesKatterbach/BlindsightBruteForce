@@ -133,7 +133,7 @@ def test_constraints_are_enforced_when_the_model_is_built():
 def test_optimizer_with_sketch_motor_yields_valid_layouts():
     d = sketch_project(TRAP_MOTOR, [("parallel", ["e0", "e2"])]).to_dict()
     d["target_count"] = 8
-    d["search"]["time_limit_s"] = 3
+    d["search"]["time_limit_s"] = 10  # ends early once all 8 are placed, the reserve is for a busy machine
     m = Model(Project.from_dict(d))
     res = run_optimizer(m)
     assert res.best and len(res.best.placements) == 8

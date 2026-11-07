@@ -31,7 +31,7 @@ async function startJob() {
   if (status !== 200) {
     const errors = errorsOf(data);
     showFieldErrors(errors.length ? errors : [t("ui.job.error")]);
-    $("#errors").innerHTML = "<ul>" + errors.map((e) => `<li>${esc(e)}</li>`).join("") + "</ul>";
+    $("#errors").innerHTML = "<ul>" + errors.map((e) => `<li>${esc(readableError(e))}</li>`).join("") + "</ul>";
     return;
   }
   showFieldErrors([]);

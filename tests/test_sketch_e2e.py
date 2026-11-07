@@ -306,3 +306,35 @@ def test_sketch_motor_is_used_by_the_optimization(page):
     page.click("#btnStart")
     page.wait_for_selector("#resultBox:not([hidden])", timeout=40000)
     page.wait_for_function("document.querySelector('#collisions').innerText.includes('Keine Kollisionen')")
+
+
+def test_sketch_problem_marks_the_motor_step_without_shifting_the_drawing(page):
+    top = page.locator("#skCanvas").bounding_box()["y"]
+    page.evaluate("skSelect(['e0', 'e1', 'e2', 'e3'])")  # the housing rectangle
+    page.keyboard.press("Delete")
+    settle(page)
+    page.wait_for_function("document.querySelector('[data-step=motor]').dataset.state === 'problem'")
+    # The banner stays empty, the drawing does not move, the sketch and the motor step name the problem
+    assert page.locator("#banner").is_hidden()
+    assert page.locator("#skCanvas").bounding_box()["y"] == top
+    assert "Gehäuse" in page.inner_text("#skStatus")
+    page.click("[data-motor-view=dims]")
+    assert "Gehäuse" in page.inner_text("#sketchErrors") and "motor.sketch" not in page.inner_text("#sketchNote")
+    page.click("[data-motor-view=sketch]")
+    settle(page)
+    page.keyboard.press("c")
+    click(page, 20, -20)
+    click(page, 26, -20)
+    settle(page)
+    page.wait_for_function("document.querySelector('[data-step=motor]').dataset.state !== 'problem'")
+    assert page.locator("#sketchErrors").is_hidden()
+    # The browser logs the expected answer 400 of the check without a housing
+    page.errors[:] = [e for e in page.errors if "status of 400" not in e]
+
+
+def test_tool_message_clears_with_the_next_tool(page):
+    page.keyboard.press("g")  # there is a gear already
+    click(page, 20, -20)
+    assert "schon ein Zahnrad" in page.inner_text("#skStatus")
+    page.keyboard.press("Escape")
+    assert "schon ein Zahnrad" not in page.inner_text("#skStatus")

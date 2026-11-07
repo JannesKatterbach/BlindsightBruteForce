@@ -42,6 +42,15 @@ function drawMotor(shape) {
   el("line", { x1: -cd, y1: 0, x2: 0, y2: 0, stroke: COLORS.bad, "stroke-width": sw, "stroke-dasharray": dash }, svg);
 }
 
+/** Problems of the sketch in the note of the motor step. The class err marks the step in the step bar. */
+function showSketchErrors(messages) {
+  const note = $("#sketchNote"), box = $("#sketchErrors");
+  box.textContent = messages.join(" ");
+  box.hidden = !messages.length;
+  note.classList.toggle("warn", messages.length > 0);
+  note.classList.toggle("err", messages.length > 0);
+}
+
 /** Lock the fields determined by the sketch (with a hint) and unlock them without a sketch. */
 function updateSketchLock() {
   const locked = hasSketch(cfg.motor);

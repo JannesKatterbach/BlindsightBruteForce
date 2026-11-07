@@ -58,6 +58,7 @@ function renderResult() {
   $("#resultBox").hidden = false;
   renderStatusBox();
   renderSolutionList();
+  renderExportMenu();  // layers of the result, export only with a result
   if (!lastGeo) { clearGeometryViews(); return; }  // old views used to stay visible
   renderPlaneSelect();
   renderMetrics();

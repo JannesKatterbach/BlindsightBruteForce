@@ -120,8 +120,10 @@ Neues Teilziel der Bewertung
 2. Gleichnamiges Feld in `config.WeightsSpec` und ein `FIELD_META` Eintrag in der Gruppe `weights`. Der Regler in der UI entsteht daraus
 
 Neues Exportformat
-1. Klasse mit `name`, `extension`, `filename`, `mime` und `export(geometry) -> str` in `export/`, Bezeichnung `export.<name>` in den Katalogen
-2. Eintrag in `_EXPORTER_CLASSES` (`export/__init__.py`). Server, CLI und Formatauswahl der UI kennen es dann
+1. Klasse mit `name`, `extension`, `filename`, `mime`, den Wahlmöglichkeiten `layer_choice`, `contents` und `default_contents`
+   (Teile aus `export.base.CONTENTS`) und `export(geometry, options) -> str` in `export/`, Bezeichnung `export.<name>` in den Katalogen
+2. Eintrag in `_EXPORTER_CLASSES` (`export/__init__.py`). Server, CLI und das Export Menü der UI kennen es dann
+3. Neue Vorlage des Export Menüs. Eintrag in `EXPORT_PRESETS` (`export/__init__.py`) mit Texten `export.preset.<name>` und `.hint`
 
 Neue Sprache
 1. Kataloge `src/blindsight/i18n/<code>.json` und `web/static/js/i18n/<code>.js` mit allen Schlüsseln anlegen
@@ -553,9 +555,23 @@ Winkel, Achsabstand und Lage der Zahnradachse je Stange. CLI `--rods datei.json`
 SVG im Maßstab 1:1 (`width` und `height` in mm, `viewBox` in mm). Gruppe `top` ist die Draufsicht, `plane-N` je Motorebene mit
 Gehäusen, Zahnrädern, Stangen und Durchgangslöchern. Die Y Achse ist gespiegelt (Ursprung links unten im Bauraum).
 Das SVG ist ein geometrisches Ergebnis, kein fertiges PCB Layout. JSON enthält alle Konturen und Z Werte.
-DXF (R12, mm) hat Layer `BOUNDS`, `OBSTACLES`, `TOP_RODS` sowie je Ebene `Gn_MOTOR`, `Gn_GEAR` und `Gn_HOLES`.
+DXF (R12, mm, `$INSUNITS` 4) hat Layer `BOUNDS`, `OBSTACLES`, `TOP_RODS` sowie je Ebene `Gn_MOTOR`, `Gn_GEAR` und `Gn_HOLES`,
+auf Wunsch `EDGE_MARGIN`, `HOLE_AREA` und `LABELS`.
 Die Bohrliste (CSV) enthält je Ebene alle Durchgangslöcher (jede Stange braucht ein Loch in jeder Ebene, die sie durchquert,
 auch die eingefahrene Stange unterhalb ihrer Motorebene).
+
+Export Menü. Im Schritt Ergebnis öffnet Exportieren ein Menü mit Vorlage, Format, Ebene und Inhalt.
+- Ebene. Alle Ebenen oder genau eine (G0 ist die Lochplatte). SVG, DXF, Bohrliste und Schraubenpositionen kennen die Wahl,
+  JSON enthält immer die gesamte Geometrie. Mit einer Ebene hat das SVG nur das Blatt dieser Ebene, das DXF nur ihre Löcher,
+  die durch sie laufenden Stangen und ihre Motoren, der Dateiname bekommt die Ebene (`blindsight-G0.dxf`)
+- Inhalt (SVG und DXF). Platinenumriss, Randbereich und Lochbereich, Löcher, Stangen, Motorgehäuse, Zahnräder, Hindernisse und
+  Sperrflächen, Beschriftung, im SVG auch Abstände und Kollisionen. Ohne Stangen zeigt die SVG Draufsicht die Löcher von G0
+- Vorlagen. Leiterplatte für KiCad (DXF der Ebene G0 nur mit Platinenumriss und Löchern, in KiCad über Datei, Importieren,
+  Grafik auf die Lage Edge.Cuts laden, die Löcher werden Ausfräsungen), Bohrschablone zum Ausdrucken (SVG 1:1 der Ebene G0),
+  Motorebene für CAD (DXF einer Motorebene) und Alles. Jede Änderung von Hand macht daraus eine eigene Auswahl
+- API. `POST /api/export-layout` mit `layer` (`"all"`, Index oder `"G2"`) und `contents` (Liste), ebenso
+  `GET /api/export/<job>.<format>?layer=0&contents=outline,holes`. Unbekannte Teile und Ebenen ergeben 400, Teile, die das
+  Format nicht kennt, werden ignoriert
 
 ## Oberfläche
 
@@ -568,8 +584,8 @@ auch die eingefahrene Stange unterhalb ihrer Motorebene).
   lokale Bibliothek) oder Skizze, Modus als Karten, Platte und Rand mit Vorschau von Lochbereich und Randbereich, Löcher bzw.
   Muster mit Bildkarten, Ziele mit Prozentreglern und Voreinstellungen, Fortschritt mit Live Vorschau
 - Schritt Ergebnis. Erste Zeile Ansicht (Lösung, Draufsicht, Einzelebene, Seitenschnitt, räumliche Ansicht mit der Maus drehen,
-  Abstände, manuelles Bearbeiten mit sofortiger Prüfung), zweite Zeile Dateien (Export SVG, Schraubenpositionen, DXF, CSV, JSON,
-  Ergebnis speichern und laden). Daneben Kennzahlen (in den Modi Löcher und Muster auch genutzte Ebenen und Tiefe im
+  Abstände, manuelles Bearbeiten mit sofortiger Prüfung), zweite Zeile Dateien (Export Menü mit Vorlage, Format, Ebene und
+  Inhalt, Ergebnis speichern und laden). Daneben Kennzahlen (in den Modi Löcher und Muster auch genutzte Ebenen und Tiefe im
   Randbereich), Kollisionen, engste Stellen und Vergleich der Top Lösungen. Die Draufsicht zeigt Platte, Lochbereich
   (gestrichelt) und Randbereich (hell), Stangen in der Textfarbe, engste Stellen als kleinen Punkt mit Tooltip
 - Seite "Muster kacheln" im Ergebnis (siehe Ablauf und Modi)

@@ -54,7 +54,8 @@
           <svg id="motorPreview" viewBox="0 0 100 100"></svg>
           <p class="hint" data-i18n="ui.geometry.preview_hint">Stange im Ursprung (schwarz), gestrichelt das Loch, orange Zahnrad, grau Gehäuse.</p>
           <div id="sketchNote" class="statusBox" hidden><span data-i18n="ui.geometry.sketch_note">Die Form kommt aus der Motor Skizze. Breite, Tiefe, Zahnrad und Achsabstand werden aus der Skizze übernommen.</span>
-            <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button></div>
+            <button id="btnDropSketch" data-i18n="ui.geometry.drop_sketch">Skizze verwerfen</button>
+            <p id="sketchErrors" class="sketchErrors" hidden></p></div>
           <div class="toolbar"><button id="btnOpenSketch" data-i18n="ui.geometry.open_sketch">Kontur in der Motor Skizze bearbeiten</button></div>
           <details><summary data-i18n="ui.geometry.svg_import" data-help="ui.help.svg_import">SVG Import</summary>
             <p class="hint" data-i18n="ui.geometry.svg_hint">Genau ein Rechteck, Polygon oder Pfad aus Geraden. Ist der Maßstab nicht eindeutig, wird er abgefragt. Das Ergebnis ist eine Skizze.</p>
@@ -250,8 +251,21 @@
         <label><input type="checkbox" id="optEdit"> <span data-i18n="ui.results.edit" data-help="ui.help.edit">Bearbeiten</span></label>
       </div>
       <div class="toolbar">
-        <span class="group"><select id="expFmt" data-i18n-title="ui.results.export_format"></select>
-          <button id="btnExport" data-i18n="ui.results.export">Exportieren</button><span data-help="ui.help.export" data-help-title="ui.results.export"></span></span>
+        <details id="exportMenu" class="menu">
+          <summary class="btn" data-i18n="ui.results.export">Exportieren</summary>
+          <div class="menuBox">
+            <div class="form">
+              <label for="expPreset"><span data-i18n="ui.export.preset">Vorlage</span><span data-help="ui.help.export" data-help-title="ui.results.export"></span></label>
+              <select id="expPreset"></select>
+              <label for="expFmt" data-i18n="ui.results.export_format">Format</label><select id="expFmt"></select>
+              <label for="expLayer" data-i18n="ui.export.layer">Ebene</label><select id="expLayer"></select>
+            </div>
+            <p id="expHint" class="hint"></p>
+            <fieldset id="expContents"><legend data-i18n="ui.export.contents">Inhalt</legend><div id="expContentList"></div></fieldset>
+            <div class="toolbar"><button id="btnExport" class="primary" data-i18n="ui.export.download">Datei herunterladen</button>
+              <span id="expProblem" class="hint"></span></div>
+          </div>
+        </details>
         <span class="group"><button id="btnSaveResult" data-i18n="ui.results.save">Ergebnis speichern</button>
           <label class="btn" for="fileResult" data-i18n="ui.results.load">Ergebnis laden</label></span>
       </div>
