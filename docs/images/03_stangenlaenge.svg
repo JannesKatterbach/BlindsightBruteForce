@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="578" viewBox="0 0 1060 578" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+<title>Stangenlänge eingefahren und ausgefahren</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1d2330"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="300.00" y="24.00" font-size="16" text-anchor="middle" font-weight="bold" fill="#1d2330">eingefahren</text>
+<rect x="180.00" y="225.60" width="112.00" height="19.20" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="308.00" y="225.60" width="82.00" height="19.20" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<text x="170.00" y="235.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G0</text>
+<rect x="180.00" y="289.60" width="112.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="308.00" y="289.60" width="82.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="170.00" y="299.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G1</text>
+<rect x="180.00" y="353.60" width="112.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="308.00" y="353.60" width="82.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="170.00" y="363.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G2</text>
+<rect x="264.80" y="257.60" width="38.40" height="32.00" fill="#4e79a7" fill-opacity="0.25" stroke="#4e79a7" stroke-width="1.2"/>
+<circle cx="284.00" cy="273.60" r="9.60" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.8"/>
+<circle cx="284.00" cy="273.60" r="1.60" fill="#ffffff"/>
+<rect x="293.60" y="225.60" width="12.80" height="246.40" fill="#2b2f36"/>
+<line x1="188.00" y1="273.60" x2="384.00" y2="273.60" stroke="#c62828" stroke-width="0.9" stroke-dasharray="5 3"/>
+<text x="310.00" y="488.00" font-size="12" text-anchor="start" fill="#1d2330">unteres Ende z = -77</text>
+<text x="310.00" y="219.60" font-size="12" text-anchor="start" fill="#1d2330">Spitze z = 0</text>
+<text x="720.00" y="24.00" font-size="16" text-anchor="middle" font-weight="bold" fill="#1d2330">ausgefahren</text>
+<rect x="600.00" y="225.60" width="112.00" height="19.20" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="728.00" y="225.60" width="82.00" height="19.20" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<text x="590.00" y="235.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G0</text>
+<rect x="600.00" y="289.60" width="112.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="728.00" y="289.60" width="82.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="590.00" y="299.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G1</text>
+<rect x="600.00" y="353.60" width="112.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="728.00" y="353.60" width="82.00" height="5.12" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="590.00" y="363.60" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G2</text>
+<rect x="684.80" y="257.60" width="38.40" height="32.00" fill="#4e79a7" fill-opacity="0.25" stroke="#4e79a7" stroke-width="1.2"/>
+<circle cx="704.00" cy="273.60" r="9.60" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.8"/>
+<circle cx="704.00" cy="273.60" r="1.60" fill="#ffffff"/>
+<rect x="713.60" y="65.60" width="12.80" height="246.40" fill="#2b2f36"/>
+<line x1="608.00" y1="273.60" x2="804.00" y2="273.60" stroke="#c62828" stroke-width="0.9" stroke-dasharray="5 3"/>
+<text x="730.00" y="328.00" font-size="12" text-anchor="start" fill="#1d2330">unteres Ende z = -27</text>
+<text x="730.00" y="59.60" font-size="12" text-anchor="start" fill="#1d2330">Spitze z = 50</text>
+<line x1="405.00" y1="273.60" x2="405.00" y2="225.60" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="412.00" y="238.72" font-size="12" text-anchor="start" fill="#1d2330">15 mm Gewinde über der</text>
+<text x="412.00" y="253.72" font-size="12" text-anchor="start" fill="#1d2330">Zahnradachse (gefordert</text>
+<text x="412.00" y="268.72" font-size="12" text-anchor="start" fill="#1d2330">mindestens 10 mm)</text>
+<line x1="150.00" y1="225.60" x2="150.00" y2="472.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="143.00" y="345.36" font-size="12" text-anchor="end" fill="#1d2330">Länge</text>
+<text x="143.00" y="360.36" font-size="12" text-anchor="end" fill="#1d2330">77 mm</text>
+<line x1="825.00" y1="273.60" x2="825.00" y2="312.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="832.00" y="281.92" font-size="12" text-anchor="start" fill="#1d2330">10 mm Gewinde unter der</text>
+<text x="832.00" y="296.92" font-size="12" text-anchor="start" fill="#1d2330">Zahnradachse + 2 mm</text>
+<text x="832.00" y="311.92" font-size="12" text-anchor="start" fill="#1d2330">Längenzuschlag</text>
+<line x1="825.00" y1="225.60" x2="825.00" y2="65.60" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="832.00" y="149.60" font-size="12" text-anchor="start" fill="#1d2330">Hub 50 mm über G0</text>
+<text x="510.00" y="321.60" font-size="12" text-anchor="middle" fill="#c62828">rot gestrichelt die Zahnradachse</text>
+<text x="510.00" y="336.60" font-size="12" text-anchor="middle" fill="#c62828">z = -15 (Ebene G1 bei -20</text>
+<text x="510.00" y="351.60" font-size="12" text-anchor="middle" fill="#c62828">+ Achshöhe 5)</text>
+<text x="40.00" y="522.00" font-size="13" text-anchor="start" font-weight="bold" fill="#1d2330">So rechnet das Programm die Länge (Motor auf G1, Standardwerte)</text>
+<text x="40.00" y="542.00" font-size="12" text-anchor="start" fill="#1d2330">unteres Ende ausgefahren = Zahnradachse - Gewinde unter der Achse - Längenzuschlag = -15 - 10 - 2 = -27</text>
+<text x="40.00" y="560.00" font-size="12" text-anchor="start" fill="#1d2330">Länge = Hub - unteres Ende = 50 - (-27) = 77 mm. Tiefere Ebenen brauchen längere Stangen (G2 97 mm, G3 117 mm)</text>
+</svg>

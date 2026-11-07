@@ -5,6 +5,9 @@ Geometrischer Optimierer. Berechnet, wie viele Gewindestangen mit seitlichen Mot
 bohrenden Lochbild oder für fest vorgegebene Löcher. Nur Python Standardbibliothek, keine Laufzeitabhängigkeiten.
 Oberfläche und Meldungen auf Deutsch, Englisch und Französisch.
 
+Eine ausführliche Erklärung der Idee, des Aufbaus und jeder Beschriftung der Oberfläche mit beschrifteten Bildern steht in
+[docs/ERKLAERUNG.md](docs/ERKLAERUNG.md).
+
 Einheiten. Alle Längen in mm, Winkel in Grad, Zeiten in Sekunden. Der Ursprung (0, 0) liegt unten links im Bauraum,
 x nach rechts, y nach oben, z = 0 an der Oberseite von G0.
 

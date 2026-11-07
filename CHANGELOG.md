@@ -10,6 +10,8 @@ Export Menü und Motor Skizze
 - Bohrliste und Schraubenpositionen lassen sich auf eine Ebene beschränken, der Dateiname nennt die Ebene
 - DXF mit `$INSUNITS` (mm) und auf Wunsch den Layern `EDGE_MARGIN`, `HOLE_AREA` und `LABELS`
 - API `layer` und `contents` für `/api/export-layout` und `/api/export/<job>.<format>`, Schema `export_menu`
+- Neue ausführliche Erklärung `docs/ERKLAERUNG.md` mit beschrifteten Schemabildern, echten Ergebnissen und Bildschirmfotos
+  aller Schritte, die Bilder zeichnet `docs/make_images.py`
 - Motor Skizze. Probleme der Skizze (zum Beispiel kein Gehäuse) stehen in der Skizze und als ! am Schritt Motor, nicht mehr
   als Banner über der Seite, der die Zeichenfläche verschoben hat. Fehlermeldungen nennen Felder mit ihrer Bezeichnung statt
   mit dem technischen Pfad. Die Meldung eines Werkzeugs verschwindet mit dem nächsten Werkzeug. Der Hinweis zum Werkzeug hat

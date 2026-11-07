@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="990" height="610" viewBox="0 0 990 610" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+<title>Platte, Sperrrand, Randbereich und Lochbereich</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1d2330"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="100.00" y="50.00" width="480.00" height="480.00" fill="#fbe9d0" stroke="#1d2330" stroke-width="1.6"/>
+<rect x="152.00" y="102.00" width="376.00" height="376.00" fill="#ffffff" stroke="#1d2330" stroke-width="1" stroke-dasharray="6 4"/>
+<rect x="112.00" y="62.00" width="456.00" height="456.00" fill="none" stroke="#5b6475" stroke-width="0.9" stroke-dasharray="2 3"/>
+<polygon points="564.00,326.00 564.00,278.00 468.00,278.00 468.00,326.00" fill="#4e79a7" fill-opacity="0.35" stroke="#4e79a7" stroke-width="1.2"/>
+<polygon points="464.00,314.00 464.00,290.00 448.00,290.00 448.00,314.00" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.6"/>
+<circle cx="200.00" cy="442.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="200.00" cy="442.00" r="8.00" fill="#2b2f36"/>
+<circle cx="200.00" cy="354.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="200.00" cy="354.00" r="8.00" fill="#2b2f36"/>
+<circle cx="200.00" cy="266.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="200.00" cy="266.00" r="8.00" fill="#2b2f36"/>
+<circle cx="200.00" cy="178.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="200.00" cy="178.00" r="8.00" fill="#2b2f36"/>
+<circle cx="288.00" cy="442.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="288.00" cy="442.00" r="8.00" fill="#2b2f36"/>
+<circle cx="288.00" cy="354.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="288.00" cy="354.00" r="8.00" fill="#2b2f36"/>
+<circle cx="288.00" cy="266.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="288.00" cy="266.00" r="8.00" fill="#2b2f36"/>
+<circle cx="288.00" cy="178.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="288.00" cy="178.00" r="8.00" fill="#2b2f36"/>
+<circle cx="376.00" cy="442.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="376.00" cy="442.00" r="8.00" fill="#2b2f36"/>
+<circle cx="376.00" cy="354.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="376.00" cy="354.00" r="8.00" fill="#2b2f36"/>
+<circle cx="376.00" cy="266.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="376.00" cy="266.00" r="8.00" fill="#2b2f36"/>
+<circle cx="376.00" cy="178.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="376.00" cy="178.00" r="8.00" fill="#2b2f36"/>
+<circle cx="456.00" cy="282.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="456.00" cy="282.00" r="8.00" fill="#2b2f36"/>
+<circle cx="456.00" cy="430.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="456.00" cy="430.00" r="8.00" fill="#2b2f36"/>
+<circle cx="464.00" cy="138.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="464.00" cy="138.00" r="8.00" fill="#2b2f36"/>
+<line x1="100.00" y1="32.00" x2="580.00" y2="32.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="340.00" y="26.00" font-size="12" text-anchor="middle" fill="#1d2330">Breite (x) 120 mm</text>
+<line x1="82.00" y1="50.00" x2="82.00" y2="530.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="75.00" y="286.56" font-size="12" text-anchor="end" fill="#1d2330">Höhe (y)</text>
+<text x="75.00" y="301.56" font-size="12" text-anchor="end" fill="#1d2330">120 mm</text>
+<line x1="100.00" y1="506.00" x2="152.00" y2="506.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="156.00" y="510.00" font-size="11" text-anchor="start" fill="#1d2330">13 mm = Sperrrand 3 + Randbereich 10</text>
+<text x="100.00" y="550.00" font-size="12" text-anchor="start" fill="#5b6475">(0, 0) Ursprung unten links</text>
+<circle cx="568.00" cy="90.00" r="2.20" fill="#1d2330"/>
+<line x1="568.00" y1="90.00" x2="630.00" y2="90.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="634.00" y="94.00" font-size="12" text-anchor="start" fill="#1d2330">Sperrrand für alle Bauteile 3 mm.</text>
+<text x="634.00" y="109.00" font-size="12" text-anchor="start" fill="#1d2330">Kein Bauteil kommt näher an den Plattenrand</text>
+<circle cx="554.00" cy="194.00" r="2.20" fill="#1d2330"/>
+<line x1="554.00" y1="194.00" x2="630.00" y2="178.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="634.00" y="182.00" font-size="12" text-anchor="start" fill="#1d2330">Randbereich nur für Motoren 10 mm</text>
+<text x="634.00" y="197.00" font-size="12" text-anchor="start" fill="#1d2330">(Breite des Randbereichs). Motoren und</text>
+<text x="634.00" y="212.00" font-size="12" text-anchor="start" fill="#1d2330">Zahnräder dürfen hinein, Löcher nicht</text>
+<circle cx="564.00" cy="282.00" r="2.20" fill="#1d2330"/>
+<line x1="564.00" y1="282.00" x2="630.00" y2="290.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="634.00" y="294.00" font-size="12" text-anchor="start" fill="#1d2330">Dieser Motor ragt in den Randbereich, das ist</text>
+<text x="634.00" y="309.00" font-size="12" text-anchor="start" fill="#1d2330">erlaubt. Das Ziel Kleiner Rand hält solche</text>
+<text x="634.00" y="324.00" font-size="12" text-anchor="start" fill="#1d2330">Überstände möglichst klein</text>
+<circle cx="528.00" cy="386.00" r="2.20" fill="#1d2330"/>
+<line x1="528.00" y1="386.00" x2="630.00" y2="394.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="634.00" y="398.00" font-size="12" text-anchor="start" fill="#1d2330">Lochbereich (gestrichelt). Jede Stange liegt</text>
+<text x="634.00" y="413.00" font-size="12" text-anchor="start" fill="#1d2330">ganz darin, also mindestens 13 mm vom</text>
+<text x="634.00" y="428.00" font-size="12" text-anchor="start" fill="#1d2330">Plattenrand entfernt</text>
+</svg>

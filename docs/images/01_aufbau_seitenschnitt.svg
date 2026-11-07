@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="615" viewBox="0 0 1080 615" font-family="DejaVu Sans, Arial, Helvetica, sans-serif">
+<title>Aufbau im Seitenschnitt</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1d2330"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<rect x="70.00" y="210.00" width="112.50" height="18.00" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="197.50" y="210.00" width="155.00" height="18.00" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="367.50" y="210.00" width="155.00" height="18.00" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="537.50" y="210.00" width="102.50" height="18.00" fill="#8f96a3" stroke="#1d2330" stroke-width="0.6"/>
+<text x="60.00" y="220.00" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G0</text>
+<rect x="70.00" y="270.00" width="112.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="197.50" y="270.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="367.50" y="270.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="537.50" y="270.00" width="102.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="60.00" y="280.00" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G1</text>
+<rect x="70.00" y="330.00" width="112.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="197.50" y="330.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="367.50" y="330.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="537.50" y="330.00" width="102.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="60.00" y="340.00" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G2</text>
+<rect x="70.00" y="390.00" width="112.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="197.50" y="390.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="367.50" y="390.00" width="155.00" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<rect x="537.50" y="390.00" width="102.50" height="4.80" fill="#c3c8d1" stroke="#1d2330" stroke-width="0.6"/>
+<text x="60.00" y="400.00" font-size="15" text-anchor="end" font-weight="bold" fill="#1d2330">G3</text>
+<rect x="157.00" y="240.00" width="36.00" height="30.00" fill="#4e79a7" fill-opacity="0.25" stroke="#4e79a7" stroke-width="1.2"/>
+<circle cx="175.00" cy="255.00" r="9.00" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.8"/>
+<circle cx="175.00" cy="255.00" r="1.60" fill="#ffffff"/>
+<rect x="184.00" y="210.00" width="12.00" height="231.00" fill="#2b2f36"/>
+<rect x="184.00" y="60.00" width="12.00" height="150.00" fill="none" stroke="#2b2f36" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="190.00" y="457.00" font-size="12" text-anchor="middle" fill="#1d2330">Stange mit Motor auf G1</text>
+<text x="190.00" y="472.00" font-size="12" text-anchor="middle" fill="#1d2330">77 mm lang</text>
+<rect x="327.00" y="300.00" width="36.00" height="30.00" fill="#f28e2b" fill-opacity="0.25" stroke="#f28e2b" stroke-width="1.2"/>
+<circle cx="345.00" cy="315.00" r="9.00" fill="#f28e2b" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.8"/>
+<circle cx="345.00" cy="315.00" r="1.60" fill="#ffffff"/>
+<rect x="354.00" y="210.00" width="12.00" height="291.00" fill="#2b2f36"/>
+<rect x="354.00" y="60.00" width="12.00" height="150.00" fill="none" stroke="#2b2f36" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="360.00" y="517.00" font-size="12" text-anchor="middle" fill="#1d2330">Stange mit Motor auf G2</text>
+<text x="360.00" y="532.00" font-size="12" text-anchor="middle" fill="#1d2330">97 mm lang</text>
+<rect x="497.00" y="360.00" width="36.00" height="30.00" fill="#59a14f" fill-opacity="0.25" stroke="#59a14f" stroke-width="1.2"/>
+<circle cx="515.00" cy="375.00" r="9.00" fill="#59a14f" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.8"/>
+<circle cx="515.00" cy="375.00" r="1.60" fill="#ffffff"/>
+<rect x="524.00" y="210.00" width="12.00" height="351.00" fill="#2b2f36"/>
+<rect x="524.00" y="60.00" width="12.00" height="150.00" fill="none" stroke="#2b2f36" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="530.00" y="577.00" font-size="12" text-anchor="middle" fill="#1d2330">Stange mit Motor auf G3</text>
+<text x="530.00" y="592.00" font-size="12" text-anchor="middle" fill="#1d2330">117 mm lang</text>
+<line x1="92.00" y1="210.00" x2="92.00" y2="270.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="99.00" y="244.00" font-size="12" text-anchor="start" fill="#1d2330">20 mm</text>
+<line x1="150.00" y1="210.00" x2="150.00" y2="60.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text x="143.00" y="131.56" font-size="12" text-anchor="end" fill="#1d2330">Hub</text>
+<text x="143.00" y="146.56" font-size="12" text-anchor="end" fill="#1d2330">50 mm</text>
+<circle cx="530.00" cy="114.00" r="2.20" fill="#1d2330"/>
+<line x1="530.00" y1="114.00" x2="690.00" y2="102.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="106.00" font-size="12" text-anchor="start" fill="#1d2330">ausgefahren (gestrichelt). Jede Stange erreicht</text>
+<text x="694.00" y="121.00" font-size="12" text-anchor="start" fill="#1d2330">denselben Hub über G0, egal auf welcher Ebene</text>
+<text x="694.00" y="136.00" font-size="12" text-anchor="start" fill="#1d2330">ihr Motor sitzt (Maximaler Hub über G0)</text>
+<circle cx="637.00" cy="219.00" r="2.20" fill="#1d2330"/>
+<line x1="637.00" y1="219.00" x2="690.00" y2="198.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="202.00" font-size="12" text-anchor="start" fill="#1d2330">G0, die Lochplatte oben, Dicke 6 mm.</text>
+<text x="694.00" y="217.00" font-size="12" text-anchor="start" fill="#1d2330">Ihre Oberseite ist z = 0, nach unten wird z negativ</text>
+<circle cx="637.00" cy="272.40" r="2.20" fill="#1d2330"/>
+<line x1="637.00" y1="272.40" x2="690.00" y2="261.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="265.00" font-size="12" text-anchor="start" fill="#1d2330">G1 bis G3, die Motorebenen, Dicke 1,6 mm,</text>
+<text x="694.00" y="280.00" font-size="12" text-anchor="start" fill="#1d2330">je 20 mm Abstand (Einheitlicher Ebenenabstand)</text>
+<circle cx="537.50" cy="332.40" r="2.20" fill="#1d2330"/>
+<line x1="537.50" y1="332.40" x2="690.00" y2="321.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="325.00" font-size="12" text-anchor="start" fill="#1d2330">Durchgangsloch ⌀ 5 mm in jeder Ebene, durch die</text>
+<text x="694.00" y="340.00" font-size="12" text-anchor="start" fill="#1d2330">eine Stange läuft (Stange 4 mm + 2 x 0,5 mm Lochspiel)</text>
+<circle cx="527.00" cy="363.00" r="2.20" fill="#1d2330"/>
+<line x1="527.00" y1="363.00" x2="690.00" y2="366.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="370.00" font-size="12" text-anchor="start" fill="#1d2330">Motorgehäuse, steht auf seiner Ebene</text>
+<text x="694.00" y="385.00" font-size="12" text-anchor="start" fill="#1d2330">(Montage. Motor steht auf der Ebene)</text>
+<circle cx="519.00" cy="380.00" r="2.20" fill="#1d2330"/>
+<line x1="519.00" y1="380.00" x2="690.00" y2="411.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="415.00" font-size="12" text-anchor="start" fill="#1d2330">Zahnrad ⌀ 6 mm auf der Motorwelle, 5 mm</text>
+<text x="694.00" y="430.00" font-size="12" text-anchor="start" fill="#1d2330">über der Ebene. Es greift ins Gewinde und schiebt</text>
+<text x="694.00" y="445.00" font-size="12" text-anchor="start" fill="#1d2330">die Stange auf und ab</text>
+<circle cx="536.00" cy="495.00" r="2.20" fill="#1d2330"/>
+<line x1="536.00" y1="495.00" x2="690.00" y2="486.00" stroke="#5b6475" stroke-width="0.8"/>
+<text x="694.00" y="490.00" font-size="12" text-anchor="start" fill="#1d2330">Gewindestange eingefahren, die Spitze bündig mit</text>
+<text x="694.00" y="505.00" font-size="12" text-anchor="start" fill="#1d2330">G0. Sie hängt durch alle Ebenen darunter und</text>
+<text x="694.00" y="520.00" font-size="12" text-anchor="start" fill="#1d2330">braucht dort überall ein Loch</text>
+<text x="690.00" y="546.00" font-size="11" text-anchor="start" fill="#5b6475" font-style="italic">Schematisch. z ist maßstäblich mit den Standardwerten,</text>
+<text x="690.00" y="559.75" font-size="11" text-anchor="start" fill="#5b6475" font-style="italic">die drei Einheiten sind in x auseinandergezogen.</text>
+</svg>
