@@ -27,7 +27,8 @@ in Sekunden. Die Bilder liegen in `docs/images/` und lassen sich mit `docs/make_
 
 - Viele senkrechte Gewindestangen sollen einzeln nach oben und unten fahren. Jede Stange hat ihren eigenen kleinen Motor
 - Die Stangen sollen möglichst dicht stehen, also mit kleinem Abstand von Loch zu Loch. Die Motoren sind aber viel breiter
-  als die Stangen (Stange 4 mm, Motor 12 x 24 mm). Lägen alle Motoren in einer Ebene, bestimmte der Motor den Abstand
+  als die Stangen (Stange 4 mm, Motor N20 mit Encoder 12 x 32 mm). Lägen alle Motoren in einer Ebene, bestimmte der Motor
+  den Abstand
 - Die Lösung ist ein Stapel aus Platten. Oben liegt die Lochplatte G0, darunter die Motorebenen G1, G2, G3 und so weiter. Jeder
   Motor sitzt seitlich an seiner Stange auf einer dieser Ebenen und treibt sie über ein Zahnrad an, das ins Gewinde greift
 - Weil die Motoren benachbarter Stangen auf verschiedenen Ebenen liegen und sich um ihre Stange drehen lassen, dürfen sich ihre
@@ -97,7 +98,10 @@ So beschreibt das Programm einen Motor.
   entfernt. Standard sind 5 mm, also Zahnradradius 3 mm plus Stangenradius 2 mm, Zahnrad und Stange berühren sich gerade
 - Von oben ist das Zahnrad ein Rechteck aus Zahnrad Durchmesser (in x) und Zahnrad Breite (in y). Die Welle zeigt in y Richtung
 - Hinter dem Zahnrad sitzt das Gehäuse, getrennt durch den Abstand Gehäuse zu Zahnrad (Standard 1 mm). Das Gehäuse ist Breite
-  (x) mal Tiefe (y, Wellenrichtung) groß, Standard 12 x 24 mm, und Höhe (z) 10 mm hoch
+  (x) mal Tiefe (y, Wellenrichtung) groß und Höhe (z) hoch
+- Die Standardwerte sind ein N20 Getriebemotor mit Hall Encoder. Getriebe und Motor sind 12 x 10 mm im Querschnitt und ohne
+  Welle 32 mm lang (Getriebe 9 mm, Motor 15 mm, Encoder etwa 8 mm). Die Welle ist 3 mm dick, etwa 10 mm lang und sitzt in der
+  Mitte der Getriebefront. Der Encoder steht je nach Hersteller etwas über den Querschnitt hinaus, am echten Motor nachmessen
 - Die Welle liegt in der Achshöhe über Montagefläche, Standard 5 mm über der Ebene. Auf dieser Höhe greift das Zahnrad in die Stange
 - Der Motorwinkel dreht alles gemeinsam um die Stange. Das Programm probiert Winkel im Winkelschritt (Standard 15 Grad) zwischen
   Winkel von und Winkel bis
@@ -196,16 +200,17 @@ Diese Punkte ändern nichts an der Geometrie, die das Programm rechnet. Sie ents
 *Bild 4. Ein echtes Ergebnis mit den Standardwerten im Muster Quadrat. Blau die Motoren auf G1, orange die auf G2.*
 
 Bild 4 zeigt den Kern der Idee.
-- 25 Löcher stehen im Quadrat mit 20 mm Lochabstand auf der Platte 120 x 120 mm
-- Jeder Motor ist 12 x 24 mm groß und um 75 Grad gedreht. In der Draufsicht überlappen sich blaue und orange Gehäuse
+- 20 Löcher stehen im Quadrat mit 20 mm Lochabstand auf der Platte 120 x 120 mm
+- Jeder Motor ist ein N20 mit Encoder, 12 x 32 mm groß und um 75 Grad gedreht. In der Draufsicht überlappen sich blaue und orange Gehäuse
   deutlich. Sie liegen aber 20 mm übereinander und berühren sich im Raum nicht
 - Zwei Motoren gleicher Ebene überlappen sich dagegen nie. Deshalb wechseln G1 und G2 sich ab
 - Der rot gestrichelte Block enthält ein Loch mit Motor auf G1 und eines mit Motor auf G2. Dieser Block wiederholt sich über
   die ganze Platte
 
-Mit nur einer Motorebene findet das Programm bei denselben Werten 21,5 mm Lochabstand und 20 Löcher statt 20 mm und 25 Löcher.
+Mit nur einer Motorebene findet das Programm bei denselben Werten 27 mm Lochabstand und 16 Löcher statt 20 mm und 20 Löcher.
 Der Gewinn hängt stark von der Motorform ab. Je größer der Motor im Verhältnis zur Stange, desto mehr bringen weitere Ebenen.
-Die dritte Ebene wird hier gar nicht gebraucht, das Ergebnis nutzt 2 von 3 Ebenen.
+Die dritte Ebene wird hier gar nicht gebraucht, das Ergebnis nutzt 2 von 3 Ebenen. Am rechten Rand bleibt eine Spalte frei, weil
+die langen Motoren dort in ihrer festen Ausrichtung über die Platte ragen würden.
 
 ## 5. Platte, Sperrrand, Randbereich und Lochbereich
 
@@ -303,8 +308,9 @@ Unter der Musterform steht die Frage Was wiederholt sich?
   lässt sich kacheln (Abschnitt 9.9), und es sieht aufgeräumt aus
 - Nur die Löcher, jeder Motor einzeln gedreht (2b). Die Löcher liegen im Muster, aber jeder Motor bekommt eigene Ebene und eigenen
   Winkel, wie bei vorgegebenen Löchern. Das ist flexibler, die Anordnung gilt aber nur für diese Platte. Mit den Standardwerten
-  findet 2b 23,5 mm Lochabstand mit Motoren auf G1 bis G3 und sechs verschiedenen Winkeln, 2a dagegen 20 mm. Welche Variante
-  besser abschneidet, hängt von Motor und Muster ab
+  findet 2b 23,5 mm Lochabstand mit Motoren auf G1 bis G3 und vier verschiedenen Winkeln, 2a dagegen 20 mm. Dafür bringt 2b
+  25 Löcher unter und 2a nur 20, weil 2a am Rand Löcher weglässt, deren Motor in der festen Ausrichtung nicht mehr auf die
+  Platte passt. Welche Variante besser abschneidet, hängt von Motor, Muster und Platte ab
 
 ### 6.4 Frei verteilen
 
@@ -433,7 +439,7 @@ Maße
 | Beschriftung | Bedeutung | Standard | Wo |
 |---|---|---|---|
 | Breite (x) [mm] | Gehäusebreite quer zur Welle | 12 mm | sichtbar |
-| Tiefe (y, Wellenrichtung) [mm] | Gehäusetiefe entlang der Welle | 24 mm | sichtbar |
+| Tiefe (y, Wellenrichtung) [mm] | Gehäusetiefe entlang der Welle (N20 mit Encoder, ohne Welle) | 32 mm | sichtbar |
 | Höhe (z) [mm] | Gehäusehöhe senkrecht zur Ebene | 10 mm | sichtbar |
 | Achshöhe über Montagefläche [mm] | Höhe der Welle über der Montagefläche | 5 mm | sichtbar |
 | Zahnrad Durchmesser [mm] | Außendurchmesser des Zahnrads | 6 mm | sichtbar |
@@ -547,7 +553,7 @@ hex_y) und Feste Teilung.
 
 ![Schritt Ergebnis](images/ui_7_ergebnis.jpg)
 
-Oben steht ein Statuskasten, zum Beispiel Suche abgeschlossen. 25 von 25 Stangen platziert (Wiederholendes Muster). Beste
+Oben steht ein Statuskasten, zum Beispiel Suche abgeschlossen. 20 von 20 Stangen platziert (Wiederholendes Muster). Beste
 gefundene Lösung, nicht als global optimal bewiesen. Darunter weitere Sätze zum Muster, zum Lochabstand und zum Block. Der
 Statuskasten ist rot umrandet, wenn weniger Stangen als gewünscht platziert wurden oder Kollisionen bestehen.
 
@@ -630,18 +636,18 @@ Leiterplatte in KiCad
 
 So entsteht Bild 4, Schritt für Schritt.
 1. Grundlagen. Stange 4 mm, Hub 50 mm, drei Motorebenen im Abstand 20 mm, fest. Die Tabelle zeigt Stangen von 77, 97 und 117 mm
-2. Motor. 12 x 24 x 10 mm, Zahnrad 6 x 4 mm, Achsabstand 5 mm
+2. Motor. N20 mit Encoder, 12 x 32 x 10 mm, Zahnrad 6 x 4 mm, Achsabstand 5 mm
 3. Modus. Muster wählen (beim Start der Oberfläche schon gewählt)
 4. Platte und Rand. 120 x 120 mm, ohne Randbereich
 5. Muster. Quadrat, Löcher und Motoren wiederholen sich, So viele wie auf die Platte passen, So klein wie möglich
 6. Ziele. Kleiner Rand 50 %, Saubere Ausrichtung 50 %, Zeitlimit 20 s. Optimierung starten
-7. Ergebnis nach etwa 14 Sekunden. 25 Löcher, Lochabstand 20 mm, Block 2 x 1 Zellen (40 x 20 mm) mit einem Motor auf G1 und
+7. Ergebnis nach etwa 14 Sekunden. 20 Löcher, Lochabstand 20 mm, Block 2 x 1 Zellen (40 x 20 mm) mit einem Motor auf G1 und
    einem auf G2, alle um 75 Grad gedreht, 2 von 3 Ebenen genutzt, keine Kollisionen. Ob ein noch kleinerer Abstand ginge, ist
    nicht bewiesen, darum steht im Statuskasten Beste gefundene Lösung
 
 Zum Vergleich mit denselben Werten
-- Muster 2b (nur die Löcher). 25 Löcher mit 23,5 mm Abstand, Motoren auf G1 bis G3 in sechs Winkeln, nach etwa 1 Sekunde
-- Nur eine Motorebene. 20 Löcher mit 21,5 mm Abstand
+- Muster 2b (nur die Löcher). 25 Löcher mit 23,5 mm Abstand, Motoren auf G1 bis G3 in vier Winkeln, nach etwa 2 Sekunden
+- Nur eine Motorebene. 16 Löcher mit 27 mm Abstand
 
 ## 11. Was das Programm verspricht und was nicht
 
@@ -652,7 +658,8 @@ Zum Vergleich mit denselben Werten
 - Unmöglichkeit wird bewiesen, wenn eine exakte Suche ohne Zeitlimit endet. Sonst heißt es nur, dass nichts gefunden wurde
 - Annahmen. Das Zahnrad ist ein Quader ohne Zähne, der Eingriff steckt nur im Achsabstand. Gehäuse sind konvex. Die Stange zählt
   über den ganzen Weg als Zylinder. Die Platte ist ein Rechteck. Kabel, Stecker, Leiterbahnen und Festigkeit fehlen
-- Standardwerte sind Platzhalter, keine Herstellerdaten. Für einen echten Motor gehören seine Maße aus dem Datenblatt hinein
+- Der Standardmotor folgt typischen Händlerangaben für einen N20 mit Encoder. Die übrigen Standardwerte sind Platzhalter.
+  Für einen echten Motor gehören seine gemessenen Maße hinein
 
 ## 12. Dateien und Formate
 
@@ -681,4 +688,4 @@ Lochbild in JSON sieht so aus.
 PYTHONPATH=src python docs/make_images.py
 ```
 
-- Die Bildschirmfotos der Oberfläche (`docs/images/ui_*.jpg`) zeigen den Stand von Version 0.10.0 mit den Standardwerten
+- Die Bildschirmfotos der Oberfläche (`docs/images/ui_*.jpg`) zeigen den Stand von Version 0.11.0 mit den Standardwerten

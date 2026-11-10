@@ -91,10 +91,9 @@ def test_fixed_pitch_is_used():
     p.search.fixed_pitch = 40.0
     p.search.time_limit_s = 2
     r = run_optimizer(Model(p))
-    xs = sorted({round(x.x, 3) for x in r.best.placements})
-    ys = sorted({round(x.y, 3) for x in r.best.placements})
-    diffs = [b - a for a, b in zip(xs, xs[1:])] + [b - a for a, b in zip(ys, ys[1:])]
-    assert diffs and all(math.isclose(d, 40.0, abs_tol=0.5) or d > 1 for d in diffs)
+    pts = [(x.x, x.y) for x in r.best.placements]
+    nearest = [min(math.dist(a, b) for b in pts if b is not a) for a in pts]
+    assert len(pts) == 4 and all(math.isclose(d, 40.0, abs_tol=1e-6) for d in nearest)  # the grid stays untouched
 
 
 @pytest.mark.real_time

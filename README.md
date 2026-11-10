@@ -434,6 +434,7 @@ Regeln und Grenzen
 
 Anordnungsziel der freien Verfahren `compact` packt dicht (kleine Grundfläche), `spread` verteilt gleichmäßig über den Bauraum.
 `search.workers` größer 1 startet unabhängige Seeds in getrennten Prozessen und führt die Ergebnisse zusammen.
+Mit fester Teilung (`search.fixed_pitch`) entfällt bei `pattern_greedy` die lokale Suche, das Raster bleibt unverändert.
 Mit `search.stagnation_s` endet ein Lauf früh, sobald die bestbewertete Lösung die Zielanzahl erreicht und sich so lange nichts
 mehr verbessert. Hat die bestbewertete Lösung wegen der Gewichtung weniger Einheiten als eine andere, steht das in den Hinweisen.
 
@@ -601,7 +602,8 @@ begrenzt die Größe von Anfragen. Fehlerantworten haben immer die Form `{"error
 
 - Das Zahnrad ist ein Quader als Einhüllende, ohne Zahngeometrie. Der Eingriff steckt nur im Achsabstand. Ob das reale Zahnrad
   in das reale Gewinde passt, muss mit den echten Bauteilen geprüft werden
-- Standardwerte sind Platzhalter, keine Herstellerdaten
+- Der Standardmotor ist ein N20 Getriebemotor mit Hall Encoder nach typischen Händlerangaben (12 x 10 mm, ohne Welle 32 mm lang,
+  Welle mittig). Die übrigen Standardwerte sind Platzhalter, echte Bauteile bitte nachmessen
 - Gehäuse sind konvex (Rechteck, konvexes Polygon oder Hülle der Skizze). Nicht konvexe SVG Konturen werden durch ihre Hülle ersetzt
 - Die Stange gilt über den ganzen Verfahrweg als Zylinder, auch eingefahren unterhalb des Motors. Das ist konservativ
 - Bauraum ist ein Rechteck, Ebenen sind keine Platinen mit Leiterbahnen, Kabel und Stecker fehlen

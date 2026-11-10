@@ -50,7 +50,8 @@ class PatternGreedyOptimizer(Optimizer):
         search = PatternSearch(model, counter, stop, random.Random(se.seed), progress)
         sweep_budget = se.time_limit_s * (1.0 - se.refine_fraction)
         search.sweep(lambda: search.halted() or stop.elapsed > sweep_budget)
-        if search.solutions and not stop.reason:
+        # The local search shifts rods, with a fixed pitch the grid must stay as it is
+        if search.solutions and not stop.reason and se.fixed_pitch is None:
             search.refine(search.halted)
         return finish(res, search, stop, counter)
 

@@ -127,8 +127,10 @@ class MotorSpec:
         when the project is validated, shaft_x, gear_gap and outline are ignored.
     """
 
+    # Defaults are a standard N20 gearmotor with hall encoder. Gearbox and motor 12 x 10 mm, 32 mm long without the
+    # output shaft (gearbox 9, motor 15, encoder about 8), Ø3 mm shaft in the centre of the gearbox face
     width: float = 12.0
-    depth: float = 24.0
+    depth: float = 32.0
     height: float = 10.0
     shaft_x: float = 0.0
     axis_height: float = 5.0

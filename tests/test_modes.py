@@ -22,6 +22,7 @@ def grid(n, pitch, x0=30.0, y0=30.0):
 
 def holes_project(holes, **weights):
     p = Project()
+    p.motor.depth = 24.0  # the hole grids of these tests were laid out for a short 12 x 24 mm motor
     p.search.optimizer = "fixed_holes"
     p.holes = holes
     p.search.time_limit_s = 4

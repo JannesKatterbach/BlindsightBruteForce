@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+Standardmotor N20 mit Encoder
+- Der Standardmotor entspricht jetzt einem N20 Getriebemotor mit Hall Encoder. 12 x 10 mm Querschnitt, ohne Welle 32 mm lang
+  (Getriebe 9, Motor 15, Encoder etwa 8 mm), Welle mittig, Achshöhe 5 mm. Bisher waren es 24 mm ohne Encoder. Beispiele mit
+  eigenen Motormaßen bleiben unverändert
+- Feste Teilung im freien Modus (`search.fixed_pitch` bei `pattern_greedy`) bleibt erhalten. Die lokale Suche hat die Stangen
+  bisher wieder vom Raster geschoben
+- Erklärung, Bilder und Bildschirmfotos mit dem neuen Motor neu gerechnet
+
 ## 0.10.0
 Export Menü und Motor Skizze
 - Exportieren öffnet ein Menü mit Vorlage, Format, Ebene und Inhalt. Exportiert wird alles oder genau eine Ebene (G0 bis Gn,

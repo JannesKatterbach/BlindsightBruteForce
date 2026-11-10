@@ -5,8 +5,8 @@
 <rect x="100.00" y="50.00" width="480.00" height="480.00" fill="#fbe9d0" stroke="#1d2330" stroke-width="1.6"/>
 <rect x="152.00" y="102.00" width="376.00" height="376.00" fill="#ffffff" stroke="#1d2330" stroke-width="1" stroke-dasharray="6 4"/>
 <rect x="112.00" y="62.00" width="456.00" height="456.00" fill="none" stroke="#5b6475" stroke-width="0.9" stroke-dasharray="2 3"/>
-<polygon points="564.00,326.00 564.00,278.00 468.00,278.00 468.00,326.00" fill="#4e79a7" fill-opacity="0.35" stroke="#4e79a7" stroke-width="1.2"/>
-<polygon points="464.00,314.00 464.00,290.00 448.00,290.00 448.00,314.00" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.6"/>
+<polygon points="568.00,326.00 568.00,278.00 440.00,278.00 440.00,326.00" fill="#4e79a7" fill-opacity="0.35" stroke="#4e79a7" stroke-width="1.2"/>
+<polygon points="436.00,314.00 436.00,290.00 420.00,290.00 420.00,314.00" fill="#4e79a7" fill-opacity="0.85" stroke="#1d2330" stroke-width="0.6"/>
 <circle cx="200.00" cy="442.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
 <circle cx="200.00" cy="442.00" r="8.00" fill="#2b2f36"/>
 <circle cx="200.00" cy="354.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
@@ -31,10 +31,10 @@
 <circle cx="376.00" cy="266.00" r="8.00" fill="#2b2f36"/>
 <circle cx="376.00" cy="178.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
 <circle cx="376.00" cy="178.00" r="8.00" fill="#2b2f36"/>
-<circle cx="456.00" cy="282.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
-<circle cx="456.00" cy="282.00" r="8.00" fill="#2b2f36"/>
-<circle cx="456.00" cy="430.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
-<circle cx="456.00" cy="430.00" r="8.00" fill="#2b2f36"/>
+<circle cx="428.00" cy="282.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="428.00" cy="282.00" r="8.00" fill="#2b2f36"/>
+<circle cx="452.00" cy="430.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
+<circle cx="452.00" cy="430.00" r="8.00" fill="#2b2f36"/>
 <circle cx="464.00" cy="138.00" r="10.00" fill="#ffffff" stroke="#1d2330"/>
 <circle cx="464.00" cy="138.00" r="8.00" fill="#2b2f36"/>
 <line x1="100.00" y1="32.00" x2="580.00" y2="32.00" stroke="#1d2330" stroke-width="1.0" marker-start="url(#arrow)" marker-end="url(#arrow)"/>

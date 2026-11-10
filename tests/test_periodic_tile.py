@@ -13,6 +13,7 @@ from blindsight.optimizers.periodic_tile import PeriodicChecker, TileShape, bloc
 
 def project(**search):
     p = Project()
+    p.motor.depth = 24.0  # the tile sizes of these tests were laid out for a short 12 x 24 mm motor
     p.target_count = 8
     p.search.optimizer = "periodic_tile"
     p.search.pattern_count = "exact"  # most tests place the target count

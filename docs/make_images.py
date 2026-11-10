@@ -172,15 +172,16 @@ def figure_motor(model: Model) -> None:
     ox, oy = 330, 120  # pixel position of the rod axis
     X = lambda x: ox + x * s  # noqa: E731
     Y = lambda y: oy - y * s  # noqa: E731
-    svg = Svg(940, 590, "Motor im Stangenrahmen, Draufsicht")
     cx = m.shaft_x - m.center_distance  # housing centre in x
     hx0, hx1 = cx - m.width / 2, cx + m.width / 2
     hy1 = -m.gear_width / 2 - m.gear_gap
     hy0 = hy1 - m.depth
+    bottom = Y(hy0) + 60  # room for the width dimension below the housing
+    svg = Svg(940, bottom + 30, "Motor im Stangenrahmen, Draufsicht")
     gx0, gx1 = -m.center_distance - m.gear_diameter / 2, -m.center_distance + m.gear_diameter / 2
     gy0, gy1 = -m.gear_width / 2, m.gear_width / 2
     svg.line(X(-17), Y(0), X(10), Y(0), stroke=MUTED, stroke_width=0.8, stroke_dasharray="5 4")
-    svg.line(X(0), Y(6), X(0), Y(-31), stroke=MUTED, stroke_width=0.8, stroke_dasharray="5 4")
+    svg.line(X(0), Y(6), X(0), Y(hy0 - 4), stroke=MUTED, stroke_width=0.8, stroke_dasharray="5 4")
     svg.text(X(10) + 4, Y(0) + 4, "x", size=13, fill=MUTED)
     svg.text(X(0) + 5, Y(6), "y", size=13, fill=MUTED)
     col = plane_color(1)
@@ -217,7 +218,7 @@ def figure_motor(model: Model) -> None:
     svg.text(lx, Y(-18), "Das Zahnrad ist ein Quader (Durchmesser x Breite).\nZähne gibt es im Modell nicht, der Eingriff ins\n"
                          "Gewinde steckt nur im Achsabstand. Er ist so\ngewählt, dass Zahnrad und Stange sich berühren\n"
                          f"({num(m.gear_diameter / 2)} mm Zahnradradius + {num(rod.diameter / 2)} mm Stangenradius).", size=12)
-    svg.text(30, 570, "Maßstäblich mit den Standardwerten. Gezeigt ist der Motorwinkel 0 Grad, das Zahnrad liegt dann in -x der Stange, "
+    svg.text(30, bottom + 10, "Maßstäblich mit den Standardwerten (N20 mit Encoder). Gezeigt ist der Motorwinkel 0 Grad, das Zahnrad liegt dann in -x der Stange, "
                       "das Gehäuse in -y.", size=11, fill=MUTED, italic=True)
     svg.save("02_motor_draufsicht.svg")
 
@@ -326,8 +327,9 @@ def figure_result(model: Model, result) -> None:
                            "Rot gestrichelt ein Block. Ein Motor\nauf G1 und einer auf G2 wechseln\n"
                            "sich ab, der Block wiederholt sich\nüber die ganze Platte.\n\n"
                            "Gerechnet mit den Standardwerten\n(Platte 120 x 120 mm, Stange 4 mm,\n"
-                           "Motor 12 x 24 mm, 3 Motorebenen,\nMuster Quadrat, so viele Löcher wie\n"
-                           "passen, Lochabstand so klein wie\nmöglich).", size=12)
+                           f"Motor N20 mit Encoder {num(model.project.motor.width)} x {num(model.project.motor.depth)} mm,\n"
+                           "3 Motorebenen, Muster Quadrat, so\nviele Löcher wie "
+                           "passen, Lochabstand\nso klein wie möglich).", size=12)
     svg.save("04_ergebnis_muster_2a.svg")
 
 
@@ -350,14 +352,14 @@ def figure_board() -> None:
     svg.rect(X(em), Y(b.height - em), (b.width - 2 * em) * s, (b.height - 2 * em) * s, fill="none", stroke=MUTED,
              stroke_width=0.9, stroke_dasharray="2 3")
     # A unit whose motor points into the edge strip on the right (angle 90 turns the housing to +x)
-    unit = (89.0, 62.0)
+    unit = (82.0, 62.0)
     for part in model.unit_parts(0, unit[0], unit[1], 1, 90.0):
         pts = [(X(x), Y(y)) for x, y in part.prism.fp.outline()]
         if part.kind == "housing":
             svg.poly(pts, fill=plane_color(1), fill_opacity=0.35, stroke=plane_color(1), stroke_width=1.2)
         elif part.kind == "gear":
             svg.poly(pts, fill=plane_color(1), fill_opacity=0.85, stroke=INK, stroke_width=0.6)
-    holes = [(x, y) for x in (25.0, 47.0, 69.0) for y in (22.0, 44.0, 66.0, 88.0)] + [unit, (89.0, 25.0), (91.0, 98.0)]
+    holes = [(x, y) for x in (25.0, 47.0, 69.0) for y in (22.0, 44.0, 66.0, 88.0)] + [unit, (88.0, 25.0), (91.0, 98.0)]
     for x, y in holes:
         svg.circle(X(x), Y(y), model.hole_r * s, fill="#ffffff", stroke=INK)
         svg.circle(X(x), Y(y), model.rod_r * s, fill=ROD)
