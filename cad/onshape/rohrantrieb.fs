@@ -2,25 +2,50 @@ FeatureScript 3112;
 import(path : "onshape/std/common.fs", version : "3112.0");
 
 // Project Blindsight, variant with a rotating tube (docs/MOTORVARIANTE_ROHR.md).
-// One unit per grid point. A threaded rod M4 with two flats (double D) is guided against rotation in a
-// fixed bush in G0. A tube with two M4 nuts in a hex pocket at its top turns on a flanged bearing
-// MF128ZZ in the bearing plate and is driven from below by an N20 gearmotor through a D bore (torque
-// only, the axial force goes into the bearing). z = 0 is the top face of G0, all sizes in millimetres.
-// The threads are shown as plain cylinders. All values except the feature parameters are preliminary
-// design assumptions and live in RB_DIMS.
+//
+// Every pin is one self-contained tile. Tiles of the same size are packed side by side in any number,
+// the frame holds them. Per tile, from the top
+//   Deckel mit Führung   printed. Top surface of the display. Its double D slot is the anti-rotation
+//                        guide for the rod, two pins locate it on the housing
+//   Gewindestange M4     bought M4 rod, cut to length, two flats filed over the guided length. The
+//                        flats only remove thread crests, the core stays whole
+//   2 Muttern M4         bought DIN 934 nuts, pressed into the hex pocket of the tube
+//   Rohr                 printed. Turns, carries the nuts at the top, is centred at the top by the rod
+//                        and at the bottom by the bearing. Its D bore is the key for the motor shaft
+//   Kugellager MR85ZZ    5 x 8 x 2.5, sits in the bulkhead of the housing and takes the axial force
+//   N20 Motor            gearmotor with encoder. Its D shaft only transmits torque, it ends below the
+//                        bottom of the D bore, so no axial force reaches the gearbox
+//   Gehäuse              printed rectangular shaft. Cavity for the tube, bulkhead with bearing seat,
+//                        pocket for the motor. Its outline is the tile size
+// Load path when a finger presses a pin. Rod, nuts, tube, bearing inner ring, bearing outer ring,
+// bulkhead, housing, floor of the frame. The thread is self locking, the motor holds no load at rest.
+// z = 0 is the top surface of the tiles, all sizes in millimetres. Only the feature parameters are
+// inputs, everything else follows from the bought parts and the printing rules in RB.
 
-const RB_DIMS = {
-        "rodD" : 4.0, "flatW" : 3.4, "flatClear" : 0.05,
-        "g0T" : 6.0, "bushD" : 8.0, "bushL" : 10.0, "rotGap" : 1.2,
-        "headD" : 10.0, "nutAF" : 7.0, "nutH" : 3.2, "nuts" : 2, "pocketExtra" : 0.3, "headFloor" : 1.0,
-        "shimT" : 0.3, "shimOD" : 9.4,
-        "bearID" : 8.0, "bearOD" : 12.0, "bearW" : 3.5, "flangeD" : 13.6, "flangeW" : 0.8, "bearPlateT" : 4.0,
-        "ringID" : 7.6, "ringOD" : 10.4, "ringT" : 0.8,
-        "tubeD" : 8.0, "boreD" : 5.0, "rodReserve" : 4.0, "boreBelowRod" : 2.0, "tubeFloor" : 8.0,
-        "shaftD" : 3.0, "shaftFlat" : 2.5, "shaftL" : 10.0, "shaftIn" : 6.0, "dBoreClear" : 0.05, "shaftPlay" : 0.5,
-        "motorW" : 12.0, "motorH" : 10.0, "gearboxL" : 9.0, "canL" : 15.0, "encL" : 8.0, "pocketClear" : 0.1,
-        "motorPlateT" : 8.0, "plateMargin" : 5.0, "spacerD" : 4.0, "spacerInset" : 3.0
+const RB = {
+        // tile and printing
+        "gap" : 0.2, "wall" : 0.8, "pocketClear" : 0.1,
+        // N20 gearmotor with hall encoder, gearbox 12 x 10, D shaft 3 mm with a flat at 2.5 mm
+        "motorW" : 12.0, "motorH" : 10.0, "gearboxL" : 9.0, "canL" : 15.0, "encL" : 8.0,
+        "shaftD" : 3.0, "shaftFlat" : 2.5, "shaftL" : 10.0, "shaftPlay" : 0.5, "dClear" : 0.05,
+        // M4 rod and DIN 934 nuts
+        "pitch" : 0.7, "rodD" : 4.0, "rodCore" : 3.2, "flatW" : 3.4, "nutAF" : 7.0, "nutH" : 3.2, "nuts" : 2,
+        "rodReserve" : 3.0,
+        // cap with the double D guide
+        "capT" : 6.0, "slotD" : 4.2, "slotClear" : 0.05, "pinD" : 1.6, "pinL" : 2.5, "pinHoleD" : 1.7,
+        // tube
+        "headGap" : 1.0, "headD" : 9.6, "pocketAF" : 7.1, "pocketExtra" : 0.3, "headFloor" : 1.0, "tubeD" : 7.0,
+        "boreD" : 4.6, "boreGap" : 1.5, "tubeFloor" : 1.0, "collarD" : 5.8, "collarH" : 0.5, "journalChamfer" : 0.3,
+        // bearing MR85ZZ in the bulkhead
+        "bearID" : 5.0, "bearOD" : 8.0, "bearW" : 2.5, "seatD" : 8.05, "bulkFloor" : 1.2, "bulkHole" : 6.5,
+        "cavityD" : 10.2, "motorEndGap" : 0.4,
+        // frame
+        "floorT" : 2.0, "frameWall" : 4.0, "frameClear" : 0.15, "coverT" : 1.2, "coverOverlap" : 1.0,
+        "cableW" : 8.0, "cableH" : 4.0, "screwPilot" : 1.6, "screwClear" : 2.2, "screwDepth" : 8.0
     };
+
+// Locating pins of the cap, in two opposite corners outside the tube cavity
+const RB_PINS = [vector(5.4, 4.4), vector(-5.4, -4.4)];
 
 const RB_MM = millimeter;
 
@@ -28,71 +53,104 @@ annotation { "Feature Type Name" : "Rohrantrieb" }
 export const rohrantrieb = defineFeature(function(context is Context, id is Id, definition is map)
     precondition
     {
-        annotation { "Name" : "Hub oberhalb von G0" }
-        isLength(definition.stroke, { (millimeter) : [5, 40, 500] } as LengthBoundSpec);
+        annotation { "Name" : "Hub der Stange" }
+        isLength(definition.stroke, { (millimeter) : [5, 40, 200] } as LengthBoundSpec);
 
         annotation { "Name" : "Ausfahrstellung zur Ansicht" }
-        isLength(definition.extension, { (millimeter) : [0, 0, 500] } as LengthBoundSpec);
+        isLength(definition.extension, { (millimeter) : [0, 20, 200] } as LengthBoundSpec);
 
-        annotation { "Name" : "Raster" }
-        isLength(definition.pitch, { (millimeter) : [10, 15, 200] } as LengthBoundSpec);
+        annotation { "Name" : "Kacheln in x" }
+        isInteger(definition.nx, { (unitless) : [1, 3, 20] } as IntegerBoundSpec);
 
-        annotation { "Name" : "Einheiten in x" }
-        isInteger(definition.nx, { (unitless) : [1, 1, 20] } as IntegerBoundSpec);
+        annotation { "Name" : "Kacheln in y" }
+        isInteger(definition.ny, { (unitless) : [1, 3, 20] } as IntegerBoundSpec);
 
-        annotation { "Name" : "Einheiten in y" }
-        isInteger(definition.ny, { (unitless) : [1, 1, 20] } as IntegerBoundSpec);
+        annotation { "Name" : "Gewinde darstellen" }
+        definition.threads is boolean;
+
+        annotation { "Name" : "Rahmen erzeugen" }
+        definition.frame is boolean;
 
         annotation { "Name" : "Abstand messen und melden" }
         definition.check is boolean;
     }
     {
+        const d = RB;
         const z = rbLevels(definition.stroke);
         const ext = min(definition.extension, definition.stroke);
-        const pitch = definition.pitch;
-        var centers = [];
+        const px = (d.motorW + 2 * d.pocketClear + 2 * d.wall + d.gap) * RB_MM;
+        const py = (d.motorH + 2 * d.pocketClear + 2 * d.wall + d.gap) * RB_MM;
+
+        // Build the first tile at the origin, then copy its parts to every other grid point
+        const first = rbBuildTile(context, id + "t0", z, ext, definition.threads);
+        var tile0 = {};
+        for (var e in first)
+        {
+            rbFinish(context, e[1], e[2] ~ " 1", e[3]);
+            tile0[e[0]] = e[1];
+        }
+        var tiles = [tile0];
         for (var j = 0; j < definition.ny; j += 1)
         {
             for (var i = 0; i < definition.nx; i += 1)
             {
-                centers = append(centers, vector(i * pitch, j * pitch));
+                const k = j * definition.nx + i;
+                if (k == 0)
+                {
+                    continue;
+                }
+                var tile = {};
+                for (var n = 0; n < size(first); n += 1)
+                {
+                    const e = first[n];
+                    const pid = id + ("p" ~ k ~ "x" ~ n);
+                    opPattern(context, pid, { "entities" : e[1], "transforms" : [transform(vector(i * px, j * py, 0 * RB_MM))],
+                                "instanceNames" : ["t" ~ k] });
+                    const q = qCreatedBy(pid, EntityType.BODY);
+                    rbFinish(context, q, e[2] ~ " " ~ (k + 1), e[3]);
+                    tile[e[0]] = q;
+                }
+                tiles = append(tiles, tile);
             }
         }
-        const plates = rbPlates(context, id + "plates", z, centers, pitch, definition.nx, definition.ny);
-        var units = [];
-        for (var k = 0; k < size(centers); k += 1)
+        if (definition.frame)
         {
-            units = append(units, rbUnit(context, id + ("u" ~ k), z, centers[k], ext, k));
+            rbFrame(context, id + "frame", z, definition.nx, definition.ny, px, py);
         }
         if (definition.check)
         {
-            rbReport(context, id, plates, units);
+            rbReport(context, id, z, tiles, px, py);
         }
-    }, { "stroke" : 40 * millimeter, "extension" : 20 * millimeter, "pitch" : 15 * millimeter, "nx" : 3, "ny" : 3, "check" : true });
+    }, { "stroke" : 40 * millimeter, "extension" : 20 * millimeter, "nx" : 3, "ny" : 3, "threads" : true, "frame" : true,
+            "check" : true });
 
-/** Heights of all parts (z values in millimetres as lengths), derived from the stroke and RB_DIMS. */
+/** Heights of all parts (lengths), derived from the stroke and RB. */
 function rbLevels(stroke is ValueWithUnits) returns map
 {
-    const d = RB_DIMS;
+    const d = RB;
     var z = {};
-    z.headTop = -(d.bushL + d.rotGap) * RB_MM;
+    z.capBottom = -d.capT * RB_MM;
+    z.headTop = z.capBottom - d.headGap * RB_MM;
     z.pocketBottom = z.headTop - (d.nuts * d.nutH + d.pocketExtra) * RB_MM;
     z.nutTop = z.headTop - 0.2 * RB_MM;
     z.nutBottom = z.nutTop - d.nuts * d.nutH * RB_MM;
     z.headBottom = z.pocketBottom - d.headFloor * RB_MM;
-    z.bearTop = z.headBottom - d.shimT * RB_MM;
-    z.bearBottom = z.bearTop - d.bearW * RB_MM;
-    z.plateTop = z.bearTop - d.flangeW * RB_MM;
-    z.plateBottom = z.plateTop - d.bearPlateT * RB_MM;
-    z.ringTop = z.bearBottom - 0.1 * RB_MM;
-    z.ringBottom = z.ringTop - d.ringT * RB_MM;
+    z.bodyTop = z.headBottom - (d.headD - d.tubeD) / 2 * RB_MM;
+    // The rod still has the reserve below the nuts at full stroke
     z.rodLen = stroke - z.nutBottom + d.rodReserve * RB_MM;
-    z.boreEnd = -z.rodLen - d.boreBelowRod * RB_MM;
-    z.tubeBottom = z.boreEnd - d.tubeFloor * RB_MM;
-    z.motorFace = z.tubeBottom - (d.shaftL - d.shaftIn) * RB_MM;
-    z.motorPlateBottom = z.motorFace - d.motorPlateT * RB_MM;
+    z.boreEnd = -z.rodLen - d.boreGap * RB_MM;
+    z.dTop = z.boreEnd - d.tubeFloor * RB_MM;
+    z.shaftTop = z.dTop - d.shaftPlay * RB_MM;
+    z.motorFace = z.shaftTop - d.shaftL * RB_MM;
+    z.bearBottom = z.motorFace + d.bulkFloor * RB_MM;
+    z.bearTop = z.bearBottom + d.bearW * RB_MM;
+    z.collarTop = z.bearTop + d.collarH * RB_MM;
+    z.bodyBottom = z.collarTop + (d.tubeD - d.collarD) / 2 * RB_MM;
     z.motorBottom = z.motorFace - (d.gearboxL + d.canL + d.encL) * RB_MM;
-    z.flatLen = stroke + (d.bushL + 2) * RB_MM;
+    z.housingBottom = z.motorBottom - d.motorEndGap * RB_MM;
+    z.floorBottom = z.housingBottom - d.floorT * RB_MM;
+    // The flats cover the guide over the whole stroke and end above the nuts
+    z.flatLen = stroke + (d.capT + 0.5) * RB_MM;
     return z;
 }
 
@@ -115,10 +173,10 @@ function rbCbox(context is Context, id is Id, c is Vector, wx is ValueWithUnits,
     return rbBox(context, id, c[0] - wx / 2, c[1] - wy / 2, z0, c[0] + wx / 2, c[1] + wy / 2, z1);
 }
 
-/** Hexagonal prism, width across flats af, flats parallel to x. */
-function rbHex(context is Context, id is Id, c is Vector, z0 is ValueWithUnits, z1 is ValueWithUnits, af is ValueWithUnits) returns Query
+/** Hexagonal prism on the z axis, width across flats af, flats facing x. */
+function rbHex(context is Context, id is Id, z0 is ValueWithUnits, z1 is ValueWithUnits, af is ValueWithUnits) returns Query
 {
-    const sketch = newSketchOnPlane(context, id + "sk", { "sketchPlane" : plane(vector(c[0], c[1], z0), vector(0, 0, 1), vector(1, 0, 0)) });
+    const sketch = newSketchOnPlane(context, id + "sk", { "sketchPlane" : plane(vector(0 * RB_MM, 0 * RB_MM, z0), vector(0, 0, 1), vector(1, 0, 0)) });
     const r = af / sqrt(3);
     var points = [];
     for (var k = 0; k <= 6; k += 1)
@@ -134,6 +192,44 @@ function rbHex(context is Context, id is Id, c is Vector, z0 is ValueWithUnits, 
     return qCreatedBy(id + "ex", EntityType.BODY);
 }
 
+/** Solid of revolution about the z axis. Points are [radius, z] pairs in millimetres. */
+function rbRevolve(context is Context, id is Id, pts is array) returns Query
+{
+    const sketch = newSketchOnPlane(context, id + "sk", { "sketchPlane" : plane(vector(0, 0, 0) * RB_MM, vector(0, -1, 0), vector(1, 0, 0)) });
+    var points = [];
+    for (var p in pts)
+    {
+        points = append(points, vector(p[0], p[1]) * RB_MM);
+    }
+    points = append(points, points[0]);
+    skPolyline(sketch, "profile", { "points" : points });
+    skSolve(sketch);
+    opRevolve(context, id + "rev", { "entities" : qSketchRegion(id + "sk"), "axis" : line(vector(0, 0, 0) * RB_MM, vector(0, 0, 1)),
+                "angleForward" : 2 * PI * radian, "angleBack" : 0 * radian });
+    opDeleteBodies(context, id + "del", { "entities" : qCreatedBy(id + "sk") });
+    return qCreatedBy(id + "rev", EntityType.BODY);
+}
+
+/**
+ * Right hand thread ridge on the z axis, swept along a helix that starts at angle 0 at height z0.
+ * The trapezoid runs from radius rIn (width wIn) to rOut (width wOut). Ridges that start at the same
+ * angle and a whole number of pitches apart mesh with each other.
+ */
+function rbThread(context is Context, id is Id, z0 is ValueWithUnits, turns is number, rIn is number, rOut is number,
+    wIn is number, wOut is number) returns Query
+{
+    opHelix(context, id + "helix", { "direction" : vector(0, 0, 1), "axisStart" : vector(0, 0, 0) * RB_MM,
+                "startPoint" : vector((rIn + rOut) / 2 * RB_MM, 0 * RB_MM, z0), "interval" : vector(0, turns),
+                "clockwise" : true, "helicalPitch" : RB.pitch * RB_MM, "spiralPitch" : 0 * RB_MM });
+    const sketch = newSketchOnPlane(context, id + "sk", { "sketchPlane" : plane(vector(0 * RB_MM, 0 * RB_MM, z0), vector(0, -1, 0), vector(1, 0, 0)) });
+    skPolyline(sketch, "profile", { "points" : [vector(rIn, -wIn / 2) * RB_MM, vector(rOut, -wOut / 2) * RB_MM, vector(rOut, wOut / 2) * RB_MM,
+                    vector(rIn, wIn / 2) * RB_MM, vector(rIn, -wIn / 2) * RB_MM] });
+    skSolve(sketch);
+    opSweep(context, id + "sweep", { "profiles" : qSketchRegion(id + "sk"), "path" : qCreatedBy(id + "helix", EntityType.EDGE) });
+    opDeleteBodies(context, id + "del", { "entities" : qUnion([qCreatedBy(id + "sk"), qCreatedBy(id + "helix")]) });
+    return qCreatedBy(id + "sweep", EntityType.BODY);
+}
+
 function rbSubtract(context is Context, id is Id, target is Query, tools is Query)
 {
     opBoolean(context, id, { "targets" : target, "tools" : tools, "operationType" : BooleanOperationType.SUBTRACTION });
@@ -144,15 +240,16 @@ function rbUnite(context is Context, id is Id, tools is Query)
     opBoolean(context, id, { "tools" : tools, "operationType" : BooleanOperationType.UNION });
 }
 
-/** Cylinder with flats at |x| > half the width (one flat if single). */
-function rbFlatted(context is Context, id is Id, c is Vector, z0 is ValueWithUnits, z1 is ValueWithUnits, r is ValueWithUnits,
+/** Cylinder on the z axis with flats at |x| > half the width (only at +x if single). */
+function rbFlatted(context is Context, id is Id, z0 is ValueWithUnits, z1 is ValueWithUnits, r is ValueWithUnits,
     width is ValueWithUnits, single is boolean) returns Query
 {
-    const body = rbCyl(context, id + "c", c, z0, z1, r);
-    var cutters = [rbCbox(context, id + "a", c + vector(width / 2 + r, 0 * RB_MM), 2 * r, 3 * r, z0 - RB_MM, z1 + RB_MM)];
+    const o = vector(0, 0) * RB_MM;
+    const body = rbCyl(context, id + "c", o, z0, z1, r);
+    var cutters = [rbCbox(context, id + "a", vector(width / 2 + r, 0 * RB_MM), 2 * r, 3 * r, z0 - RB_MM, z1 + RB_MM)];
     if (!single)
     {
-        cutters = append(cutters, rbCbox(context, id + "b", c - vector(width / 2 + r, 0 * RB_MM), 2 * r, 3 * r, z0 - RB_MM, z1 + RB_MM));
+        cutters = append(cutters, rbCbox(context, id + "b", vector(-width / 2 - r, 0 * RB_MM), 2 * r, 3 * r, z0 - RB_MM, z1 + RB_MM));
     }
     rbSubtract(context, id + "cut", body, qUnion(cutters));
     return body;
@@ -164,184 +261,211 @@ function rbFinish(context is Context, q is Query, name is string, col is Color)
     setProperty(context, { "entities" : q, "propertyType" : PropertyType.APPEARANCE, "value" : col });
 }
 
-// -- Plates and spacers ----------------------------------------------------------------------------------
-function rbPlates(context is Context, id is Id, z is map, centers is array, pitch is ValueWithUnits, nx is number, ny is number) returns map
+function rbMm(v is ValueWithUnits) returns number
 {
-    const d = RB_DIMS;
-    const m = pitch / 2 + d.plateMargin * RB_MM;
-    const x0 = -m;
-    const y0 = -m;
-    const x1 = (nx - 1) * pitch + m;
-    const y1 = (ny - 1) * pitch + m;
-    // G0 with a bore for every guide bush
-    const g0 = rbBox(context, id + "g0", x0, y0, -d.g0T * RB_MM, x1, y1, 0 * RB_MM);
-    var holes = [];
-    for (var k = 0; k < size(centers); k += 1)
-    {
-        holes = append(holes, rbCyl(context, id + ("g0h" ~ k), centers[k], -d.g0T * RB_MM - RB_MM, RB_MM, d.bushD / 2 * RB_MM));
-    }
-    rbSubtract(context, id + "g0cut", g0, qUnion(holes));
-    rbFinish(context, g0, "G0 Deckplatte", color(0.55, 0.58, 0.63, 0.55));
-    // Bearing plate with a bore for every flanged bearing
-    const bp = rbBox(context, id + "bp", x0, y0, z.plateBottom, x1, y1, z.plateTop);
-    holes = [];
-    for (var k = 0; k < size(centers); k += 1)
-    {
-        holes = append(holes, rbCyl(context, id + ("bph" ~ k), centers[k], z.plateBottom - RB_MM, z.plateTop + RB_MM, d.bearOD / 2 * RB_MM));
-    }
-    rbSubtract(context, id + "bpcut", bp, qUnion(holes));
-    rbFinish(context, bp, "Lagerplatte", color(0.75, 0.78, 0.83, 0.55));
-    // Motor plate with a pocket for every gearbox
-    const mp = rbBox(context, id + "mp", x0, y0, z.motorPlateBottom, x1, y1, z.motorFace);
-    holes = [];
-    for (var k = 0; k < size(centers); k += 1)
-    {
-        holes = append(holes, rbCbox(context, id + ("mph" ~ k), centers[k], (d.motorW + d.pocketClear * 2) * RB_MM,
-                    (d.motorH + d.pocketClear * 2) * RB_MM, z.motorPlateBottom - RB_MM, z.motorFace + RB_MM));
-    }
-    rbSubtract(context, id + "mpcut", mp, qUnion(holes));
-    rbFinish(context, mp, "Motorplatte", color(0.75, 0.78, 0.83, 0.55));
-    // Spacers at the four corners between the plates
-    const inset = d.spacerInset * RB_MM + d.spacerD / 2 * RB_MM;
-    const corners = [vector(x0 + inset, y0 + inset), vector(x1 - inset, y0 + inset), vector(x0 + inset, y1 - inset), vector(x1 - inset, y1 - inset)];
-    var spacers = [];
-    for (var k = 0; k < 4; k += 1)
-    {
-        const upper = rbCyl(context, id + ("su" ~ k), corners[k], z.plateTop, -d.g0T * RB_MM, d.spacerD / 2 * RB_MM);
-        const lower = rbCyl(context, id + ("sl" ~ k), corners[k], z.motorFace, z.plateBottom, d.spacerD / 2 * RB_MM);
-        rbFinish(context, qUnion([upper, lower]), "Distanzbolzen", color(0.7, 0.7, 0.72));
-        spacers = append(spacers, upper);
-        spacers = append(spacers, lower);
-    }
-    return { "g0" : g0, "bearingPlate" : bp, "motorPlate" : mp, "spacers" : qUnion(spacers) };
+    return v / RB_MM;
 }
 
-// -- One unit --------------------------------------------------------------------------------------------
-function rbUnit(context is Context, id is Id, z is map, c is Vector, ext is ValueWithUnits, k is number) returns map
+// -- One tile at the origin ------------------------------------------------------------------------------
+/** Returns [key, query, part name, colour] for every part of the tile. */
+function rbBuildTile(context is Context, id is Id, z is map, ext is ValueWithUnits, threads is boolean) returns array
 {
-    const d = RB_DIMS;
-    const n = " " ~ (k + 1);
-    // Guide bush (fixed, POM) with the double D bore
-    const bush = rbCyl(context, id + "bush", c, -d.bushL * RB_MM, 0 * RB_MM, d.bushD / 2 * RB_MM);
-    const bore = rbFlatted(context, id + "bushbore", c, -d.bushL * RB_MM - RB_MM, RB_MM, (d.rodD / 2 + d.flatClear) * RB_MM,
-        (d.flatW + 2 * d.flatClear) * RB_MM, false);
-    rbSubtract(context, id + "bushcut", bush, bore);
-    rbFinish(context, bush, "Führungsbuchse" ~ n, color(0.95, 0.92, 0.78));
+    const d = RB;
+    const o = vector(0, 0) * RB_MM;
+    const hx = (d.motorW / 2 + d.pocketClear + d.wall) * RB_MM;
+    const hy = (d.motorH / 2 + d.pocketClear + d.wall) * RB_MM;
 
-    // Threaded rod M4 (thread not shown) with the flats on the upper part
+    // Housing. Cavity for the tube, bulkhead with bearing seat and shaft hole, pocket for the motor
+    const housing = rbBox(context, id + "housing", -hx, -hy, z.housingBottom, hx, hy, z.capBottom);
+    var cuts = [
+        rbCyl(context, id + "cavity", o, z.bearTop, z.capBottom + RB_MM, d.cavityD / 2 * RB_MM),
+        rbCyl(context, id + "seat", o, z.bearBottom, z.bearTop + 0.01 * RB_MM, d.seatD / 2 * RB_MM),
+        rbCyl(context, id + "bulkhole", o, z.motorFace - RB_MM, z.bearBottom + 0.01 * RB_MM, d.bulkHole / 2 * RB_MM),
+        rbCbox(context, id + "mpocket", o, (d.motorW + 2 * d.pocketClear) * RB_MM, (d.motorH + 2 * d.pocketClear) * RB_MM,
+            z.housingBottom - RB_MM, z.motorFace)
+    ];
+    for (var i = 0; i < size(RB_PINS); i += 1)
+    {
+        cuts = append(cuts, rbCyl(context, id + ("pinhole" ~ i), RB_PINS[i] * RB_MM, z.capBottom - (d.pinL + 0.5) * RB_MM,
+                z.capBottom + RB_MM, d.pinHoleD / 2 * RB_MM));
+    }
+    rbSubtract(context, id + "housingcut", housing, qUnion(cuts));
+
+    // Cap with the double D guide and two locating pins
+    const cap = rbBox(context, id + "cap", -hx, -hy, z.capBottom, hx, hy, 0 * RB_MM);
+    const slot = rbFlatted(context, id + "slot", z.capBottom - RB_MM, RB_MM, d.slotD / 2 * RB_MM, (d.flatW + 2 * d.slotClear) * RB_MM, false);
+    rbSubtract(context, id + "capcut", cap, slot);
+    var capParts = [cap];
+    for (var i = 0; i < size(RB_PINS); i += 1)
+    {
+        capParts = append(capParts, rbCyl(context, id + ("pin" ~ i), RB_PINS[i] * RB_MM, z.capBottom - d.pinL * RB_MM,
+                    z.capBottom + 0.5 * RB_MM, d.pinD / 2 * RB_MM));
+    }
+    rbUnite(context, id + "capunite", qUnion(capParts));
+
+    // Tube as a solid of revolution with 45 degree transitions, so it prints upright without support
+    const rj = d.bearID / 2;
+    const tube = rbRevolve(context, id + "tube", [
+                [0, rbMm(z.bearBottom)], [rj - d.journalChamfer, rbMm(z.bearBottom)], [rj, rbMm(z.bearBottom) + d.journalChamfer],
+                [rj, rbMm(z.bearTop)], [d.collarD / 2, rbMm(z.bearTop)], [d.collarD / 2, rbMm(z.collarTop)],
+                [d.tubeD / 2, rbMm(z.bodyBottom)], [d.tubeD / 2, rbMm(z.bodyTop)], [d.headD / 2, rbMm(z.headBottom)],
+                [d.headD / 2, rbMm(z.headTop)], [0, rbMm(z.headTop)]
+            ]);
+    const tubeCuts = qUnion([
+                rbHex(context, id + "pocket", z.pocketBottom, z.headTop + RB_MM, d.pocketAF * RB_MM),
+                rbCyl(context, id + "bore", o, z.boreEnd, z.pocketBottom + 0.01 * RB_MM, d.boreD / 2 * RB_MM),
+                // D bore, the key for the motor shaft. Deeper than the shaft reaches
+                rbFlatted(context, id + "dbore", z.bearBottom - RB_MM, z.dTop, (d.shaftD / 2 + d.dClear) * RB_MM,
+                    (2 * d.shaftFlat - d.shaftD + 2 * d.dClear) * RB_MM, true)
+            ]);
+    rbSubtract(context, id + "tubecut", tube, tubeCuts);
+
+    // Threaded rod. Both ridges start at angle 0 a whole number of pitches apart, so rod and nuts mesh
+    const pitch = d.pitch * RB_MM;
     const tip = ext;
     const rodBottom = ext - z.rodLen;
-    const rod = rbCyl(context, id + "rod", c, rodBottom, tip, d.rodD / 2 * RB_MM);
-    const flats = qUnion([
-                rbCbox(context, id + "rfa", c + vector((d.flatW / 2 + 2) * RB_MM, 0 * RB_MM), 4 * RB_MM, 6 * RB_MM, tip - z.flatLen, tip + RB_MM),
-                rbCbox(context, id + "rfb", c - vector((d.flatW / 2 + 2) * RB_MM, 0 * RB_MM), 4 * RB_MM, 6 * RB_MM, tip - z.flatLen, tip + RB_MM)
-            ]);
-    rbSubtract(context, id + "rodflats", rod, flats);
-    rbFinish(context, rod, "Gewindestange M4" ~ n, color(0.25, 0.26, 0.29));
+    const zStart = rodBottom - pitch;
+    var rod;
+    if (threads)
+    {
+        rod = rbCyl(context, id + "rod", o, rodBottom - RB_MM, tip + RB_MM, d.rodCore / 2 * RB_MM);
+        const turns = ceil((tip + RB_MM - zStart) / pitch);
+        const ridge = rbThread(context, id + "rodthread", zStart, turns, 1.55, 2.0, 0.607, 0.0875);
+        rbUnite(context, id + "rodunite", qUnion([rod, ridge]));
+    }
+    else
+    {
+        rod = rbCyl(context, id + "rod", o, rodBottom - RB_MM, tip + RB_MM, d.rodD / 2 * RB_MM);
+    }
+    const t = rbMm(tip);
+    const b = rbMm(rodBottom);
+    const fx = (d.flatW / 2 + 2) * RB_MM;
+    rbSubtract(context, id + "rodcut", rod, qUnion([
+                rbRevolve(context, id + "tipcut", [[0, t], [1.6, t], [2.6, t - 1.0], [2.6, t + 3], [0, t + 3]]),
+                rbRevolve(context, id + "endcut", [[0, b], [1.6, b], [2.6, b + 1.0], [2.6, b - 3], [0, b - 3]]),
+                rbCbox(context, id + "flata", vector(fx, 0 * RB_MM), 4 * RB_MM, 6 * RB_MM, tip - z.flatLen, tip + 2 * RB_MM),
+                rbCbox(context, id + "flatb", vector(-fx, 0 * RB_MM), 4 * RB_MM, 6 * RB_MM, tip - z.flatLen, tip + 2 * RB_MM)
+            ]));
 
-    // Rotating tube. Head with the hex pocket, body with the free bore, floor with the D bore for the shaft
-    const head = rbCyl(context, id + "head", c, z.headBottom, z.headTop, d.headD / 2 * RB_MM);
-    const body = rbCyl(context, id + "body", c, z.tubeBottom, z.headBottom, d.tubeD / 2 * RB_MM);
-    rbUnite(context, id + "tubeunite", qUnion([head, body]));
-    const tube = head;
-    const pocket = rbHex(context, id + "pocket", c, z.pocketBottom, z.headTop + RB_MM, (d.nutAF + 0.1) * RB_MM);
-    const tubeBore = rbCyl(context, id + "tbore", c, z.boreEnd, z.pocketBottom + 0.01 * RB_MM, d.boreD / 2 * RB_MM);
-    // The D bore is deeper than the shaft goes in, so the shaft carries no axial force
-    const dBore = rbFlatted(context, id + "dbore", c, z.tubeBottom - RB_MM, z.tubeBottom + (d.shaftIn + d.shaftPlay) * RB_MM,
-        (d.shaftD / 2 + d.dBoreClear) * RB_MM, (d.shaftFlat * 2 - d.shaftD + 2 * d.dBoreClear) * RB_MM, true);
-    const groove = rbCyl(context, id + "groove", c, z.ringBottom, z.ringTop, d.tubeD / 2 * RB_MM + RB_MM);
-    const grooveCore = rbCyl(context, id + "groovecore", c, z.ringBottom - RB_MM, z.ringTop + RB_MM, d.ringID / 2 * RB_MM);
-    rbSubtract(context, id + "groovecut", groove, grooveCore);
-    rbSubtract(context, id + "tubecut", tube, qUnion([pocket, tubeBore, dBore, groove]));
-    rbFinish(context, tube, "Rohr" ~ n, color(0.85, 0.68, 0.28));
-
-    // Two M4 hex nuts in the pocket (thread not shown)
+    // Two M4 nuts with the matching internal thread
     var nuts = [];
     for (var i = 0; i < d.nuts; i += 1)
     {
         const top = z.nutTop - i * d.nutH * RB_MM;
-        const nut = rbHex(context, id + ("nut" ~ i), c, top - d.nutH * RB_MM, top, d.nutAF * RB_MM);
-        const nutHole = rbCyl(context, id + ("nuth" ~ i), c, top - d.nutH * RB_MM - RB_MM, top + RB_MM, d.rodD / 2 * RB_MM);
-        rbSubtract(context, id + ("nutcut" ~ i), nut, nutHole);
-        rbFinish(context, nut, "Mutter M4" ~ n, color(0.62, 0.64, 0.68));
-        nuts = append(nuts, nut);
+        nuts = append(nuts, rbHex(context, id + ("nut" ~ i), top - d.nutH * RB_MM, top, d.nutAF * RB_MM));
     }
+    var nutCuts = [rbCyl(context, id + "nutbore", o, z.nutBottom - RB_MM, z.nutTop + RB_MM, (threads ? 1.65 : 2.05) * RB_MM)];
+    if (threads)
+    {
+        const zTap = zStart + floor((z.nutBottom - RB_MM - zStart) / pitch) * pitch;
+        const turns = ceil((z.nutTop + RB_MM - zTap) / pitch);
+        nutCuts = append(nutCuts, rbThread(context, id + "tap", zTap, turns, 1.62, 2.08, 0.642, 0.11));
+    }
+    rbSubtract(context, id + "nutcut", qUnion(nuts), qUnion(nutCuts));
 
-    // Shim on the inner ring, flanged bearing, retaining ring
-    const shim = rbCyl(context, id + "shim", c, z.bearTop, z.headBottom, d.shimOD / 2 * RB_MM);
-    rbSubtract(context, id + "shimcut", shim, rbCyl(context, id + "shimh", c, z.bearTop - RB_MM, z.headBottom + RB_MM, d.bearID / 2 * RB_MM));
-    rbFinish(context, shim, "Distanzscheibe" ~ n, color(0.62, 0.64, 0.68));
-    const bearing = rbCyl(context, id + "bear", c, z.bearBottom, z.bearTop, d.bearOD / 2 * RB_MM);
-    const flange = rbCyl(context, id + "flange", c, z.plateTop, z.bearTop, d.flangeD / 2 * RB_MM);
-    rbUnite(context, id + "bearunite", qUnion([bearing, flange]));
-    rbSubtract(context, id + "bearcut", bearing, rbCyl(context, id + "bearh", c, z.bearBottom - RB_MM, z.bearTop + RB_MM, d.bearID / 2 * RB_MM));
-    rbFinish(context, bearing, "Flanschlager MF128ZZ" ~ n, color(0.45, 0.5, 0.58));
-    const ring = rbCyl(context, id + "ring", c, z.ringBottom, z.ringTop, d.ringOD / 2 * RB_MM);
-    rbSubtract(context, id + "ringcut", ring, rbCyl(context, id + "ringh", c, z.ringBottom - RB_MM, z.ringTop + RB_MM, d.ringID / 2 * RB_MM));
-    rbFinish(context, ring, "Sicherungsring 8" ~ n, color(0.15, 0.15, 0.17));
+    // Bearing MR85ZZ
+    const bearing = rbCyl(context, id + "bearing", o, z.bearBottom, z.bearTop, d.bearOD / 2 * RB_MM);
+    rbSubtract(context, id + "bearingcut", bearing, rbCyl(context, id + "bearinghole", o, z.bearBottom - RB_MM, z.bearTop + RB_MM,
+            d.bearID / 2 * RB_MM));
 
-    // N20 gearmotor with encoder, gearbox face up, D shaft into the tube floor
-    const gearbox = rbCbox(context, id + "gearbox", c, d.motorW * RB_MM, d.motorH * RB_MM, z.motorFace - d.gearboxL * RB_MM, z.motorFace);
+    // N20 gearmotor with encoder, gearbox face up against the bulkhead
+    const gearbox = rbCbox(context, id + "gearbox", o, d.motorW * RB_MM, d.motorH * RB_MM, z.motorFace - d.gearboxL * RB_MM, z.motorFace);
     const canTop = z.motorFace - d.gearboxL * RB_MM;
     const canBottom = canTop - d.canL * RB_MM;
-    const can = rbCyl(context, id + "can", c, canBottom, canTop, d.motorW / 2 * RB_MM);
-    const canCut = rbCbox(context, id + "canbox", c, d.motorW * RB_MM, d.motorH * RB_MM, canBottom - RB_MM, canTop + RB_MM);
-    opBoolean(context, id + "canshape", { "tools" : qUnion([can, canCut]), "operationType" : BooleanOperationType.INTERSECTION });
-    const encoder = rbCbox(context, id + "enc", c, d.motorW * RB_MM, d.motorH * RB_MM, z.motorBottom, canBottom);
-    const shaft = rbFlatted(context, id + "shaft", c, z.motorFace, z.motorFace + d.shaftL * RB_MM, d.shaftD / 2 * RB_MM,
-        (d.shaftFlat * 2 - d.shaftD) * RB_MM, true);
+    const can = rbCyl(context, id + "can", o, canBottom, canTop, d.motorW / 2 * RB_MM);
+    const canBox = rbCbox(context, id + "canbox", o, d.motorW * RB_MM, d.motorH * RB_MM, canBottom - RB_MM, canTop + RB_MM);
+    opBoolean(context, id + "canshape", { "tools" : qUnion([can, canBox]), "operationType" : BooleanOperationType.INTERSECTION });
+    const encoder = rbCbox(context, id + "encoder", o, d.motorW * RB_MM, d.motorH * RB_MM, z.motorBottom, canBottom);
+    const shaft = rbFlatted(context, id + "shaft", z.motorFace, z.shaftTop, d.shaftD / 2 * RB_MM, (2 * d.shaftFlat - d.shaftD) * RB_MM, true);
     rbUnite(context, id + "motorunite", qUnion([gearbox, can, encoder, shaft]));
-    rbFinish(context, gearbox, "N20 Motor mit Encoder" ~ n, color(0.31, 0.47, 0.65));
 
-    return { "bush" : bush, "rod" : rod, "tube" : tube, "nuts" : qUnion(nuts), "shim" : shim, "bearing" : bearing,
-            "ring" : ring, "motor" : gearbox };
+    return [
+            ["housing", housing, "Gehäuse", color(0.78, 0.80, 0.84, 0.35)],
+            ["cap", cap, "Deckel mit Führung", color(0.96, 0.78, 0.25, 0.85)],
+            ["tube", tube, "Rohr", color(0.92, 0.45, 0.18)],
+            ["nuts", qUnion(nuts), "Mutter M4", color(0.62, 0.64, 0.68)],
+            ["rod", rod, "Gewindestange M4", color(0.30, 0.31, 0.35)],
+            ["bearing", bearing, "Kugellager MR85ZZ", color(0.45, 0.50, 0.58)],
+            ["motor", gearbox, "N20 Motor mit Encoder", color(0.25, 0.42, 0.62)]
+        ];
+}
+
+// -- Frame -----------------------------------------------------------------------------------------------
+/** Base frame with floor, walls and cable slots, and a cover frame that holds the outer tiles down. */
+function rbFrame(context is Context, id is Id, z is map, nx is number, ny is number, px is ValueWithUnits, py is ValueWithUnits)
+{
+    const d = RB;
+    const hx = (d.motorW / 2 + d.pocketClear + d.wall) * RB_MM;
+    const hy = (d.motorH / 2 + d.pocketClear + d.wall) * RB_MM;
+    const c = d.frameClear * RB_MM;
+    const w = d.frameWall * RB_MM;
+    const ix0 = -hx - c;
+    const iy0 = -hy - c;
+    const ix1 = (nx - 1) * px + hx + c;
+    const iy1 = (ny - 1) * py + hy + c;
+    const base = rbBox(context, id + "base", ix0 - w, iy0 - w, z.floorBottom, ix1 + w, iy1 + w, 0 * RB_MM);
+    var cuts = [rbBox(context, id + "inner", ix0, iy0, z.housingBottom, ix1, iy1, RB_MM)];
+    for (var j = 0; j < ny; j += 1)
+    {
+        for (var i = 0; i < nx; i += 1)
+        {
+            cuts = append(cuts, rbCbox(context, id + ("cable" ~ i ~ "x" ~ j), vector(i * px, j * py), d.cableW * RB_MM, d.cableH * RB_MM,
+                    z.floorBottom - RB_MM, z.housingBottom + RB_MM));
+        }
+    }
+    const screws = [vector(ix0 - w / 2, iy0 - w / 2), vector(ix1 + w / 2, iy0 - w / 2), vector(ix0 - w / 2, iy1 + w / 2), vector(ix1 + w / 2, iy1 + w / 2)];
+    for (var k = 0; k < 4; k += 1)
+    {
+        cuts = append(cuts, rbCyl(context, id + ("pilot" ~ k), screws[k], -d.screwDepth * RB_MM, RB_MM, d.screwPilot / 2 * RB_MM));
+    }
+    rbSubtract(context, id + "basecut", base, qUnion(cuts));
+    rbFinish(context, base, "Grundrahmen", color(0.55, 0.57, 0.60, 0.5));
+
+    const ov = d.coverOverlap * RB_MM;
+    const cover = rbBox(context, id + "cover", ix0 - w, iy0 - w, 0 * RB_MM, ix1 + w, iy1 + w, d.coverT * RB_MM);
+    var coverCuts = [rbBox(context, id + "window", ix0 + c + ov, iy0 + c + ov, -RB_MM, ix1 - c - ov, iy1 - c - ov, (d.coverT + 1) * RB_MM)];
+    for (var k = 0; k < 4; k += 1)
+    {
+        coverCuts = append(coverCuts, rbCyl(context, id + ("clear" ~ k), screws[k], -RB_MM, (d.coverT + 1) * RB_MM, d.screwClear / 2 * RB_MM));
+    }
+    rbSubtract(context, id + "covercut", cover, qUnion(coverCuts));
+    rbFinish(context, cover, "Abdeckrahmen", color(0.30, 0.32, 0.36));
 }
 
 // -- Clearance check -------------------------------------------------------------------------------------
-function rbGap(context is Context, a is Query, b is Query) returns ValueWithUnits
+function rbGap(context is Context, a is Query, b is Query) returns number
 {
-    return evDistance(context, { "side0" : a, "side1" : b }).distance;
+    return roundToPrecision(evDistance(context, { "side0" : a, "side1" : b }).distance / RB_MM, 3);
 }
 
-function rbReport(context is Context, id is Id, plates is map, units is array)
+function rbReport(context is Context, id is Id, z is map, tiles is array, px is ValueWithUnits, py is ValueWithUnits)
 {
-    const u = units[0];
-    const fixed = qUnion([plates.g0, plates.bearingPlate, plates.motorPlate, plates.spacers]);
-    const checks = [
-            ["Rohr zu Führungsbuchse", rbGap(context, u.tube, u.bush), 1.0],
-            ["Rohr zu Platten und Bolzen", rbGap(context, u.tube, fixed), 1.0],
-            ["Muttern zu Führungsbuchse", rbGap(context, u.nuts, u.bush), 1.0],
-            ["Sicherungsring zu Lagerplatte", rbGap(context, u.ring, plates.bearingPlate), 0.5],
-            ["Stange zu Rohr", rbGap(context, u.rod, u.tube), 0.3],
-            ["Motorwelle zu Rohr (Schiebesitz)", rbGap(context, u.motor, u.tube), 0.03]
-        ];
-    var text = "Rohrantrieb Abstände (mm).";
+    const u = tiles[0];
+    var checks = [
+        ["Rohr zu Gehäuse", rbGap(context, u.tube, u.housing), 0.25],
+        ["Rohr zu Deckel", rbGap(context, u.tube, u.cap), 0.5],
+        ["Muttern zu Deckel", rbGap(context, u.nuts, u.cap), 0.5],
+        ["Stange zu Rohr", rbGap(context, u.rod, u.tube), 0.2],
+        ["Stange zu Muttern (Gewindespiel)", rbGap(context, u.rod, u.nuts), 0.03],
+        ["Stange zu Deckel (Führungsspiel)", rbGap(context, u.rod, u.cap), 0.03],
+        ["Motor zu Rohr (D Welle)", rbGap(context, u.motor, u.tube), 0.03]
+    ];
+    if (size(tiles) > 1)
+    {
+        checks = append(checks, ["Gehäuse zu Nachbarkachel", rbGap(context, u.housing, tiles[1].housing), 0.15]);
+        checks = append(checks, ["Motor zu Nachbarmotor", rbGap(context, u.motor, tiles[1].motor), 1.05]);
+    }
+    var text = "Rohrantrieb. Raster " ~ roundToPrecision(px / RB_MM, 2) ~ " x " ~ roundToPrecision(py / RB_MM, 2) ~
+        " mm, Bautiefe " ~ roundToPrecision(-z.floorBottom / RB_MM, 2) ~ " mm, Stange " ~ roundToPrecision(z.rodLen / RB_MM, 2) ~
+        " mm. Abstände in mm.";
     var ok = true;
     for (var c in checks)
     {
-        const mm = roundToPrecision(c[1] / RB_MM, 3);
-        text = text ~ " " ~ c[0] ~ " " ~ mm ~ ";";
-        if (mm < c[2] - 0.000001)
+        text = text ~ " " ~ c[0] ~ " " ~ c[1] ~ ";";
+        if (c[1] < c[2] - 0.000001)
         {
             ok = false;
             text = text ~ " ZU KLEIN (mindestens " ~ c[2] ~ ");";
-        }
-    }
-    if (size(units) > 1)
-    {
-        // Neighbouring units (the first two in x) must keep the clearance of the project, 1.05 mm
-        const pairs = [["Motor zu Nachbarmotor", units[0].motor, units[1].motor],
-                ["Lager zu Nachbarlager", units[0].bearing, units[1].bearing],
-                ["Rohr zu Nachbarrohr", units[0].tube, units[1].tube]];
-        for (var p in pairs)
-        {
-            const mm = roundToPrecision(rbGap(context, p[1], p[2]) / RB_MM, 3);
-            text = text ~ " " ~ p[0] ~ " " ~ mm ~ ";";
-            if (mm < 1.05)
-            {
-                ok = false;
-                text = text ~ " ZU KLEIN (mindestens 1.05);";
-            }
         }
     }
     println(text);
