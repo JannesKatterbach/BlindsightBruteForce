@@ -246,11 +246,11 @@ Parameter im Feature
 
 | Parameter | Vorgabe | Bedeutung |
 |---|---|---|
-| Hub über G0 | 40 mm | höchste Stellung der Stangenspitze, bestimmt Stangenlänge und Bauhöhe |
+| Hub oberhalb von G0 | 40 mm | höchste Stellung der Stangenspitze, bestimmt Stangenlänge und Bauhöhe |
 | Ausfahrstellung zur Ansicht | 20 mm | wie weit die Stangen im Modell gerade herausstehen (0 bis Hub) |
 | Raster | 15 mm | Abstand der Einheiten in x und y |
 | Einheiten in x und y | 3 und 3 | Größe des Feldes |
-| Abstände prüfen und melden | an | misst die Abstände und zeigt sie als Hinweis am Feature, gelb bei zu kleinem Abstand |
+| Abstand messen und melden | an | misst die Abstände und zeigt sie als Hinweis am Feature, gelb bei zu kleinem Abstand |
 
 Alle übrigen Maße stehen oben im Code in `RB_DIMS` (Abschnitt 6, vorläufige Annahmen). Gewinde sind als glatte Zylinder
 dargestellt.

@@ -28,7 +28,7 @@ annotation { "Feature Type Name" : "Rohrantrieb" }
 export const rohrantrieb = defineFeature(function(context is Context, id is Id, definition is map)
     precondition
     {
-        annotation { "Name" : "Hub über G0" }
+        annotation { "Name" : "Hub oberhalb von G0" }
         isLength(definition.stroke, { (millimeter) : [5, 40, 500] } as LengthBoundSpec);
 
         annotation { "Name" : "Ausfahrstellung zur Ansicht" }
@@ -43,7 +43,7 @@ export const rohrantrieb = defineFeature(function(context is Context, id is Id, 
         annotation { "Name" : "Einheiten in y" }
         isInteger(definition.ny, { (unitless) : [1, 1, 20] } as IntegerBoundSpec);
 
-        annotation { "Name" : "Abstände prüfen und melden" }
+        annotation { "Name" : "Abstand messen und melden" }
         definition.check is boolean;
     }
     {
