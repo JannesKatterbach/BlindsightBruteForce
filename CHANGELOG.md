@@ -5,6 +5,9 @@
   prüft git und Python, überspringt einen belegten Port und öffnet ohne grafische Oberfläche keinen Browser
 - Untersuchung der Variante Rohrantrieb (`docs/MOTORVARIANTE_ROHR.md`) mit Schnittbild, Kräften, Verdrehsicherung, Stückliste
   und Plan für Onshape, neue Bilder 9 und 10 in `docs/make_images.py` (`--variant-only` zeichnet nur die Schemabilder)
+- FeatureScript `cad/onshape/rohrantrieb.fs` für die Variante Rohrantrieb. Erzeugt in Onshape ein parametrisches Feld aus
+  Einheiten mit allen Teilen und prüft die Abstände, im Branch des Dokuments "Ingenieurswettbewerb Motorvariante" als
+  Feature Studio "Rohrantrieb" angelegt (Main unverändert)
 
 ## 0.11.0
 Standardmotor N20 mit Encoder

@@ -1,6 +1,6 @@
 # Variante Rohrantrieb (Rohr mit Innengewinde)
 
-Stand. Technische Untersuchung und Plan für die CAD Umsetzung in Onshape. Noch keine CAD Änderungen. Alle Maße in mm.
+Stand. Technische Untersuchung, Plan und erste CAD Umsetzung in Onshape (Abschnitt 14). Alle Maße in mm.
 
 Diese Datei untersucht den Vorschlag, die Gewindestange nicht mehr seitlich über ein Zahnrad anzutreiben, sondern über ein
 drehendes Rohr mit Innengewinde und einem Motor darunter. Grundlage sind das Repository (README, `docs/ERKLAERUNG.md`) und
@@ -235,7 +235,57 @@ keine vorhandenen Features löschen. Daraus folgt der Ablauf.
 
 ## 14. Änderungen im Onshape Branch
 
-Noch keine. Wird nach der Umsetzung ergänzt.
+Dokument "Ingenieurswettbewerb Motorvariante", nur im Branch des Teams
+(`documents/7b861d28eaa305bc44dbf56d/w/e4a92442a8a34a2d035e8c98`). Main und alle anderen Stände sind unverändert, der
+Assistent hat dort nichts gelesen oder geschrieben.
+
+**Neu. Feature Studio "Rohrantrieb"** mit dem Feature "Rohrantrieb". Der Code liegt auch im Repository unter
+`cad/onshape/rohrantrieb.fs` und ist dort die Vorlage. Änderungen gehen immer zuerst in diese Datei und dann ins Feature Studio.
+
+Parameter im Feature
+
+| Parameter | Vorgabe | Bedeutung |
+|---|---|---|
+| Hub über G0 | 40 mm | höchste Stellung der Stangenspitze, bestimmt Stangenlänge und Bauhöhe |
+| Ausfahrstellung zur Ansicht | 20 mm | wie weit die Stangen im Modell gerade herausstehen (0 bis Hub) |
+| Raster | 15 mm | Abstand der Einheiten in x und y |
+| Einheiten in x und y | 3 und 3 | Größe des Feldes |
+| Abstände prüfen und melden | an | misst die Abstände und zeigt sie als Hinweis am Feature, gelb bei zu kleinem Abstand |
+
+Alle übrigen Maße stehen oben im Code in `RB_DIMS` (Abschnitt 6, vorläufige Annahmen). Gewinde sind als glatte Zylinder
+dargestellt.
+
+Erzeugte Teile, jedes einzeln benannt und eingefärbt. G0 Deckplatte, Lagerplatte, Motorplatte, vier Distanzbolzen und je
+Einheit Führungsbuchse, Gewindestange M4 mit Doppel D, Rohr mit Sechskanttasche, Querbohrung frei und D Bohrung unten,
+zwei Muttern M4, Distanzscheibe, Flanschlager MF128ZZ, Sicherungsring 8 und N20 Motor mit Encoder.
+
+Höhen bei Hub 40 mm (z = 0 ist die Oberseite von G0). Rohrkopf oben −11,2, Lagerplatte −20 bis −24, Stangenlänge 61,8,
+Rohrunterkante −71,8, Motorstirn −75,8, Motorende −107,8.
+
+Geprüfte Abstände (Test mit 2 x 2 Einheiten, Ausfahrstellung 20 mm, alle eingehalten)
+
+| Prüfung | gemessen | mindestens |
+|---|---|---|
+| Rohr zu Führungsbuchse | 1,2 | 1,0 |
+| Rohr zu Platten und Bolzen | 1,487 | 1,0 |
+| Muttern zu Führungsbuchse | 1,4 | 1,0 |
+| Sicherungsring zu Lagerplatte | 0,8 | 0,5 |
+| Stange zu Rohr | 0,5 | 0,3 |
+| Motorwelle zu Rohr (Schiebesitz) | 0,05 | 0,03 |
+| Motor zu Nachbarmotor | 3 | 1,05 |
+| Lager zu Nachbarlager | 1,4 | 1,05 |
+| Rohr zu Nachbarrohr | 5 | 1,05 |
+
+Die Motorwelle steckt 6 mm tief in einer 6,5 mm tiefen D Bohrung. So überträgt sie nur Drehmoment, die Axialkraft geht über
+Rohrkopf und Distanzscheibe in das Flanschlager.
+
+**Vom Team einmalig von Hand** (mit den Werkzeugen des Assistenten nicht möglich)
+1. Im Branch das alte Part Studio leeren (alle Features markieren und löschen) oder den Tab löschen und ein neues Part Studio
+   anlegen
+2. Dort "Benutzerdefiniertes Feature hinzufügen", Feature Studio "Rohrantrieb" dieses Dokuments wählen und das Feature
+   "Rohrantrieb" einfügen. Spätere Codeänderungen im Feature Studio wirken danach ohne weiteren Schritt im Part Studio
+
+Stand dieser Punkte. Offen, bis das Team sie erledigt hat.
 
 ## 15. Offene Punkte
 
