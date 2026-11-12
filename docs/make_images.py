@@ -1,6 +1,7 @@
 """Draws the labelled figures of docs/ERKLAERUNG.md (SVG, German labels).
 
 Run from the repository root with  PYTHONPATH=src python docs/make_images.py
+(--variant-only skips the optimizer runs and draws only the schematic figures)
 The figures 1 to 3, 5 and 6 are schematic but use the default values of the project. The figures 4, 7 and 8
 come from real results of the optimizers with the default values (computed when the script runs, about 30 s).
 Every figure has a white background so that it stays readable in dark themes.
@@ -508,6 +509,143 @@ def figure_tiling(model: Model, result) -> None:
     svg.save("08_muster_kacheln.svg")
 
 
+# -- Figures 9 and 10. Variant with a rotating tube (docs/MOTORVARIANTE_ROHR.md) -------------------------------------
+# Preliminary design assumptions of the variant, all in mm. z = 0 is the top face of G0, negative below.
+TUBE_VARIANT = {
+    "stroke": 40.0,           # stroke above G0 (enough according to the project team, 4 cm)
+    "rod_d": 4.0,             # M4 threaded rod
+    "flats": 3.4,             # width across the two flats (double D)
+    "g0": 6.0,                # thickness of G0 (project default)
+    "bush": 10.0,             # length of the guide bush, 4 mm below G0
+    "head_top": -11.0,        # top end of the rotating tube
+    "head_d": 10.0,           # tube head with the hex pocket for two M4 nuts
+    "nut_len": 6.4,           # two M4 hex nuts DIN 934, 3.2 mm each
+    "plate_bearing": (-18.5, -22.5),  # bearing plate
+    "journal_d": 8.0,         # journal for the flanged bearing MF128ZZ 8 x 12 x 3.5
+    "tube_d": 8.0,
+    "bore_d": 5.0,            # free bore around the rod below the nuts
+    "rod_len": 62.0,          # stroke 40 + 18 to the end of the nuts + 2 reserve + 2 length allowance
+    "bottom": -72.0,          # bottom end of the tube, D bore for the motor shaft 6 mm deep
+    "motor_face": -76.0,      # N20 gearbox face, shaft 10 mm
+    "plate_motor": (-76.0, -84.0),
+    "gearbox": 9.0, "can": 15.0, "encoder": 8.0,
+}
+
+
+def figure_tube_section() -> None:
+    v = TUBE_VARIANT
+    s, zmax, top = 4.0, 48.0, 30
+    cx = 300.0
+    Z = lambda z: top + (zmax - z) * s  # noqa: E731
+    X = lambda x: cx + x * s  # noqa: E731
+    svg = Svg(1080, top + (zmax + 118) * s + 40, "Variante Rohrantrieb im Schnitt")
+    POM, BRASS, STEEL, MOTOR = "#f3e9c6", "#d9b44a", "#9aa3b0", "#4e79a7"
+    half = 40.0
+    # Plates. G0, bearing plate, motor plate, with spacers at the sides
+    g0 = (0.0, -v["g0"])
+    for (z0, z1), name in ((g0, "G0"), (v["plate_bearing"], "Lagerplatte"), (v["plate_motor"], "Motorplatte")):
+        gap = 6.0 if name != "G0" else 4.0
+        if name == "Motorplatte":
+            gap = 6.0
+        for a, b in ((-half, -gap), (gap, half)):
+            svg.rect(X(a), Z(z0), (b - a) * s, (z0 - z1) * s, fill=PLATE if name != "G0" else PLATE_G0, stroke=INK, stroke_width=0.7)
+        svg.text(X(-half) - 8, Z(z0) + (z0 - z1) * s / 2 + 5, name, size=13, anchor="end", weight="bold")
+    for x in (-half + 4, half - 4):  # spacers
+        svg.rect(X(x - 1.5), Z(v["plate_bearing"][1]), 3 * s, (v["plate_bearing"][1] - v["plate_motor"][0]) * s, fill="#c9ccd3", stroke=INK, stroke_width=0.5)
+        svg.rect(X(x - 1.5), Z(g0[1]), 3 * s, (g0[1] - v["plate_bearing"][0]) * s, fill="#c9ccd3", stroke=INK, stroke_width=0.5)
+    # Guide bush (stationary, POM) in G0 with the double D bore
+    svg.rect(X(-4), Z(0), 8 * s, v["bush"] * s, fill=POM, stroke=INK, stroke_width=0.8)
+    # Rotating tube. Head with nuts, journal in the flanged bearing, body, bottom with D bore
+    head_bottom = v["plate_bearing"][0]
+    svg.rect(X(-v["head_d"] / 2), Z(v["head_top"]), v["head_d"] * s, (v["head_top"] - head_bottom) * s, fill=BRASS, fill_opacity=0.55, stroke=INK)
+    svg.rect(X(-3.5), Z(v["head_top"] - 0.5), 7 * s, v["nut_len"] * s, fill=STEEL, stroke=INK, stroke_width=0.6)
+    svg.line(X(-3.5), Z(v["head_top"] - 0.5 - v["nut_len"] / 2), X(3.5), Z(v["head_top"] - 0.5 - v["nut_len"] / 2), stroke=INK, stroke_width=0.6)
+    body_top = head_bottom
+    svg.rect(X(-v["tube_d"] / 2), Z(body_top), v["tube_d"] * s, (body_top - v["bottom"]) * s, fill=BRASS, fill_opacity=0.55, stroke=INK)
+    svg.rect(X(-v["bore_d"] / 2), Z(body_top - 0.2), v["bore_d"] * s, (body_top - 0.2 - (v["bottom"] + 8)) * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
+    svg.rect(X(-1.5), Z(v["bottom"] + 6), 3 * s, 6 * s, fill="#ffffff", stroke=INK, stroke_width=0.5)  # D bore for the shaft
+    # Flanged bearing in the bearing plate, both sides of the journal
+    b0, b1 = v["plate_bearing"][0], v["plate_bearing"][0] - 3.5
+    for sign in (-1, 1):
+        x_in, x_out = sign * v["journal_d"] / 2, sign * 6.0
+        svg.rect(X(min(x_in, x_out)), Z(b0), abs(x_out - x_in) * s, 3.5 * s, fill="#7d8796", stroke=INK, stroke_width=0.6)
+        svg.circle(X((x_in + x_out) / 2), Z((b0 + b1) / 2), 0.8 * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
+        svg.rect(X(min(sign * 6.0, sign * 6.8)), Z(b0 + 0.8), 0.8 * s, 0.8 * s, fill="#7d8796", stroke=INK, stroke_width=0.5)  # flange
+    # Retaining ring below the bearing
+    for sign in (-1, 1):
+        svg.rect(X(min(sign * 4.0, sign * 5.2)), Z(b1 - 0.3), 1.2 * s, 0.7 * s, fill=INK)
+    # Threaded rod, retracted (solid) and extended (dashed)
+    rw = v["rod_d"] * s
+    svg.rect(X(-2), Z(0), rw, v["rod_len"] * s, fill=ROD)
+    svg.rect(X(-2), Z(v["stroke"]), rw, v["rod_len"] * s, fill="none", stroke=ROD, stroke_width=1, stroke_dasharray="4 3")
+    flat_len = v["stroke"] + v["bush"] + 2.0
+    svg.rect(X(-1.0), Z(0), 2 * s, flat_len * s, fill="#ffffff", fill_opacity=0.18)
+    # N20 motor below the tube
+    z = v["motor_face"]
+    for length, col, op in ((v["gearbox"], "#b8bec9", 1.0), (v["can"], MOTOR, 0.35), (v["encoder"], "#59a14f", 0.45)):
+        svg.rect(X(-6), Z(z), 12 * s, length * s, fill=col, fill_opacity=op, stroke=INK, stroke_width=0.8)
+        z -= length
+    svg.rect(X(-1.5), Z(v["bottom"] + 6), 3 * s, (v["bottom"] + 6 - v["motor_face"]) * s, fill="#55595f")  # shaft
+    svg.rect(X(-3), Z(z), 6 * s, 4 * s, fill="#ffffff", stroke=INK, stroke_width=0.6)  # connector
+    # Motion arrows
+    svg.arrow(X(-12), Z(-40), X(-12), Z(-25), both=True, color=RED, width=1.6)
+    svg.text(X(-13), Z(-32) + 4, "Stange\nfährt", size=11, anchor="end", fill=RED)
+    rx, ry = X(0), Z(-50)
+    svg.add(f'<path d="M{rx - 22:.1f},{ry:.1f} A22,7 0 0 0 {rx + 22:.1f},{ry:.1f}" fill="none" stroke="{RED}" stroke-width="1.6" marker-end="url(#arrow)"/>')
+    svg.text(rx + 26, ry + 16, "Rohr dreht", size=11, fill=RED)
+    # Dimensions
+    svg.dim(X(-half) + 14, Z(0), X(-half) + 14, Z(v["stroke"]), f"Hub\n{num(v['stroke'])} mm", side=1)
+    depth = -(z - 4)
+    svg.dim(X(half) + 14, Z(0), X(half) + 14, Z(z - 4), f"etwa {num(depth, 0)} mm\nunter G0", side=1)
+    # Labels
+    lx = 640
+    svg.leader(X(0), Z(25), lx, Z(30), "Gewindestange M4 ausgefahren (gestrichelt)")
+    svg.leader(X(1.6), Z(-3), lx, Z(10), f"Gewindestange M4 mit Doppel D Abflachung\n(Schlüsselweite {num(v['flats'])} mm) über {num(flat_len)} mm Länge")
+    svg.leader(X(4), Z(-8), lx, Z(-4), "Führungsbuchse POM in G0, steht fest.\nDoppel D Bohrung, verhindert das Drehen")
+    svg.leader(X(3.5), Z(-14), lx, Z(-15), "Rohrkopf mit zwei M4 Muttern in einer\nSechskanttasche, dreht mit dem Rohr")
+    svg.leader(X(6.4), Z(-20), lx, Z(-26), "Flanschlager MF128ZZ (8 x 12 x 3,5) in der\nLagerplatte, nimmt die Axialkraft auf,\ndarunter ein Sicherungsring")
+    svg.leader(X(4), Z(-45), lx, Z(-45), "Rohr Ø 8 mm, innen Ø 5 mm frei, dreht")
+    svg.leader(X(1.5), Z(-69), lx, Z(-62), "Rohrboden mit D Bohrung, die Motorwelle\nsteckt im Schiebesitz. Nur Drehmoment,\nkeine Axialkraft")
+    svg.leader(X(6), Z(-80), lx, Z(-80), "Motorplatte, Tasche 12 x 10 mm für das Getriebe")
+    svg.leader(X(6), Z(-93), lx, Z(-94), "N20 12 V, schnelle Variante (um 3000 U/min),\nmit Encoder unten")
+    svg.leader(X(half - 4), Z(-50), lx, Z(-110), "Distanzbolzen zwischen den Platten,\nBefestigung an der übergeordneten Konstruktion")
+    svg.text(40, top + (zmax + 118) * s + 20, "Schnitt durch eine Einheit, maßstäblich mit vorläufigen Konstruktionsannahmen "
+                                             "(siehe docs/MOTORVARIANTE_ROHR.md). Eingefahren ist die Spitze bündig mit G0.",
+             size=11, fill=MUTED, italic=True)
+    svg.save("09_rohrantrieb_schnitt.svg")
+
+
+def figure_double_d() -> None:
+    v = TUBE_VARIANT
+    s = 30.0
+    svg = Svg(900, 330, "Doppel D Abflachung im Querschnitt")
+    for i, (title, with_bush) in enumerate((("Stange M4 mit Doppel D", False), ("in der Führungsbuchse", True))):
+        cx, cy = 150 + i * 520, 160
+        r, f = v["rod_d"] / 2, v["flats"] / 2
+        if with_bush:
+            svg.circle(cx, cy, 3.6 * s, fill="#f3e9c6", stroke=INK)
+            a = math.degrees(math.acos((f + 0.05) / (r + 0.05)))
+            path_bush = _double_d_path(cx, cy, (r + 0.05) * s, (f + 0.05) * s, a)
+            svg.add(f'<path d="{path_bush}" fill="#ffffff" stroke="{INK}" stroke-width="1"/>')
+        a = math.degrees(math.acos(f / r))
+        svg.add(f'<path d="{_double_d_path(cx, cy, r * s, f * s, a)}" fill="{ROD}" stroke="none"/>')
+        svg.circle(cx, cy, r * s, fill="none", stroke=MUTED, stroke_width=1, stroke_dasharray="4 3")
+        svg.text(cx, 30, title, size=14, anchor="middle", weight="bold")
+    cx, cy = 150, 160
+    svg.dim(cx - v["flats"] / 2 * s, cy + 2.8 * s, cx + v["flats"] / 2 * s, cy + 2.8 * s, f"Schlüsselweite {num(v['flats'])} mm", side=-1)
+    svg.dim(cx - 2.8 * s, cy - 2 * s, cx - 2.8 * s, cy + 2 * s, "Ø 4", side=-1)
+    svg.text(290, 130, "Zwei parallele Flächen, wie bei einem\nSchraubenschlüssel. Gestrichelt das\nursprüngliche Gewinde. Zwischen den\nFlächen bleibt Gewinde stehen und\ngreift weiter in die Mutter.", size=12)
+    svg.text(670, 300, "Die Buchse steht fest. Die Flächen liegen an und\nverhindern das Drehen, auf und ab gleitet die Stange.", size=12, anchor="middle")
+    svg.save("10_doppel_d.svg")
+
+
+def _double_d_path(cx: float, cy: float, r: float, f: float, half_angle_deg: float) -> str:
+    """Circle of radius r cut by two vertical flats at x = +-f (pixels)."""
+    h = math.sqrt(max(r * r - f * f, 0.0))
+    return (f"M{cx + f:.2f},{cy - h:.2f} L{cx + f:.2f},{cy + h:.2f} A{r:.2f},{r:.2f} 0 0 1 {cx - f:.2f},{cy + h:.2f} "
+            f"L{cx - f:.2f},{cy - h:.2f} A{r:.2f},{r:.2f} 0 0 1 {cx + f:.2f},{cy - h:.2f} Z")
+
+
 def main() -> None:
     model = Model(Project())
     figure_stack(model)
@@ -515,6 +653,10 @@ def main() -> None:
     figure_rod_length(model)
     figure_board()
     figure_patterns()
+    figure_tube_section()
+    figure_double_d()
+    if "--variant-only" in sys.argv:
+        return
     model_a, result_a = solve("periodic_tile")
     model_b, result_b = solve("pattern_holes")
     figure_result(model_a, result_a)

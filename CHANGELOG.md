@@ -1,5 +1,9 @@
 # Changelog
 
+## Unveröffentlicht
+- Untersuchung der Variante Rohrantrieb (`docs/MOTORVARIANTE_ROHR.md`) mit Schnittbild, Kräften, Verdrehsicherung, Stückliste
+  und Plan für Onshape, neue Bilder 9 und 10 in `docs/make_images.py` (`--variant-only` zeichnet nur die Schemabilder)
+
 ## 0.11.0
 Standardmotor N20 mit Encoder
 - Der Standardmotor entspricht jetzt einem N20 Getriebemotor mit Hall Encoder. 12 x 10 mm Querschnitt, ohne Welle 32 mm lang
