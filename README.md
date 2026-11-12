@@ -21,6 +21,17 @@ python run.py                    # Web UI auf http://127.0.0.1:8765
 python run.py --port 9000 --no-browser
 ```
 
+Neue Version in einen eigenen Ordner holen. `scripts/clone.sh` legt neben vorhandenen Ordnern V1, V2 den nächsten Ordner V3 an,
+klont das Repository nach V3/BlindsightBruteForce und startet die Oberfläche (läuft mit jeder POSIX Shell, braucht git und
+Python 3.10 oder neuer, ein belegter Port 8765 wird übersprungen, ohne grafische Oberfläche öffnet sich kein Browser)
+
+```bash
+sh scripts/clone.sh                 # aus einem vorhandenen Klon, legt den nächsten V Ordner daneben an
+sh clone.sh                         # das Skript neben V1, V2 abgelegt
+sh clone.sh ~/Projekte --no-start   # anderer Basisordner, nur klonen
+sh clone.sh --branch main           # anderer Branch
+```
+
 Mit virtueller Umgebung (nur nötig für die Tests oder die Befehle `blindsight` und `blindsight-cli`). Die Aktivierung hängt von der Shell ab
 
 ```bash

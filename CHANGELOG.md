@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unveröffentlicht
+- `scripts/clone.sh` holt eine neue Version in den nächsten Ordner V1, V2, V3 und startet sie. Läuft mit jeder POSIX Shell,
+  prüft git und Python, überspringt einen belegten Port und öffnet ohne grafische Oberfläche keinen Browser
 - Untersuchung der Variante Rohrantrieb (`docs/MOTORVARIANTE_ROHR.md`) mit Schnittbild, Kräften, Verdrehsicherung, Stückliste
   und Plan für Onshape, neue Bilder 9 und 10 in `docs/make_images.py` (`--variant-only` zeichnet nur die Schemabilder)
 
