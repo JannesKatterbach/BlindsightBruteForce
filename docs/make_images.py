@@ -514,16 +514,12 @@ def figure_tiling(model: Model, result) -> None:
 # -- Figures 9 and 10. Variant with a rotating tube (docs/MOTORVARIANTE_ROHR.md) -------------------------------------
 # One tile of cad/onshape/rohrantrieb.fs with the default stroke of 40 mm, all in mm. z = 0 is the top surface.
 TUBE_VARIANT = {
-    "stroke": 40.0,
-    "rod_d": 4.0, "flats": 3.4, "rod_len": 56.6, "flat_len": 46.5,
-    "half_x": 6.9, "pitch_x": 14.0, "cavity_r": 5.1, "pocket_half": 6.1,
-    "cap": (0.0, -6.0), "slot_half": 1.75,
-    "head_top": -7.0, "pocket": -13.7, "nuts": (-7.2, -13.6), "head_bottom": -14.7, "body_top": -16.0,
-    "head_r": 4.8, "tube_r": 3.5, "collar_r": 2.9, "journal_r": 2.5, "pocket_af": 7.1,
-    "bore_r": 2.3, "bore_end": -58.1, "d_top": -59.1,
-    "bear": (-65.9, -68.4), "bear_od": 8.0, "seat_r": 4.025, "bulk_hole_r": 3.25, "body_bottom": -64.8, "collar_top": -65.4,
-    "motor_face": -69.6, "shaft_top": -59.6, "gearbox": 9.0, "can": 15.0, "encoder": 8.0,
-    "housing_bottom": -102.0, "floor_bottom": -104.0, "cable_half": 4.0,
+    "stroke": 40.0, "pitch": 0.7,
+    "rod_d": 4.0, "flats": 3.4, "rod_len": 58.0, "flat_len": 46.5,
+    "half_x": 6.9, "pitch_x": 14.0, "inner_half": 6.1, "top": -6.0, "slot_half": 1.75,
+    "tube_r": 4.0, "tube_top": -7.0, "thread_bottom": -15.0, "bore_r": 2.3, "bore_end": -59.5, "d_top": -60.5,
+    "motor_face": -71.0, "shaft_top": -61.0, "gearbox": 9.0, "can": 15.0, "encoder": 8.0,
+    "housing_bottom": -103.0, "floor_bottom": -105.0, "cable_half": 4.0,
 }
 
 
@@ -536,72 +532,58 @@ def figure_tube_section() -> None:
     pts = lambda seq: [(X(x), Z(z)) for x, z in seq]  # noqa: E731
     height = top + (zmax - v["floor_bottom"]) * s + 70
     svg = Svg(1080, height, "Variante Rohrantrieb, Schnitt durch eine Kachel")
-    PRINT, CAP, TUBE, STEEL, MOTOR = "#d5d9e0", "#f4c542", "#eb7a2e", "#9aa3b0", "#4e79a7"
-    hx, cap0, cap1 = v["half_x"], v["cap"][0], v["cap"][1]
-    b0, b1 = v["bear"]
+    PRINT, TUBE, MOTOR = "#d5d9e0", "#eb7a2e", "#4e79a7"
+    hx, hi, p = v["half_x"], v["inner_half"], v["pitch"]
+    tt, tb, mf = v["tube_top"], v["thread_bottom"], v["motor_face"]
     # Neighbour tiles, only their edges, 0.2 mm gap
     for sign in (-1, 1):
-        edge = sign * (hx + 0.2)
-        svg.rect(X(min(edge, sign * 10.5)), Z(0), 3.3 * s, (0 - v["housing_bottom"]) * s, fill=PRINT, fill_opacity=0.35,
-                 stroke=MUTED, stroke_width=0.6, stroke_dasharray="4 3")
-    # Floor of the frame with the cable slot
+        svg.rect(X(min(sign * (hx + 0.2), sign * 10.5)), Z(0), 3.3 * s, (0 - v["housing_bottom"]) * s, fill=PRINT,
+                 fill_opacity=0.35, stroke=MUTED, stroke_width=0.6, stroke_dasharray="4 3")
+    # Floor of the tray with the cable slot
     for a, b in ((-10.5, -v["cable_half"]), (v["cable_half"], 10.5)):
         svg.rect(X(a), Z(v["housing_bottom"]), (b - a) * s, 2 * s, fill=PLATE_G0, stroke=INK, stroke_width=0.6)
-    # Housing, printed. Wall, bulkhead with bearing seat, motor pocket
+    # Housing, printed. Sleeve with a closed top, the top is the Sicherung with the double D slot
     for sign in (-1, 1):
-        shape = [(-hx, cap1), (-v["cavity_r"], cap1), (-v["cavity_r"], b0), (-v["seat_r"], b0), (-v["seat_r"], b1),
-                 (-v["bulk_hole_r"], b1), (-v["bulk_hole_r"], v["motor_face"]), (-v["pocket_half"], v["motor_face"]),
-                 (-v["pocket_half"], v["housing_bottom"]), (-hx, v["housing_bottom"])]
+        shape = [(hx, 0), (v["slot_half"], 0), (v["slot_half"], v["top"]), (hi, v["top"]), (hi, v["housing_bottom"]),
+                 (hx, v["housing_bottom"])]
         svg.poly(pts([(sign * x, z) for x, z in shape]), fill=PRINT, stroke=INK, stroke_width=0.8)
-    # Cap with the guide, printed
+    # Tube, printed. Open end with the internal thread, free bore, closed bottom with the D bore
+    r = v["tube_r"]
     for sign in (-1, 1):
-        svg.poly(pts([(sign * hx, cap0), (sign * v["slot_half"], cap0), (sign * v["slot_half"], cap1), (sign * hx, cap1)]),
-                 fill=CAP, stroke=INK, stroke_width=0.8)
-    # Tube, printed. Head with the hex pocket, body, collar, journal
-    right = [(v["head_r"], v["head_top"]), (v["head_r"], v["head_bottom"]), (v["tube_r"], v["body_top"]),
-             (v["tube_r"], v["body_bottom"]), (v["collar_r"], v["collar_top"]), (v["collar_r"], b0), (v["journal_r"], b0),
-             (v["journal_r"], b1 + 0.3), (v["journal_r"] - 0.3, b1)]
-    outline = right + [(-x, z) for x, z in reversed(right)]
-    svg.poly(pts(outline), fill=TUBE, fill_opacity=0.75, stroke=INK, stroke_width=0.8)
-    pa = v["pocket_af"] / 2
-    svg.rect(X(-pa), Z(v["head_top"]), 2 * pa * s, (v["head_top"] - v["pocket"]) * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
-    svg.rect(X(-v["bore_r"]), Z(v["pocket"]), 2 * v["bore_r"] * s, (v["pocket"] - v["bore_end"]) * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
-    svg.rect(X(-1.55), Z(v["d_top"]), 3.1 * s, (v["d_top"] - b1) * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
-    # Two M4 nuts
-    n0, n1 = v["nuts"]
-    svg.rect(X(-3.5), Z(n0), 7 * s, (n0 - n1) * s, fill=STEEL, stroke=INK, stroke_width=0.6)
-    svg.line(X(-3.5), Z((n0 + n1) / 2), X(3.5), Z((n0 + n1) / 2), stroke=INK, stroke_width=0.6)
-    # Bearing MR85ZZ with balls
-    for sign in (-1, 1):
-        x_in, x_out = sign * v["journal_r"], sign * v["bear_od"] / 2
-        svg.rect(X(min(x_in, x_out)), Z(b0), abs(x_out - x_in) * s, (b0 - b1) * s, fill="#7d8796", stroke=INK, stroke_width=0.6)
-        svg.circle(X((x_in + x_out) / 2), Z((b0 + b1) / 2), 0.55 * s, fill="#ffffff", stroke=INK, stroke_width=0.5)
-    # N20 motor, D shaft into the tube
-    z = v["motor_face"]
+        wall = [(2.08, tt), (r - 0.5, tt), (r, tt - 0.5), (r, mf + 0.5), (r - 0.5, mf), (2.5, mf), (2.5, mf + 1), (1.55, mf + 1),
+                (1.55, v["d_top"]), (0.0, v["d_top"]), (0.0, v["bore_end"]), (v["bore_r"], v["bore_end"]), (v["bore_r"], tb),
+                (2.08, tb)]
+        svg.poly(pts([(sign * x, z) for x, z in wall]), fill=TUBE, fill_opacity=0.8, stroke=INK, stroke_width=0.7)
+        z = tb
+        while z < tt - 0.01:  # internal thread teeth
+            svg.poly(pts([(sign * 2.08, z), (sign * 1.65, z + p / 2), (sign * 2.08, min(z + p, tt))]), fill=TUBE, stroke="none")
+            z += p
+    # N20 motor with the bearing boss, D shaft into the tube
+    z = mf
     for length, col, op in ((v["gearbox"], "#b8bec9", 1.0), (v["can"], MOTOR, 0.35), (v["encoder"], "#59a14f", 0.45)):
         svg.rect(X(-6), Z(z), 12 * s, length * s, fill=col, fill_opacity=op, stroke=INK, stroke_width=0.8)
         z -= length
-    svg.rect(X(-1.5), Z(v["shaft_top"]), 3 * s, (v["shaft_top"] - v["motor_face"]) * s, fill="#55595f")
-    svg.rect(X(0.9), Z(v["shaft_top"]), 0.6 * s, (v["shaft_top"] - v["motor_face"]) * s, fill="#ffffff", fill_opacity=0.35)
-    # Threaded rod, retracted (solid, thread marks on the round part) and extended (dashed)
-    rod_bottom = -v["rod_len"]
-    flat_bottom = -v["flat_len"]
+    svg.rect(X(-2), Z(mf + 0.5), 4 * s, 0.5 * s, fill="#8a919c", stroke=INK, stroke_width=0.4)
+    svg.rect(X(-1.5), Z(v["shaft_top"]), 3 * s, (v["shaft_top"] - mf) * s, fill="#55595f")
+    svg.rect(X(0.9), Z(v["shaft_top"]), 0.6 * s, (v["shaft_top"] - mf) * s, fill="#ffffff", fill_opacity=0.35)
+    # Threaded rod, retracted (solid, thread teeth on the round part) and extended (dashed)
     f = v["flats"] / 2
-    svg.rect(X(-f), Z(0), 2 * f * s, (0 - flat_bottom) * s, fill=ROD)
-    svg.rect(X(-2), Z(flat_bottom), 4 * s, (flat_bottom - rod_bottom) * s, fill=ROD)
-    zz = flat_bottom - 0.35
-    while zz > rod_bottom + 0.3:
+    fb, rb = -v["flat_len"], -v["rod_len"]
+    svg.rect(X(-f), Z(0), 2 * f * s, (0 - fb) * s, fill=ROD)
+    svg.rect(X(-1.6), Z(fb), 3.2 * s, (fb - rb) * s, fill=ROD)
+    z = rb
+    while z < fb - 0.01:
         for sign in (-1, 1):
-            svg.line(X(sign * 2.0), Z(zz), X(sign * 1.6), Z(zz - 0.35), stroke="#ffffff", stroke_width=0.5)
-        zz -= 0.7
+            svg.poly(pts([(sign * 1.6, z), (sign * 2.0, z + p / 2), (sign * 1.6, z + p)]), fill=ROD, stroke="none")
+        z += p
     svg.rect(X(-2), Z(v["stroke"]), 4 * s, v["rod_len"] * s, fill="none", stroke=ROD, stroke_width=1, stroke_dasharray="4 3")
     # Motion arrows
     svg.arrow(X(4.5), Z(32), X(4.5), Z(12), both=True, color=RED, width=1.6)
     svg.text(X(5.5), Z(22) + 4, "Stange\nfährt", size=11, fill=RED)
-    rx, ry = X(0), Z(-40)
-    svg.add(f'<path d="M{rx - 24:.1f},{ry:.1f} A24,7 0 0 0 {rx + 24:.1f},{ry:.1f}" fill="none" stroke="{RED}" '
+    rx, ry = X(0), Z(-38)
+    svg.add(f'<path d="M{rx - 26:.1f},{ry:.1f} A26,7 0 0 0 {rx + 26:.1f},{ry:.1f}" fill="none" stroke="{RED}" '
             f'stroke-width="1.6" marker-end="url(#arrow)"/>')
-    svg.text(rx + 28, ry + 16, "Rohr dreht", size=11, fill=RED)
+    svg.text(rx + 30, ry + 16, "Rohr dreht", size=11, fill=RED)
     # Dimensions
     svg.dim(X(-hx - 0.1), Z(44), X(hx + 0.1), Z(44), f"Raster {num(v['pitch_x'], 0)} mm", side=-1)
     svg.dim(X(-16), Z(0), X(-16), Z(v["stroke"]), f"Hub\n{num(v['stroke'], 0)} mm", side=-1)
@@ -609,19 +591,19 @@ def figure_tube_section() -> None:
     # Labels
     lx = 650
     svg.leader(X(0.5), Z(40), lx, Z(44), "Gewindestange M4 ausgefahren (gestrichelt)")
-    svg.leader(X(1.7), Z(-2), lx, Z(18), f"Gewindestange M4, oben mit Doppel D\n(Schlüsselweite {num(v['flats'])} mm) über "
-                                        f"{num(v['flat_len'])} mm,\nunten mit vollem Gewinde")
-    svg.leader(X(4.5), Z(-3), lx, Z(2), "Deckel mit Führung, gedruckt. Doppel D Schlitz,\nhält die Stange gegen Drehen. Oberfläche")
-    svg.leader(X(3.5), Z(-10.4), lx, Z(-12), "Zwei Muttern M4 in der Sechskanttasche\ndes Rohrkopfs, drehen mit dem Rohr")
-    svg.leader(X(4.8), Z(-20), lx, Z(-26), "Rohr, gedruckt. Dreht, 45° Übergänge\nfür den Druck ohne Stützen")
-    svg.leader(X(-6), Z(-35), lx, Z(-40), "Gehäuse, gedruckt. Außen 13,8 x 11,8 mm,\nWand 0,8 mm, ist die Kachel")
-    svg.leader(X(3.25), Z(-67.1), lx, Z(-56), "Kugellager MR85ZZ (5 x 8 x 2,5) im Zwischen-\nboden, nimmt die Axialkraft auf")
-    svg.leader(X(1.2), Z(-63), lx, Z(-68), "D Bohrung im Rohr, die D Welle des Motors\nist der Key. Nur Drehmoment, 0,5 mm Luft\nüber dem Wellenende")
-    svg.leader(X(6), Z(-85), lx, Z(-84), "N20 mit Encoder, Getriebe oben am\nZwischenboden, Tasche hält das Drehmoment")
+    svg.leader(X(1.7), Z(-2), lx, Z(20), f"Gewindestange M4, oben Doppel D (Schlüsselweite\n{num(v['flats'])} mm) über "
+                                        f"{num(v['flat_len'])} mm, sonst volles Gewinde")
+    svg.leader(X(4.5), Z(-3), lx, Z(4), "Sicherung. Geschlossene Oberseite des Gehäuses\nmit Doppel D Schlitz, hält die Stange gegen Drehen")
+    svg.leader(X(1.9), Z(-11), lx, Z(-11), "Offenes Ende des Rohres mit M4 Innengewinde,\n8 mm lang, nach dem Druck eingeschnitten")
+    svg.leader(X(4), Z(-25), lx, Z(-28), "Rohr, gedruckt, dreht. Innen frei für die Stange")
+    svg.leader(X(-6.5), Z(-45), lx, Z(-44), "Gehäuse, gedruckt. Außen 13,8 x 11,8 mm, Wand 0,8 mm,\nist die Kachel")
+    svg.leader(X(1.2), Z(-64), lx, Z(-60), "D Bohrung, die D Welle des N20 ist der Key.\nNur Drehmoment, 0,5 mm Luft über dem Wellenende")
+    svg.leader(X(3.5), Z(-71), lx, Z(-74), "Rohr steht auf der Getriebeplatte und gibt die\nAxialkraft dorthin ab, Aussparung für den Lagerbund")
+    svg.leader(X(6), Z(-87), lx, Z(-88), "N20 mit Encoder, die Tasche hält das Drehmoment")
     svg.leader(X(9), Z(-60), lx, Z(-98), "Nachbarkachel, Spalt 0,2 mm")
-    svg.leader(X(-6), Z(-103), lx, Z(-108), "Boden des Grundrahmens mit Kabelschlitz")
+    svg.leader(X(-6), Z(-104), lx, Z(-108), "Boden der Wanne mit Kabelschlitz")
     svg.text(40, height - 22, "Schnitt durch eine Kachel, maßstäblich nach cad/onshape/rohrantrieb.fs mit Hub 40 mm. "
-                              "Eingefahren ist die Spitze bündig mit dem Deckel.", size=11, fill=MUTED, italic=True)
+                              "Eingefahren ist die Spitze bündig mit der Oberfläche.", size=11, fill=MUTED, italic=True)
     svg.save("09_rohrantrieb_schnitt.svg")
 
 
@@ -629,7 +611,7 @@ def figure_double_d() -> None:
     v = TUBE_VARIANT
     s = 30.0
     svg = Svg(900, 330, "Doppel D Abflachung im Querschnitt")
-    for i, (title, with_bush) in enumerate((("Stange M4 mit Doppel D", False), ("in der Führung im Deckel", True))):
+    for i, (title, with_bush) in enumerate((("Stange M4 mit Doppel D", False), ("in der Sicherung", True))):
         cx, cy = 150 + i * 520, 160
         r, f = v["rod_d"] / 2, v["flats"] / 2
         if with_bush:
@@ -645,7 +627,7 @@ def figure_double_d() -> None:
     svg.dim(cx - v["flats"] / 2 * s, cy + 2.8 * s, cx + v["flats"] / 2 * s, cy + 2.8 * s, f"Schlüsselweite {num(v['flats'])} mm", side=-1)
     svg.dim(cx - 2.8 * s, cy - 2 * s, cx - 2.8 * s, cy + 2 * s, "Ø 4", side=-1)
     svg.text(290, 130, "Zwei parallele Flächen, wie bei einem\nSchraubenschlüssel. Gestrichelt das\nursprüngliche Gewinde. Zwischen den\nFlächen bleibt Gewinde stehen und\ngreift weiter in die Mutter.", size=12)
-    svg.text(670, 300, "Der Deckel steht fest. Die Flächen liegen an und\nverhindern das Drehen, auf und ab gleitet die Stange.", size=12, anchor="middle")
+    svg.text(670, 300, "Die Sicherung steht fest. Die Flächen liegen an und\nverhindern das Drehen, auf und ab gleitet die Stange.", size=12, anchor="middle")
     svg.save("10_doppel_d.svg")
 
 

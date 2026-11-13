@@ -6,9 +6,10 @@
 - Untersuchung der Variante Rohrantrieb (`docs/MOTORVARIANTE_ROHR.md`) mit Schnittbild, Kräften, Verdrehsicherung, Stückliste
   und Plan für Onshape, neue Bilder 9 und 10 in `docs/make_images.py` (`--variant-only` zeichnet nur die Schemabilder)
 - FeatureScript `cad/onshape/rohrantrieb.fs` für die Variante Rohrantrieb, im Branch des Dokuments "Ingenieurswettbewerb
-  Motorvariante" als Feature Studio "Rohrantrieb" (Main unverändert). Jede Stange ist eine druckbare Kachel 14 x 12 mm aus
-  Gehäuse, Deckel mit Doppel D Führung und Rohr, dazu Kaufteile M4 Stange, zwei Muttern, MR85ZZ und N20 mit D Welle als Key.
-  Stange und Muttern mit echtem, ineinandergreifendem Gewinde, Grund- und Abdeckrahmen für das Feld, Abstandsprüfung im Feature
+  Motorvariante" als Feature Studio "Rohrantrieb" (Main unverändert). Jede Stange ist eine Kachel 14 x 12 mm aus vier Teilen.
+  Gedrucktes Gehäuse, dessen geschlossene Oberseite die Sicherung mit Doppel D Schlitz ist, gedrucktes Rohr mit offenem Ende
+  und M4 Innengewinde, M4 Gewindestange und N20 mit D Welle als Key. Echtes, ineinandergreifendes Gewinde, flache Wanne für
+  das Feld, Abstandsprüfung im Feature. Schalter starten eingeschaltet (Angabe "Default")
 - Schnittbild 9 und Bild 10 zeigen die Kachel, Zahlenformat in `docs/make_images.py` behält Nullen bei ganzen Zahlen
 
 ## 0.11.0
