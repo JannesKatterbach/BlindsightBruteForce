@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unveröffentlicht
+- Neues Erscheinungsbild der Oberfläche, abgeleitet vom Bauteil. Lötstopplack Grün für Aktionen und Fortschritt, Gold der
+  Lötflächen für Fokus und Auswahl, weiß wie Bestückungsdruck für Felder und Zeichnungen, hell und dunkel. Die Schrittleiste
+  zählt in Braille Zellen, beim offenen Schritt stehen die Punkte auf wie die Stangen. Schrift Atkinson Hyperlegible Next
+  (für Menschen mit Sehbehinderung entworfen, SIL Open Font License, liegt lokal in `static/fonts`), auf dem Handy breitere
+  Beschriftungen in den Formularen
 - `scripts/clone.sh` holt eine neue Version in den nächsten Ordner V1, V2, V3 und startet sie. Läuft mit jeder POSIX Shell,
   prüft git und Python, überspringt einen belegten Port und öffnet ohne grafische Oberfläche keinen Browser
 - Untersuchung der Variante Rohrantrieb (`docs/MOTORVARIANTE_ROHR.md`) mit Schnittbild, Kräften, Verdrehsicherung, Stückliste

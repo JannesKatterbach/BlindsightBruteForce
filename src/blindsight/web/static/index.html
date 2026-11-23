@@ -18,15 +18,17 @@
   <label class="btn"><span data-i18n="ui.header.load">Konfig laden</span><input type="file" id="fileLoad" accept=".json" hidden></label>
   <select id="langSel" data-i18n-title="ui.header.language" aria-label="Sprache"></select>
 </header>
-<!-- Guided workflow. The steps run from left to right, js/ui/steps.js adds Back and Next to every step -->
+<!-- Guided workflow. The steps run from left to right, js/ui/steps.js adds Back and Next to every step.
+     Each step shows its number as a Braille cell (dots 1 2 3 down the left column, 4 5 6 down the right),
+     the dots of the open step stand up like the pins of the display -->
 <nav id="steps" role="tablist">
-  <button role="tab" data-step="basics" class="active" aria-selected="true"><span class="num">1</span><span data-i18n="ui.step.basics">Grundlagen</span><i class="state"></i></button>
-  <button role="tab" data-step="motor"><span class="num">2</span><span data-i18n="ui.step.motor">Motor</span><i class="state"></i></button>
-  <button role="tab" data-step="mode"><span class="num">3</span><span data-i18n="ui.step.mode">Modus</span><i class="state"></i></button>
-  <button role="tab" data-step="board"><span class="num">4</span><span data-i18n="ui.step.board">Platte und Rand</span><i class="state"></i></button>
-  <button role="tab" data-step="holes"><span class="num">5</span><span id="stepHolesLabel" data-i18n="ui.step.holes">Löcher</span><i class="state"></i></button>
-  <button role="tab" data-step="run"><span class="num">6</span><span data-i18n="ui.step.run">Ziele und Berechnen</span><i class="state"></i></button>
-  <button role="tab" data-step="results"><span class="num">7</span><span data-i18n="ui.step.results">Ergebnis</span><i class="state"></i></button>
+  <button role="tab" data-step="basics" class="active" aria-selected="true"><span class="cell" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></span><span class="num">1</span><span data-i18n="ui.step.basics">Grundlagen</span><i class="state"></i></button>
+  <button role="tab" data-step="motor"><span class="cell" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span class="num">2</span><span data-i18n="ui.step.motor">Motor</span><i class="state"></i></button>
+  <button role="tab" data-step="mode"><span class="cell" aria-hidden="true"><i class="on"></i><i></i><i></i><i class="on"></i><i></i><i></i></span><span class="num">3</span><span data-i18n="ui.step.mode">Modus</span><i class="state"></i></button>
+  <button role="tab" data-step="board"><span class="cell" aria-hidden="true"><i class="on"></i><i></i><i></i><i class="on"></i><i class="on"></i><i></i></span><span class="num">4</span><span data-i18n="ui.step.board">Platte und Rand</span><i class="state"></i></button>
+  <button role="tab" data-step="holes"><span class="cell" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i class="on"></i><i></i></span><span class="num">5</span><span id="stepHolesLabel" data-i18n="ui.step.holes">Löcher</span><i class="state"></i></button>
+  <button role="tab" data-step="run"><span class="cell" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i><i class="on"></i><i></i><i></i></span><span class="num">6</span><span data-i18n="ui.step.run">Ziele und Berechnen</span><i class="state"></i></button>
+  <button role="tab" data-step="results"><span class="cell" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i><i></i></span><span class="num">7</span><span data-i18n="ui.step.results">Ergebnis</span><i class="state"></i></button>
 </nav>
 <div id="banner" class="errors" role="alert" hidden></div>
 <main>
