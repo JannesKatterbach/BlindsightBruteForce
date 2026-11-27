@@ -1,0 +1,522 @@
+<title>Motormatrix Platine</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
+<style>
+/* Platine als Bild: Lötstopplack Grün für Signalwege, Gold der Pads für Auswahl, Weiß wie Bestückungsdruck */
+:root {
+  --board: #e8edea; --silk: #fbfcfb; --ink: #1b2a23; --mut: #58685f; --bd: #cbd6d0; --bd2: #9fb0a7;
+  --mask: #17694a; --pad: #b07f1c; --out: #2f6f9f; --in: #9a4f86; --pwr: #b42318; --field: #f2f5f3;
+  --font: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --board: #13241c; --silk: #1a2e25; --ink: #e3ebe6; --mut: #9cb0a5; --bd: #2d473b; --bd2: #4b6a5b;
+  --mask: #4fb886; --pad: #e0b04a; --out: #6fb0e0; --in: #d08cc0; --pwr: #ff7a6b; --field: #152820; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --board: #13241c; --silk: #1a2e25; --ink: #e3ebe6; --mut: #9cb0a5; --bd: #2d473b; --bd2: #4b6a5b;
+  --mask: #4fb886; --pad: #e0b04a; --out: #6fb0e0; --in: #d08cc0; --pwr: #ff7a6b; --field: #152820; color-scheme: dark }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--board); color: var(--ink); font: 15px/1.55 var(--font);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 28px 60px; display: grid; gap: 22px }
+h1 { font-size: 30px; line-height: 1.15; margin: 0; letter-spacing: -.01em; text-wrap: balance }
+h2 { font-size: 19px; margin: 0 0 10px; text-wrap: balance }
+h3 { font-size: 15px; margin: 14px 0 6px }
+p { margin: 0 0 8px; max-width: 72ch }
+.lead { color: var(--mut); font-size: 16px }
+.panel { background: var(--silk); border: 1px solid var(--bd); border-radius: 10px; padding: 18px; min-width: 0 }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr } }
+.controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px 16px }
+.controls label { display: grid; gap: 4px; font-size: 13px; color: var(--mut) }
+.controls input { font: inherit; font-size: 15px; color: var(--ink); background: var(--field); border: 1px solid var(--bd2);
+  border-radius: 5px; padding: 6px 8px; width: 100%; font-variant-numeric: tabular-nums }
+.controls input:focus-visible, button:focus-visible, .cell:focus-visible { outline: 2px solid var(--pad); outline-offset: 2px }
+.note { font-size: 12px; color: var(--mut) }
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px }
+.fact { border: 1px solid var(--bd); border-radius: 8px; padding: 10px 12px; background: var(--silk) }
+.fact b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; line-height: 1.2 }
+.fact span { font-size: 12px; color: var(--mut) }
+.fact.warn { border-color: var(--pwr) } .fact.warn b { color: var(--pwr) }
+.scroll { overflow-x: auto }
+svg text { font-family: var(--font) }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--mut); margin-top: 8px }
+.legend i { display: inline-block; width: 18px; height: 3px; vertical-align: middle; margin-right: 6px; border-radius: 2px }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--bd); vertical-align: top }
+th { color: var(--mut); font-weight: 600; font-size: 13px }
+code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 13px }
+pre { background: var(--field); border: 1px solid var(--bd); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 0; line-height: 1.45 }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+button { font: inherit; font-weight: 650; border-radius: 6px; padding: 9px 16px; cursor: pointer; border: 1px solid var(--bd2); background: var(--silk); color: var(--ink) }
+button.primary { background: var(--mask); border-color: var(--mask); color: #fff }
+:root[data-theme="dark"] button.primary { color: #0e1f17 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0e1f17 } }
+.status { font-size: 14px; color: var(--mut) }
+ul { margin: 0; padding-left: 20px } li { margin: 3px 0 }
+.pads { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; max-width: 520px }
+.pad { border: 1px solid var(--bd2); border-radius: 6px; padding: 8px 4px; text-align: center; background: var(--field) }
+.pad b { display: block; font-size: 16px } .pad span { font-size: 11px; color: var(--mut) }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px }
+.kv dt { color: var(--mut) } .kv dd { margin: 0; font-variant-numeric: tabular-nums }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Motormatrix Platine</h1>
+    <p class="lead">Plan für den Prototyp der Lippenstift Ebene. Jeder N20 Motor sitzt unter seinem Pin, seine sechs Kabel hängen nach unten auf diese Platine. Ein ESP32 steuert alle Motoren über sieben Leitungen.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="h-set">
+    <h2 id="h-set">Matrix und Annahmen</h2>
+    <div class="controls">
+      <label for="rows">Reihen<input id="rows" type="number" min="1" max="40" value="14"></label>
+      <label for="cols">Spalten<input id="cols" type="number" min="1" max="40" value="14"></label>
+      <label for="active">Motoren gleichzeitig<input id="active" type="number" min="1" value="98"></label>
+      <label for="iRun">Strom je laufendem Motor [A]<input id="iRun" type="number" step="0.01" min="0" value="0.10"></label>
+      <label for="iEnc">Strom je Encoder [mA]<input id="iEnc" type="number" step="1" min="0" value="10"></label>
+      <label for="spi">SPI Takt [MHz]<input id="spi" type="number" step="1" min="1" max="20" value="8"></label>
+      <label for="ratio">Untersetzung Getriebe<input id="ratio" type="number" step="1" min="1" value="100"></label>
+      <label for="rpm">Drehzahl Abtrieb [U/min]<input id="rpm" type="number" step="1" min="1" value="140"></label>
+    </div>
+    <p class="note" style="margin-top:10px">Motor 12 V, 140 U/min mit Hall Encoder (7 Impulse je Motorumdrehung). Ströme und Untersetzung sind Schätzwerte, bitte am echten Motor messen.</p>
+  </section>
+
+  <section class="facts" id="facts" aria-label="Kennzahlen"></section>
+
+  <section class="panel" aria-labelledby="h-dia">
+    <h2 id="h-dia">Verkabelungsdiagramm</h2>
+    <p>Die Motorleitungen werden nicht gemultiplext. Jeder Motor hat einen eigenen kleinen Treiber (DRV8220). Gemultiplext werden nur die Steuer- und Encoderleitungen über zwei Ketten aus Schieberegistern. Die Ausgangskette (74HC595) setzt für jeden Treiber IN1 und IN2, die Eingangskette (74HC165) liest von jedem Encoder A und B. Jede Reihe hat einen Puffer (74HC244) für die Takte. Klick auf einen Motor zeigt seine Bauteile und Bits.</p>
+    <div class="scroll"><svg id="dia" role="img" aria-label="Signalfluss vom ESP32 durch die Reihen der Matrix"></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--out)"></i>Ausgangskette MOSI zu den 74HC595</span>
+      <span><i style="background:var(--in)"></i>Eingangskette 74HC165 zum MISO</span>
+      <span><i style="background:var(--mask)"></i>Takte über den Puffer je Reihe</span>
+      <span><i style="background:var(--pad)"></i>ausgewählter Motor</span>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel" aria-labelledby="h-ch">
+      <h2 id="h-ch">Ein Motorkanal</h2>
+      <div class="scroll"><svg id="chan" viewBox="0 0 560 300" role="img" aria-label="Verdrahtung eines Motorkanals"></svg></div>
+    </section>
+    <section class="panel" aria-labelledby="h-sel">
+      <h2 id="h-sel">Ausgewählter Motor</h2>
+      <dl class="kv" id="sel"></dl>
+      <h3>Lötpads je Motor</h3>
+      <div class="pads" id="pads"></div>
+      <p class="note" style="margin-top:8px">Die Farben der sechs Adern unterscheiden sich je nach Händler. Vor dem Löten am Datenblatt des Motors prüfen, welche Ader Motor, VCC, GND, A und B ist.</p>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="panel" aria-labelledby="h-esp">
+      <h2 id="h-esp">Anschluss ESP32</h2>
+      <table><thead><tr><th>J2 Pin</th><th>Signal</th><th>ESP32 GPIO</th><th>Aufgabe</th></tr></thead><tbody id="esp"></tbody></table>
+      <p class="note" style="margin-top:8px">Vorschlag für ein ESP32 DevKit mit WROOM-32. GPIO 0, 2, 5, 12 und 15 sind Startpins und bleiben frei. Der ESP32 bekommt Strom über USB, Platine und ESP32 teilen nur GND.</p>
+    </section>
+    <section class="panel" aria-labelledby="h-pwr">
+      <h2 id="h-pwr">Versorgung</h2>
+      <ul id="power"></ul>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-bom">
+    <h2 id="h-bom">Stückliste</h2>
+    <div class="scroll"><table><thead><tr><th>Anzahl</th><th>Bauteil</th><th>Referenz</th><th>Footprint</th><th>Bestückung</th></tr></thead><tbody id="bom"></tbody></table></div>
+    <p class="note" style="margin-top:8px">Die Spalte LCSC ist im Schaltplan angelegt, aber leer. Die Nummern beim Bestellen in der JLCPCB Teilesuche eintragen.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-kicad">
+    <h2 id="h-kicad">KiCad Schaltplan</h2>
+    <p>Die ZIP enthält ein KiCad Projekt mit Wurzelblatt (Versorgung, ESP32 Anschluss, ein Blatt pro Reihe) und dem Reihenblatt, das alle Reihen gemeinsam nutzen. Geprüft mit KiCad 7, KiCad 8 und 9 lesen das Format ein. Danach in KiCad Werkzeuge, Leiterplatte aus Schaltplan aktualisieren, dann die Footprints unter die Motoren schieben.</p>
+    <div class="btns">
+      <button class="primary" id="dl" type="button">Schaltplan als ZIP herunterladen</button>
+      <span class="status" id="dlStatus" role="status"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-fw">
+    <h2 id="h-fw">ESP32 Grundgerüst</h2>
+    <p>Schickt die Richtungen an alle Treiber und zählt die Flanken von Encoder A. Die Richtung ist bekannt, weil der ESP32 sie selbst setzt.</p>
+    <div class="btns" style="margin-bottom:10px"><button id="copyFw" type="button">Code kopieren</button><span class="status" id="fwStatus" role="status"></span></div>
+    <pre id="fw"></pre>
+  </section>
+
+  <section class="panel" aria-labelledby="h-open">
+    <h2 id="h-open">Annahmen und offene Punkte</h2>
+    <ul>
+      <li>DRV8220DRL (TI, 4,5 bis 18 V, 1,76 A) im SOT-563. Logikpegel ab 1,45 V, passt zu 3,3 V. Sehr klein, aber für JLCPCB kein Problem</li>
+      <li>74HC595 und 74HC165 laufen mit 3,3 V. Bei 3,3 V sind sie langsamer als bei 5 V, darum 8 MHz SPI. Für mehr Takt die steckerkompatiblen 74LV595A und 74LV165A nehmen</li>
+      <li>Pull-ups für die Encoder sind eingeplant, aber nicht bestückt. Viele N20 Encoderplatinen haben schon welche</li>
+      <li>Strom je Motor, Encoderstrom und Untersetzung sind geschätzt und müssen am echten Motor gemessen werden</li>
+      <li>Die Lage der Footprints unter den Motoren (V Anordnung) ist nicht Teil dieses Plans, nur der Schaltplan</li>
+      <li>Das Buck Modul für 3,3 V ist ein fertiges Modul zum Anlöten, Typ noch offen (mindestens 2 A)</li>
+    </ul>
+  </section>
+</div>
+
+<script src="kicad-matrix.js"></script>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const SVGNS = "http://www.w3.org/2000/svg";
+let selected = { r: 0, c: 0 };
+
+const ESP = [
+  ["1", "GND", "GND", "gemeinsame Masse"],
+  ["2", "SCK_O", "18", "Takt Ausgangskette (VSPI SCK)"],
+  ["3", "MOSI", "23", "Daten zu den 74HC595 (VSPI MOSI)"],
+  ["4", "LATCH", "22", "übernimmt die Bits in alle Ausgänge"],
+  ["5", "OE_N", "21", "low schaltet die Ausgänge frei, R1 hält es beim Start high"],
+  ["6", "SCK_I", "14", "Takt Eingangskette (HSPI SCK)"],
+  ["7", "MISO", "27", "Daten von den 74HC165 (HSPI über GPIO Matrix)"],
+  ["8", "LOAD_N", "26", "low lädt alle Encoderpegel in die 74HC165"],
+];
+
+function val(id, def) {
+  const v = Number($(id).value);
+  return Number.isFinite(v) ? v : def;
+}
+
+function read() {
+  const max = MotorMatrix.MAX_SIDE;
+  const rows = Math.min(max, Math.max(1, Math.round(val("rows", 14))));
+  const cols = Math.min(max, Math.max(1, Math.round(val("cols", 14))));
+  const n = rows * cols;
+  return {
+    rows, cols, n, active: Math.min(n, Math.max(1, Math.round(val("active", n / 2)))), iRun: val("iRun", 0.1),
+    iEnc: val("iEnc", 10), spi: val("spi", 8), ratio: val("ratio", 100), rpm: val("rpm", 140),
+  };
+}
+
+const fmt = (v, d = 1) => v.toLocaleString("de-DE", { maximumFractionDigits: d, minimumFractionDigits: d });
+
+function facts(o, P) {
+  const scan = (o.spi * 1e6) / (P.bits + 16);
+  const edgesA = (o.rpm * o.ratio / 60) * 7 * 2;
+  const i12 = o.active * o.iRun;
+  const i33 = (o.n * o.iEnc) / 1000 + P.chips * 2 * 0.001;
+  const hub = 0.7 * o.rpm / 60;
+  const items = [
+    ["7 + GND", "Leitungen zum ESP32"],
+    [String(o.n), "Motoren und DRV8220"],
+    [String(P.chips * 2 + o.rows), "Logikchips (595, 165, 244)"],
+    [String(P.bits), "Bits je Kette und Durchlauf"],
+    [fmt(scan / 1000) + " kHz", "Encoder Abtastung", scan < 2 * edgesA],
+    [fmt(edgesA / 1000) + " kHz", "Flanken von A je Motor"],
+    [fmt(i12) + " A", "Strom 12 V bei " + o.active + " Motoren"],
+    [fmt(i33, 2) + " A", "Strom 3,3 V Encoder und Logik"],
+    [fmt(40 / hub, 0) + " s", "für 40 mm Hub mit M4"],
+  ];
+  $("facts").replaceChildren(...items.map(([b, s, warn]) => {
+    const d = document.createElement("div");
+    d.className = "fact" + (warn ? " warn" : "");
+    const bb = document.createElement("b"); bb.textContent = b;
+    const ss = document.createElement("span"); ss.textContent = s + (warn ? ", zu langsam" : "");
+    d.append(bb, ss);
+    return d;
+  }));
+  const fuse = Math.max(5, Math.ceil((i12 * 1.3) / 5) * 5);
+  const pw = [
+    `Netzteil 12 V mit mindestens ${fmt(i12 * 1.3)} A (Laststrom ${fmt(i12)} A plus 30 Prozent Reserve)`,
+    `Flachsicherung ${fuse} A direkt hinter der Klemme`,
+    `3,3 V aus einem Buck Modul, mindestens ${fmt(Math.max(1, i33 * 1.5), 1)} A, versorgt alle Encoder und Logikchips`,
+    `Breite Leiterbahnen oder Flächen für 12 V und GND, je Reihe bis ${fmt(Math.min(o.cols, o.active) * o.iRun)} A`,
+    "Je Treiber 100 nF an VM, je Reihe 22 µF, am Eingang 1000 µF",
+  ];
+  $("power").replaceChildren(...pw.map((t) => { const li = document.createElement("li"); li.textContent = t; return li; }));
+}
+
+function svgEl(name, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+function css(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Übersicht: ESP32 links, je Reihe Puffer, 595 Kette, Motoren, 165 Kette
+function drawDiagram(o, P) {
+  const svg = $("dia");
+  svg.replaceChildren();
+  const cell = Math.max(14, Math.min(30, 560 / o.cols));
+  const rowH = Math.max(cell + 14, 34);
+  const x0 = 230;
+  const width = x0 + o.cols * cell + 40;
+  const height = 70 + o.rows * rowH + 20;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", width);
+  svg.style.maxWidth = "100%";
+  svg.style.height = "auto";
+  const ink = css("--ink"), mut = css("--mut"), bd = css("--bd2"), silk = css("--silk"), out = css("--out"), inn = css("--in"), mask = css("--mask"), pad = css("--pad");
+
+  // ESP32
+  svgEl("rect", { x: 8, y: 20, width: 92, height: 140, rx: 6, fill: silk, stroke: ink }, svg);
+  svgEl("text", { x: 54, y: 40, "text-anchor": "middle", "font-weight": 700, fill: ink, "font-size": 14 }, svg, "ESP32");
+  ESP.slice(1).forEach(([, sig], i) => svgEl("text", { x: 92, y: 62 + i * 14, "text-anchor": "end", fill: mut, "font-size": 10 }, svg, sig));
+  svgEl("text", { x: x0, y: 16, fill: mut, "font-size": 11 }, svg, `Spalten 1 bis ${o.cols}, je Reihe ${P.K} x 74HC595 und ${P.K} x 74HC165`);
+
+  // Taktbus senkrecht
+  const busX = 130;
+  svgEl("line", { x1: 100, y1: 70, x2: busX, y2: 70, stroke: mask, "stroke-width": 3 }, svg);
+  svgEl("line", { x1: busX, y1: 70, x2: busX, y2: 70 + (o.rows - 1) * rowH + rowH / 2 - 10, stroke: mask, "stroke-width": 3 }, svg);
+
+  for (let r = 0; r < o.rows; r++) {
+    const y = 56 + r * rowH;
+    const mid = y + rowH / 2 - 6;
+    // Puffer
+    svgEl("line", { x1: busX, y1: mid, x2: 148, y2: mid, stroke: mask, "stroke-width": 2 }, svg);
+    svgEl("rect", { x: 148, y: mid - 9, width: 34, height: 18, rx: 3, fill: silk, stroke: mask }, svg);
+    svgEl("text", { x: 165, y: mid + 4, "text-anchor": "middle", fill: ink, "font-size": 9 }, svg, "244");
+    svgEl("text", { x: 196, y: mid + 4, "text-anchor": "middle", fill: mut, "font-size": 10 }, svg, `R${r + 1}`);
+    // Motoren der Reihe
+    for (let c = 0; c < o.cols; c++) {
+      const cx = x0 + c * cell + cell / 2;
+      const isSel = selected.r === r && selected.c === c;
+      const g = svgEl("g", { class: "cell", tabindex: 0, role: "button", "aria-label": `Motor Reihe ${r + 1} Spalte ${c + 1}` }, svg);
+      svgEl("rect", { x: cx - cell / 2 + 2, y: mid - cell / 2 + 2, width: cell - 4, height: cell - 4, rx: 4,
+        fill: isSel ? pad : silk, stroke: isSel ? pad : bd, cursor: "pointer" }, g);
+      if (cell >= 22) svgEl("text", { x: cx, y: mid + 4, "text-anchor": "middle", fill: isSel ? silk : mut, "font-size": 9, "pointer-events": "none" }, g, String(c + 1));
+      g.addEventListener("click", () => select(r, c));
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(r, c); } });
+    }
+    // Ketten: Ausgang oben von links nach rechts, Eingang unten von rechts nach links
+    const yo = mid - cell / 2 - 3;
+    const yi = mid + cell / 2 + 3;
+    const xr = x0 + o.cols * cell + 6;
+    svgEl("line", { x1: x0 - 4, y1: yo, x2: xr, y2: yo, stroke: out, "stroke-width": 2 }, svg);
+    svgEl("line", { x1: xr, y1: yi, x2: x0 - 4, y2: yi, stroke: inn, "stroke-width": 2 }, svg);
+    if (r < o.rows - 1) {
+      const ny = 56 + (r + 1) * rowH + rowH / 2 - 6;
+      svgEl("path", { d: `M${xr} ${yo} L${xr + 12} ${yo} L${xr + 12} ${ny - cell / 2 - 3 - 6} L${x0 - 12} ${ny - cell / 2 - 3 - 6} L${x0 - 12} ${ny - cell / 2 - 3} L${x0 - 4} ${ny - cell / 2 - 3}`,
+        fill: "none", stroke: out, "stroke-width": 1.5, "stroke-dasharray": "4 3" }, svg);
+      svgEl("path", { d: `M${x0 - 4} ${yi} L${x0 - 18} ${yi} L${x0 - 18} ${ny + cell / 2 + 3 + 6} L${xr + 20} ${ny + cell / 2 + 3 + 6} L${xr + 20} ${ny + cell / 2 + 3} L${xr} ${ny + cell / 2 + 3}`,
+        fill: "none", stroke: inn, "stroke-width": 1.5, "stroke-dasharray": "4 3" }, svg);
+    }
+  }
+  // MOSI und MISO zur ersten Reihe
+  const m0 = 56 + rowH / 2 - 6;
+  svgEl("path", { d: `M100 112 L118 112 L118 ${m0 - cell / 2 - 3} L${x0 - 4} ${m0 - cell / 2 - 3}`, fill: "none", stroke: out, "stroke-width": 2 }, svg);
+  svgEl("path", { d: `M100 126 L112 126 L112 ${m0 + cell / 2 + 3 + 10} L${x0 - 26} ${m0 + cell / 2 + 3 + 10} L${x0 - 26} ${m0 + cell / 2 + 3} L${x0 - 4} ${m0 + cell / 2 + 3}`, fill: "none", stroke: inn, "stroke-width": 2 }, svg);
+}
+
+// Ein Kanal: 595 -> DRV8220 -> Lötpads -> 165
+function drawChannel(m) {
+  const svg = $("chan");
+  svg.replaceChildren();
+  const ink = css("--ink"), mut = css("--mut"), silk = css("--silk"), out = css("--out"), inn = css("--in"), pwr = css("--pwr"), pad = css("--pad"), mask = css("--mask");
+  const box = (x, y, w, h, title, sub) => {
+    svgEl("rect", { x, y, width: w, height: h, rx: 6, fill: silk, stroke: ink }, svg);
+    svgEl("text", { x: x + w / 2, y: y + 18, "text-anchor": "middle", "font-weight": 700, fill: ink, "font-size": 13 }, svg, title);
+    if (sub) svgEl("text", { x: x + w / 2, y: y + 33, "text-anchor": "middle", fill: mut, "font-size": 10 }, svg, sub);
+  };
+  const pin = (x, y, label, anchor) => svgEl("text", { x, y, "text-anchor": anchor, fill: mut, "font-size": 10 }, svg, label);
+  const line = (x1, y1, x2, y2, color, w = 2) => svgEl("line", { x1, y1, x2, y2, stroke: color, "stroke-width": w }, svg);
+
+  box(16, 40, 104, 92, "74HC595", m.in1.chip);
+  pin(112, 92, m.in1.pin, "end"); pin(112, 112, m.in2.pin, "end");
+  box(190, 40, 110, 92, "DRV8220", m.driver);
+  pin(198, 92, "IN1", "start"); pin(198, 112, "IN2", "start");
+  pin(292, 92, "OUT1", "end"); pin(292, 112, "OUT2", "end");
+  line(120, 88, 190, 88, out); line(120, 108, 190, 108, out);
+  line(245, 40, 245, 18, pwr); svgEl("text", { x: 252, y: 22, fill: pwr, "font-size": 10 }, svg, "VM +12 V, 100 nF");
+  box(380, 30, 90, 214, "Lötpads", m.pads);
+  const labels = [["M1", "Motor"], ["M2", "Motor"], ["VCC", "+3,3 V"], ["GND", ""], ["A", "Encoder"], ["B", "Encoder"]];
+  labels.forEach(([l, s], i) => {
+    const y = 86 + i * 24;
+    svgEl("circle", { cx: 392, cy: y - 4, r: 5, fill: "none", stroke: pad, "stroke-width": 2 }, svg);
+    svgEl("text", { x: 404, y, fill: ink, "font-size": 11, "font-weight": 600 }, svg, l);
+    if (s) svgEl("text", { x: 430, y, fill: mut, "font-size": 9 }, svg, s);
+  });
+  line(300, 88, 387, 82, mask); line(300, 108, 387, 106, mask);
+  box(16, 180, 104, 92, "74HC165", m.encA.chip);
+  pin(112, 232, m.encA.pin, "end"); pin(112, 252, m.encB.pin, "end");
+  svgEl("path", { d: "M387 178 L340 178 L340 228 L120 228", fill: "none", stroke: inn, "stroke-width": 2 }, svg);
+  svgEl("path", { d: "M387 202 L352 202 L352 248 L120 248", fill: "none", stroke: inn, "stroke-width": 2 }, svg);
+  svgEl("text", { x: 190, y: 220, fill: mut, "font-size": 10 }, svg, `Pull-ups ${m.rpack} (nicht bestückt)`);
+  svgEl("text", { x: 500, y: 290, "text-anchor": "end", fill: mut, "font-size": 10 }, svg, `Motor Reihe ${m.row}, Spalte ${m.col}`);
+}
+
+function showSelected(P) {
+  const m = P.motor(selected.r, selected.c);
+  const rows = [
+    ["Motor", `Reihe ${m.row}, Spalte ${m.col}`],
+    ["Lötpads", m.pads],
+    ["Treiber", `${m.driver}, Kondensator ${m.vmCap}`],
+    ["IN1", `${m.in1.chip} ${m.in1.pin}, Bit ${m.in1.frameBit} im Sendepuffer`],
+    ["IN2", `${m.in2.chip} ${m.in2.pin}, Bit ${m.in2.frameBit} im Sendepuffer`],
+    ["Encoder A", `${m.encA.chip} Eingang ${m.encA.pin}, Bit ${m.encA.frameBit} im Lesepuffer`],
+    ["Encoder B", `${m.encB.chip} Eingang ${m.encB.pin}, Bit ${m.encB.frameBit} im Lesepuffer`],
+    ["Pull-ups", `${m.rpack} (DNP)`],
+  ];
+  $("sel").replaceChildren(...rows.flatMap(([k, v]) => {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    return [dt, dd];
+  }));
+  drawChannel(m);
+}
+
+function select(r, c) {
+  selected = { r, c };
+  render();
+}
+
+function firmware(o, P) {
+  return `#include <SPI.h>
+
+// ── Pins (Vorschlag ESP32 DevKit) ──────────────────────────
+const int PIN_SCK_O = 18, PIN_MOSI = 23, PIN_LATCH = 22, PIN_OE_N = 21;
+const int PIN_SCK_I = 14, PIN_MISO = 27, PIN_LOAD_N = 26;
+
+const int REIHEN = ${o.rows}, SPALTEN = ${o.cols};
+const int K = ${P.K};                  // Schieberegister je Reihe und Kette
+const int CHIPS = REIHEN * K;
+
+SPIClass spiAus(VSPI);
+SPIClass spiEin(HSPI);
+uint8_t aus[CHIPS], ein[CHIPS], einAlt[CHIPS];
+int8_t richtung[REIHEN][SPALTEN];    // 1 hoch, -1 runter, 0 aus
+long position[REIHEN][SPALTEN];       // gezählte Flanken von Encoder A
+
+// Erst gesendetes Byte landet im letzten Chip der Kette, QA ist Bit 0
+void setzeBits(int r, int c, int8_t dir) {
+  int b = 2 * c;
+  uint8_t &byte = aus[CHIPS - 1 - (r * K + b / 8)];
+  bitWrite(byte, b % 8, dir > 0);          // IN1
+  bitWrite(byte, b % 8 + 1, dir < 0);      // IN2, beide 0 heißt Leerlauf
+}
+
+void sende() {
+  spiAus.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  uint8_t puffer[CHIPS];
+  memcpy(puffer, aus, CHIPS);
+  spiAus.transfer(puffer, CHIPS);
+  spiAus.endTransaction();
+  digitalWrite(PIN_LATCH, HIGH);
+  digitalWrite(PIN_LATCH, LOW);
+}
+
+// Erstes gelesenes Byte kommt vom Chip direkt am MISO, Eingang A ist Bit 0
+void lese() {
+  digitalWrite(PIN_LOAD_N, LOW);
+  digitalWrite(PIN_LOAD_N, HIGH);
+  spiEin.beginTransaction(SPISettings(8000000, MSBFIRST, SPI_MODE0));
+  memset(ein, 0, CHIPS);
+  spiEin.transfer(ein, CHIPS);
+  spiEin.endTransaction();
+}
+
+void setup() {
+  pinMode(PIN_OE_N, OUTPUT);
+  digitalWrite(PIN_OE_N, HIGH);           // Treiber aus, bis alle Bits stimmen
+  pinMode(PIN_LATCH, OUTPUT);
+  pinMode(PIN_LOAD_N, OUTPUT);
+  digitalWrite(PIN_LOAD_N, HIGH);
+  spiAus.begin(PIN_SCK_O, -1, PIN_MOSI, -1);
+  spiEin.begin(PIN_SCK_I, PIN_MISO, -1, -1);
+  sende();                                 // alles auf Leerlauf
+  digitalWrite(PIN_OE_N, LOW);
+  lese();
+  memcpy(einAlt, ein, CHIPS);
+}
+
+void loop() {
+  lese();
+  for (int r = 0; r < REIHEN; r++) {
+    for (int c = 0; c < SPALTEN; c++) {
+      int b = 2 * c;
+      int g = r * K + b / 8;
+      bool a = bitRead(ein[g], b % 8);
+      if (a != bitRead(einAlt[g], b % 8)) position[r][c] += richtung[r][c];
+    }
+  }
+  memcpy(einAlt, ein, CHIPS);
+  // hier Zielpositionen prüfen, richtung[][] ändern, mit setzeBits() übernehmen und sende() aufrufen
+}
+`;
+}
+
+function render() {
+  const o = read();
+  if (selected.r >= o.rows || selected.c >= o.cols) selected = { r: 0, c: 0 };
+  const P = MotorMatrix.plan(o.rows, o.cols);
+  facts(o, P);
+  drawDiagram(o, P);
+  showSelected(P);
+  $("esp").replaceChildren(...ESP.map((row) => {
+    const tr = document.createElement("tr");
+    row.forEach((v) => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    return tr;
+  }));
+  $("bom").replaceChildren(...MotorMatrix.bom(P).map((b) => {
+    const tr = document.createElement("tr");
+    [b.qty, b.what, b.ref, b.fp, b.how].forEach((v) => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    return tr;
+  }));
+  $("pads").replaceChildren(...[["1", "M1"], ["2", "M2"], ["3", "VCC"], ["4", "GND"], ["5", "A"], ["6", "B"]].map(([n, l]) => {
+    const d = document.createElement("div"); d.className = "pad";
+    const b = document.createElement("b"); b.textContent = l;
+    const s = document.createElement("span"); s.textContent = "Pad " + n;
+    d.append(b, s);
+    return d;
+  }));
+  $("fw").textContent = firmware(o, P);
+}
+
+// Download, im Artifact über die downloads Fähigkeit, sonst normal über den Browser
+async function download() {
+  const o = read();
+  const status = $("dlStatus");
+  status.textContent = "Erzeuge Schaltplan ...";
+  const res = MotorMatrix.generate({ rows: o.rows, cols: o.cols });
+  const blob = MotorMatrix.zip(res.files);
+  const name = `blindsight_motormatrix_${o.rows}x${o.cols}.zip`;
+  try {
+    if (window.claude && typeof window.claude.use === "function") {
+      const dl = await window.claude.use("downloads");
+      if (!dl) { status.textContent = "Herunterladen ist in dieser Ansicht nicht möglich. Seite im Browser öffnen."; return; }
+      await dl.save({ filename: name, data: blob });
+      status.textContent = `${name} gespeichert`;
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    status.textContent = `${name} heruntergeladen`;
+  } catch (e) {
+    status.textContent = e && e.code === "declined" ? "Abgebrochen" : "Speichern hat nicht geklappt, bitte noch einmal versuchen";
+  }
+}
+
+async function copyFw() {
+  const text = $("fw").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    $("fwStatus").textContent = "Kopiert";
+  } catch (e) {
+    const range = document.createRange();
+    range.selectNodeContents($("fw"));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    $("fwStatus").textContent = "Text ist markiert, mit Strg+C kopieren";
+  }
+}
+
+for (const id of ["rows", "cols", "active", "iRun", "iEnc", "spi", "ratio", "rpm"]) $(id).addEventListener("input", render);
+$("dl").addEventListener("click", download);
+$("copyFw").addEventListener("click", copyFw);
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+render();
+</script>

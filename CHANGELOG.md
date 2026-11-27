@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unveröffentlicht
+- Neuer Ordner `pcb/` für die Motormatrix der Lippenstift Ebene. Interaktive Seite mit Verkabelungsdiagramm, Kennzahlen
+  (Strom, Encoder Abtastung, Hubzeit), Stückliste, ESP32 Grundgerüst und Download eines KiCad Schaltplans als ZIP für 1 x 1
+  bis 40 x 40 Motoren. Je Motor ein DRV8220DRL und sechs Lötpads, Steuerung über Ketten aus 74HC595 und 74HC165 mit einem
+  74HC244 je Reihe, 7 Signale zum ESP32. Fertiger Schaltplan für 14 x 14 in `pcb/kicad/`, alle Verbindungen mit
+  `kicad-cli` geprüft
 - Neues Erscheinungsbild der Oberfläche, abgeleitet vom Bauteil. Lötstopplack Grün für Aktionen und Fortschritt, Gold der
   Lötflächen für Fokus und Auswahl, weiß wie Bestückungsdruck für Felder und Zeichnungen, hell und dunkel. Die Schrittleiste
   zählt in Braille Zellen, beim offenen Schritt stehen die Punkte auf wie die Stangen. Schrift Atkinson Hyperlegible Next
